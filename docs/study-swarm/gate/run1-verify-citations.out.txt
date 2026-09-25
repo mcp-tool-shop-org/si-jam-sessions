@@ -1,0 +1,35 @@
+
+roleos verify-citations — REFUSE (blocking)
+
+Dispatch: phase-0-consult.dispatch.md
+Verdict:  refuse  (29 citation(s) checked, 70035ms)
+Findings: 15 supported · 10 not_addressed · 4 unchecked
+  - [DROP] 10.5281/zenodo.15571083 — Crossref has no record for DOI 10.5281/zenodo.15571083
+  - [DROP] 10.5281/zenodo.10265217 — Crossref has no record for DOI 10.5281/zenodo.10265217
+  - [RETRIEVE FULL TEXT] arXiv:2502.18008 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2505.15559 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2310.08497 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2511.20697 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2503.14476 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2510.20270 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2502.21267 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2606.11886 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] 10.1068/p6465 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2508.04651 — claim is not addressed in the title+abstract
+  - [RETRIEVE MANUALLY] arXiv:2602.05064 — arXiv oracle unreachable: HTTPStatusError
+  - [DROP] 10.5281/zenodo.1416276 — Crossref has no record for DOI 10.5281/zenodo.1416276
+
+  8 item(s) looked like citations but had no resolvable arXiv/DOI id (verify manually):
+    ? **US works published before 1931 are public domain in 2026, and the cut-off moves every January.** Hirtle, Cornell Unive
+    ? **A performing edition of public-domain music was held to carry its own copyright in England.** Hyperion Records v Sawki
+    ? **OpenScore releases about 1,500 Lieder and about 200 string quartets under CC0 and does not list source editions on its
+    ? **Creative Commons advises that publicly shared models or outputs based on ShareAlike content carry the same licence, an
+    ? **Re-implementing common MIR metrics transparently changed reported scores by up to about 11% relative, because of conve
+    ? **Copies of the same MIR dataset failed checksums, and three hop sizes in circulation for one dataset gave significantly
+    ? **Widely used libm implementations are not correctly rounded for common double-precision functions, and one library can 
+    ? **FLAC's checksum is defined over the decoded samples, independent of compression level and container.** van Beurden and
+
+Receipt: docs/study-swarm/gate/run1-citation-receipt.json (path redacted to the repository location)
+
+BLOCKING: a cited paper did not resolve in arXiv/Crossref (likely fabricated). Reject the dispatch.
+exit 20

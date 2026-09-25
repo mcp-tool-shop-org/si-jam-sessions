@@ -1,0 +1,201 @@
+{
+  "schema": "roleos-citation-receipt/v1",
+  "kind": "citation-verification",
+  "tool": "roleos verify-citations",
+  "input": "phase-0-consult.dispatch.md",
+  "verdict": "escalate",
+  "blocking": false,
+  "advisory": true,
+  "citations_sha256": "e7fd9a9c6d7d7862a8f72c447bdc2166e1c57665ec9c3e28e4801205bcba7310",
+  "prism_receipt": {
+    "id": "prism-01m3cakqb0htswb2r60vek2rwj",
+    "signature": "bfe739444942a860ea9e9e50c7e116d61da57e2e6025b09a0d19d99a7048eba96511af5958fe3cac59c31437ab745e3b88fd0fca216451f6251d00f0b1a68e0c",
+    "verdict": "escalate"
+  },
+  "retrieval_pins": [
+    {
+      "id": "c1",
+      "identifier": "arXiv:2409.10831",
+      "query": "https://export.arxiv.org/api/query?id_list=2409.10831",
+      "source_sha256": "886fe128a61c2da63133d5bcbf543c00321c25b19f51ccf858af961232d4c27b",
+      "existence": "resolved"
+    },
+    {
+      "id": "c2",
+      "identifier": "arXiv:2310.16787",
+      "query": "https://export.arxiv.org/api/query?id_list=2310.16787",
+      "source_sha256": "2736cef6c4dcde4b289191f1620e96073f4097c89a0976c201649e285d70c075",
+      "existence": "resolved"
+    },
+    {
+      "id": "c3",
+      "identifier": "arXiv:2410.13114",
+      "query": "https://export.arxiv.org/api/query?id_list=2410.13114",
+      "source_sha256": "1ca3129a51f71ecaad68f6eec5a88344a347e549ad0ad068f2996176dd2c737b",
+      "existence": "resolved"
+    },
+    {
+      "id": "c4",
+      "identifier": "arXiv:2502.18008",
+      "query": "https://export.arxiv.org/api/query?id_list=2502.18008",
+      "source_sha256": "997653a45b3a9066a8933569c9a3412bca1eb4272ada1cc48613ab475836aed5",
+      "existence": "resolved"
+    },
+    {
+      "id": "c5",
+      "identifier": "arXiv:2505.15559",
+      "query": "https://export.arxiv.org/api/query?id_list=2505.15559",
+      "source_sha256": "5aee1753b8aaf21a25f13b9b6739b9ef22b380bf8cec539b771b13f81725fb96",
+      "existence": "resolved"
+    },
+    {
+      "id": "c6",
+      "identifier": "arXiv:2310.08497",
+      "query": "https://export.arxiv.org/api/query?id_list=2310.08497",
+      "source_sha256": "791c461b9caeb93fd1381a4a8398ae69f3edefd587c0f5c46b083d21d07455bf",
+      "existence": "resolved"
+    },
+    {
+      "id": "c7",
+      "identifier": "arXiv:2306.08620",
+      "query": "https://export.arxiv.org/api/query?id_list=2306.08620",
+      "source_sha256": "8723c5c74f38d66cc7c780d9ca27a837ce4815a60cf15c40f7d26c34d8f8106a",
+      "existence": "resolved"
+    },
+    {
+      "id": "c8",
+      "identifier": "arXiv:2510.22455",
+      "query": "https://export.arxiv.org/api/query?id_list=2510.22455",
+      "source_sha256": "850c5c5cfee571235e49d08d4bca6eaa7fd4d8997a5af9723651d712fe5141f7",
+      "existence": "resolved"
+    },
+    {
+      "id": "c9",
+      "identifier": "arXiv:2511.20697",
+      "query": "https://export.arxiv.org/api/query?id_list=2511.20697",
+      "source_sha256": "f14f1fec36b99a7e46167509a1cb080b1700c2e76f80daa770d76d8e438cc433",
+      "existence": "resolved"
+    },
+    {
+      "id": "c10",
+      "identifier": "arXiv:2509.16662",
+      "query": "https://export.arxiv.org/api/query?id_list=2509.16662",
+      "source_sha256": "019dae3ac016bd582b7b609acb9236cc33cae8b72a7c5bc0eec28674c820c9c4",
+      "existence": "resolved"
+    },
+    {
+      "id": "c11",
+      "identifier": "arXiv:2509.13658",
+      "query": "https://export.arxiv.org/api/query?id_list=2509.13658",
+      "source_sha256": "6b212db6a7dbb023dbf8007d6c7597d3316d6444e44c32c7b82d12cbf22812d6",
+      "existence": "resolved"
+    },
+    {
+      "id": "c12",
+      "identifier": "arXiv:2504.13837",
+      "query": "https://export.arxiv.org/api/query?id_list=2504.13837",
+      "source_sha256": "3bdf49e7afe933791b6ee9c95d4d278acd0476a0ba5a1f144c80475bb734e331",
+      "existence": "resolved"
+    },
+    {
+      "id": "c13",
+      "identifier": "arXiv:2503.14476",
+      "query": "https://export.arxiv.org/api/query?id_list=2503.14476",
+      "source_sha256": "205e68cb329eb1ea56b60b0fc52c41755585bb302c8df807dfb1e0caba6fde07",
+      "existence": "resolved"
+    },
+    {
+      "id": "c14",
+      "identifier": "arXiv:2506.10947",
+      "query": "https://export.arxiv.org/api/query?id_list=2506.10947",
+      "source_sha256": "c53b08ebab16ffb204f6cd7c226cdb2201fc0d1ddd619c46fde42516a996dccd",
+      "existence": "resolved"
+    },
+    {
+      "id": "c15",
+      "identifier": "arXiv:2507.10532",
+      "query": "https://export.arxiv.org/api/query?id_list=2507.10532",
+      "source_sha256": "03703b486cee8c81e8eea7924e70720a55d3cfb49224ca9f29693536942d9b12",
+      "existence": "resolved"
+    },
+    {
+      "id": "c16",
+      "identifier": "arXiv:2501.17161",
+      "query": "https://export.arxiv.org/api/query?id_list=2501.17161",
+      "source_sha256": "58dc52ab4c43543ca2f23031752045424501127065be294170124abac9f99021",
+      "existence": "resolved"
+    },
+    {
+      "id": "c17",
+      "identifier": "arXiv:2511.07317",
+      "query": "https://export.arxiv.org/api/query?id_list=2511.07317",
+      "source_sha256": "d6cd004c46fd99d202c8f46ea67ddc4c35b40757a9a9108f4ed9fb08a64ee0d4",
+      "existence": "resolved"
+    },
+    {
+      "id": "c18",
+      "identifier": "arXiv:2406.18518",
+      "query": "https://export.arxiv.org/api/query?id_list=2406.18518",
+      "source_sha256": "746e0ac79c1e3b99ff4c3e7548cb589f029ccdacdb293a73d9093b07edd5b1ca",
+      "existence": "resolved"
+    },
+    {
+      "id": "c19",
+      "identifier": "arXiv:2403.07714",
+      "query": "https://export.arxiv.org/api/query?id_list=2403.07714",
+      "source_sha256": "ceb3612aa0590e2d0c8a9f5110295decbf742ab6ec76b9450219498d626d4d99",
+      "existence": "resolved"
+    },
+    {
+      "id": "c20",
+      "identifier": "arXiv:2510.20270",
+      "query": "https://export.arxiv.org/api/query?id_list=2510.20270",
+      "source_sha256": "b8a7e71df4cec7b9646d4e19cacce707ac1844fbe3d0105d3d3cdade5f9080a6",
+      "existence": "resolved"
+    },
+    {
+      "id": "c21",
+      "identifier": "arXiv:2502.21267",
+      "query": "https://export.arxiv.org/api/query?id_list=2502.21267",
+      "source_sha256": "43a2830dea53fd0d12cef697093ff304c2af5ec2002edc037c643b4b2b29ea8b",
+      "existence": "resolved"
+    },
+    {
+      "id": "c22",
+      "identifier": "arXiv:2606.11886",
+      "query": "https://export.arxiv.org/api/query?id_list=2606.11886",
+      "source_sha256": "1ac16c854353713d392473cc020f3846e202351be40eca79d106ed40a4640b2f",
+      "existence": "resolved"
+    },
+    {
+      "id": "c23",
+      "identifier": "10.1068/p6465",
+      "query": "https://api.crossref.org/works/10.1068/p6465?mailto=verify%40prism-verify.dev",
+      "source_sha256": "0dcbc25b2b79d177f329d21018cbfe079eb9783ba2b3946c22173b538b240675",
+      "existence": "resolved"
+    },
+    {
+      "id": "c24",
+      "identifier": "arXiv:2509.07586",
+      "query": "https://export.arxiv.org/api/query?id_list=2509.07586",
+      "source_sha256": "b38b97c4781126d68014f22b35f1e7cdf334f2d033f4d631ece2828899959310",
+      "existence": "resolved"
+    },
+    {
+      "id": "c25",
+      "identifier": "arXiv:2508.04651",
+      "query": "https://export.arxiv.org/api/query?id_list=2508.04651",
+      "source_sha256": "c58313f05bc00c57d6635933b3bd419951e94b032306022764385666843cb19a",
+      "existence": "resolved"
+    },
+    {
+      "id": "c26",
+      "identifier": "arXiv:2602.05064",
+      "query": "https://export.arxiv.org/api/query?id_list=2602.05064",
+      "source_sha256": "",
+      "existence": "unresolvable"
+    }
+  ],
+  "local_panel": null,
+  "chain_sha256": "dba14b8bd1c361c41aa411a27cd54024c19d8c1e6b8346bf52afa69aab080ea4"
+}

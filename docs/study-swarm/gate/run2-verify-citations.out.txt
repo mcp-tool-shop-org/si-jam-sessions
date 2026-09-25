@@ -1,0 +1,34 @@
+
+roleos verify-citations — NEEDS REVIEW
+
+Dispatch: phase-0-consult.dispatch.md
+Verdict:  escalate  (26 citation(s) checked, 34716ms)
+Findings: 15 supported · 10 not_addressed · 1 unchecked
+  - [RETRIEVE FULL TEXT] arXiv:2502.18008 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2505.15559 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2310.08497 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2511.20697 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2503.14476 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2510.20270 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2502.21267 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2606.11886 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] 10.1068/p6465 — claim is not addressed in the title+abstract
+  - [RETRIEVE FULL TEXT] arXiv:2508.04651 — claim is not addressed in the title+abstract
+  - [RETRIEVE MANUALLY] arXiv:2602.05064 — arXiv oracle unreachable: HTTPStatusError
+
+  11 item(s) looked like citations but had no resolvable arXiv/DOI id (verify manually):
+    ? **US works published before 1931 are public domain in 2026, and the cut-off moves every January.** Hirtle, Cornell Unive
+    ? **A performing edition of public-domain music was held to carry its own copyright in England.** Hyperion Records v Sawki
+    ? **OpenScore releases about 1,500 Lieder and about 200 string quartets under CC0 and does not list source editions on its
+    ? **PDMX found 31,221 of its songs (12.29%) carry a different licence inside the file than on the MuseScore page, and reco
+    ? **42.6% of the music-generation training sets examined were collected from the web without permission.** Morreale, Sharm
+    ? **Creative Commons advises that publicly shared models or outputs based on ShareAlike content carry the same licence, an
+    ? **Re-implementing common MIR metrics transparently changed reported scores by up to about 11% relative, because of conve
+    ? **Copies of the same MIR dataset failed checksums, and three hop sizes in circulation for one dataset gave significantly
+    ? **MFCC and chroma features computed from lossy copies deviate from the lossless original by several percent, depending o
+    ? **Widely used libm implementations are not correctly rounded for common double-precision functions, and one library can 
+
+Receipt: docs/study-swarm/gate/run2-citation-receipt.json (path redacted to the repository location)
+
+ADVISORY: citations resolved but need revision / human review — accept-with-notes or escalate per the items above.
+exit 30
