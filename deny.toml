@@ -1,0 +1,20 @@
+# cargo-deny configuration. CI runs the licence check:
+#   cargo deny --locked check licenses
+#
+# The allowlist is the product's: MIT, Apache-2.0, Unlicense and BSD-1-Clause
+# (PHASE-0, "The Rust constraints the law inherits"). A crate under any other
+# licence fails the check; widening this list is a change to the lock, made in
+# review, never to get a build green.
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "Unlicense", "BSD-1-Clause"]
+# Only a licence cargo-deny is confident about counts.
+confidence-threshold = 0.93
+
+# One exception, scoped by crate. unicode-ident is a build-time dependency of
+# proc-macro2, under (MIT OR Apache-2.0) AND Unicode-3.0. Unicode-3.0 is
+# allowed for that crate only, not globally: [graph] targets do not narrow
+# build dependencies, so a target filter could not scope it.
+exceptions = [
+    { crate = "unicode-ident", allow = ["Unicode-3.0"] },
+]
