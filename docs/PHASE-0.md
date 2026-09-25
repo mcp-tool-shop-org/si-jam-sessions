@@ -92,7 +92,7 @@ Heard delay matters too. In rhythmic pairs, one-way delays under about 11.5 ms s
 
 ## The Rust constraints the law inherits
 
-The studio's Rust knowledge base binds the law. It has 230 verified recipes for `si-rpg-engine`, plus a four-lane wave written for this lock.
+The studio's [Rust knowledge base](https://github.com/mcp-tool-shop-org/readouts/tree/main/rust-knowledge) binds the law. It has 230 verified recipes for `si-rpg-engine`, plus a four-lane wave written for this lock. Its next wave marks the entries below as consumed pins; from then on, an edit to any of them is raised as a change to this lock before it lands.
 
 | Pin | Source |
 |---|---|
@@ -103,7 +103,7 @@ The studio's Rust knowledge base binds the law. It has 230 verified recipes for 
 | Digest re-pinned only from x86_64 Linux; `--locked`; path remapping; `clippy -D warnings`; `wasm-opt` only if pinned | ci-reproducible-builds lane |
 | `midly` 0.5.3, `default-features = false`, `features = ["alloc", "strict"]`; SMPTE-timed files refused | midi-notation-ingest lane (verified; `strict` path not yet compiler-tested) |
 | MusicXML `<divisions>` mapped to PPQ by integer maths with a divisibility test; ABC durations parsed as exact rationals, never through a crate's `f32` | midi-notation-ingest lane (verified) |
-| Native host: `cpal` (Apache-2.0, WASAPI shared mode only, no output xrun reporting), `rtrb` SPSC queue, no allocation on the callback | host-audio-and-midi lane (source-verified; compile-only) |
+| Native host: `cpal` 0.18.2 (Apache-2.0, WASAPI shared mode only; it reports xruns on the input path only), `rtrb` SPSC queue, no allocation on the callback | host-audio-and-midi lane (source-verified; compile-only) |
 | cargo-deny allowlist MIT / Apache-2.0 / Unlicense / BSD-1-Clause, plus one scoped exception for build-only `unicode-ident` (Unicode-3.0) | crate-licences lane (verified; measured with `cargo metadata`) |
 
 ## What comes across, and what stays in the sibling
