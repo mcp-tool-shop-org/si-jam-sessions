@@ -104,7 +104,7 @@ pub const QUANTUM_SAMPLES: u32 = 48;
 /// While the transport runs, the quantum at the playhead and the H quanta
 /// after it are committed. A proposal for a committed quantum is refused with
 /// its lateness in quanta, so a committed quantum never changes (PHASE-0
-/// [F29]). Before the first step nothing is committed.
+/// finding F29). Before the first step nothing is committed.
 ///
 /// Why 100:
 /// - The horizon is the host's render-ahead budget. The host may hand any
@@ -117,10 +117,11 @@ pub const QUANTUM_SAMPLES: u32 = 48;
 ///   sources are in `docs/study-swarm/lanes/lane4-realtime-coperformance.md`,
 ///   outside the gated dispatch: they inform this choice and pin nothing.
 /// - It adds 100 ms to the lead a model needs. That is small against how far
-///   ahead a jamming agent plans (four beats in ReaLJam, [F29]) and against
-///   the round trip that decides whether an accompaniment model keeps up at
-///   all (about 100 to 150 ms base latency in StreamMUSE, [F30]); the model
-///   absorbs its own latency by planning further ahead, not through H.
+///   ahead a jamming agent plans (four beats in ReaLJam, PHASE-0 F29) and
+///   against the round trip that decides whether an accompaniment model keeps
+///   up at all (about 100 to 150 ms base latency in StreamMUSE, PHASE-0 F30);
+///   the model absorbs its own latency by planning further ahead, not through
+///   H.
 pub const HORIZON_QUANTA: u32 = 100;
 
 /// The two-sided timing gate: 1,920 samples, 40 ms at 48 kHz.
@@ -131,10 +132,10 @@ pub const HORIZON_QUANTA: u32 = 100;
 ///
 /// Why inclusive: the slice-1 specification writes the gate as
 /// `|delta| ≤ 1920`, and the sibling's 40 ms gate, whose width PHASE-0 pins at
-/// 1,920 samples, keeps a difference equal to
-/// its tolerance (`ai-jam-sessions` `src/score-performance.ts` skips a match
-/// only when `timeDiff > toleranceSec`, and `src/audio/onsets.ts` accepts
-/// `d <= toleranceSec`). The edge therefore classifies here as it did in the
+/// 1,920 samples, keeps a difference equal to its tolerance: in
+/// `ai-jam-sessions`, `src/score-performance.ts` skips a match only when
+/// `timeDiff > toleranceSec`, and `src/audio/onsets.ts` accepts
+/// `d <= toleranceSec`. The edge therefore classifies here as it did in the
 /// sibling's labelled data.
 pub const GATE_SAMPLES: u32 = 1_920;
 

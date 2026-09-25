@@ -4,6 +4,22 @@
 #
 # Push is limited to main so a branch with an open pull request runs once, on
 # the pull_request event; workflow_dispatch runs any branch by hand.
+#
+# Standards compliance (the studio's six workflow standards, scored 0-3):
+# - PIN_PER_STEP 2: actions by commit SHA; the toolchain by rust-toolchain.toml;
+#   dependencies by Cargo.lock under --locked; cargo-deny by version, checked
+#   against install-action's recorded sha256.
+# - ANDON_AUTHORITY 2: every step is a gate and the first failure stops the
+#   job; nothing downstream of it runs.
+# - NAMED_COMPENSATORS: this workflow makes no irreversible call. It publishes,
+#   tags and pushes nothing, so there is nothing to undo.
+# - DECOMPOSE_BY_SECRETS 2: a read-only token, credentials not persisted, no
+#   secrets; the law's wasm is checked to import nothing.
+# - UNCERTAINTY_GATED_HUMANS 1. skip: a gate that only passes or fails has no
+#   uncertain output to route to a person; a person merges, and the workflow
+#   never does.
+# - EXTERNAL_VERIFIER 2: the import section is checked twice, by the Rust
+#   test's own parser and by the JavaScript engine's; no model grades anything.
 name: CI
 
 permissions:
