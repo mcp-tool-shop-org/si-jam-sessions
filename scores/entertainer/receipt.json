@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "score_id": "entertainer",
+  "title": "The Entertainer",
+  "fetched_on": "2026-09-25",
+  "composition": {
+    "authors": [
+      {
+        "name": "Scott Joplin",
+        "role": "composer",
+        "death_year": 1917
+      }
+    ],
+    "first_publication_year": 1902,
+    "evidence": ["loc-item", "mutopia-piece-page", "imslp-work-page"]
+  },
+  "source_edition": {
+    "statement": "Reproduction of original edition (1902)",
+    "publisher": "John Stark & Son",
+    "year": 1902,
+    "kind": "first-edition",
+    "evidence": ["loc-item", "imslp-work-page", "mutopia-piece-page"]
+  },
+  "arrangement": {
+    "kind": "third-party",
+    "host": "Mutopia Project",
+    "record": "Mutopia-2016/11/25-263",
+    "typesetter": "Chris Sawer",
+    "contributors": ["Simon Albrecht", "John Mamoun"],
+    "page_licence": {
+      "evidence": "mutopia-piece-page",
+      "text": "Public Domain"
+    },
+    "terms": {
+      "evidence": "mutopia-licence-page",
+      "text": "The contributor of this music has dedicated their contribution into the public domain.",
+      "restrictions": []
+    },
+    "credit_ledger_id": null
+  },
+  "files": [
+    {
+      "name": "entertainer.ly",
+      "media": "lilypond",
+      "url": "https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer.ly",
+      "sha256": "3a07fcf4f47b6000ced3e6579ef74bebb3c15af82d542a3aa42271f797544f7d",
+      "bytes": 11100,
+      "last_modified": "Fri, 25 Nov 2016 09:28:17 GMT",
+      "in_file_licence": [
+        {
+          "field": "lilypond-license",
+          "text": "Public Domain"
+        },
+        {
+          "field": "lilypond-copyright-markup",
+          "text": "Mutopia Project Typeset using LilyPond by Placed in the public domain by the typesetter free to distribute, modify, and perform"
+        }
+      ]
+    },
+    {
+      "name": "entertainer.mid",
+      "media": "smf",
+      "url": "https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer.mid",
+      "sha256": "33e4e81ee64ffb2edf90d1c6a1ddee7276507296bfb915c2bb775231a467f066",
+      "bytes": 22084,
+      "last_modified": "Thu, 21 Jan 2016 21:03:40 GMT",
+      "in_file_licence": []
+    }
+  ],
+  "evidence": [
+    {
+      "id": "cc-publicdomain-certification",
+      "url": "http://creativecommons.org/licenses/publicdomain/",
+      "resolved_url": "https://creativecommons.org/publicdomain/certification/1.0/us/",
+      "sha256": "122cd2dba6c0edfe907f7853e06aa096ee0ba00cd8362f2d96b6bd781288d208",
+      "bytes": 30419,
+      "quotes": [
+        "2010-10-11: Creative Commons has retired this legal tool",
+        "This tool is based on United States law and may not be applicable outside the US."
+      ]
+    },
+    {
+      "id": "imslp-work-page",
+      "url": "https://imslp.org/wiki/The_Entertainer_(Joplin,_Scott)",
+      "resolved_url": null,
+      "sha256": "7d16729e6ad3e6f2d1804f2daf7b6933c8caf6eb0015a8218b1a7428acffac3c",
+      "bytes": 500770,
+      "quotes": [
+        "First edition",
+        "St. Louis: John Stark & Son, 1902. Plate 10-4.",
+        "PDF scanned by US-Wc",
+        "oldid=4802745"
+      ]
+    },
+    {
+      "id": "loc-item",
+      "url": "https://www.loc.gov/item/2023864238/?fo=json",
+      "resolved_url": null,
+      "sha256": "dbeb612de2d5f0c644cd6e1a364c5a82a66da4c27bd190051ef47b844240848e",
+      "bytes": 40037,
+      "quotes": [
+        "[Place of publication not identified] : John Stark, 1902.",
+        "Joplin, Scott, 1868-1917, composer"
+      ]
+    },
+    {
+      "id": "mutopia-change-log",
+      "url": "https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer.log",
+      "resolved_url": null,
+      "sha256": "83ae396681e3cf725afbc6327a40e176f022d40a45246b4a37a59cc49a6756eb",
+      "bytes": 4038,
+      "quotes": [
+        "Improve formatting",
+        "(John Mamoun)",
+        "Header tweaks",
+        "JoplinS entertainer: credit Simon Albrecht's recent overhaul"
+      ]
+    },
+    {
+      "id": "mutopia-contribution-terms",
+      "url": "https://www.mutopiaproject.org/contribute.html",
+      "resolved_url": null,
+      "sha256": "2d12951661186c5566f088b60efe1dfef3c94fe94fc2345212c92f5828966fc0",
+      "bytes": 20654,
+      "quotes": [
+        "It is up to the contributor to decide what terms the music is released under.",
+        "Note that contributions listing a facsimile/reproduction source are discouraged as they may have additional legal complications."
+      ]
+    },
+    {
+      "id": "mutopia-licence-page",
+      "url": "https://www.mutopiaproject.org/legal.html",
+      "resolved_url": null,
+      "sha256": "21dd9566f45b2b238be3e79c449d03fb964854e85e5d1d6e6c244d3352136aa3",
+      "bytes": 6786,
+      "quotes": [
+        "The contributor of this music has dedicated their contribution into the public domain.",
+        "http://creativecommons.org/licenses/publicdomain/"
+      ]
+    },
+    {
+      "id": "mutopia-piece-page",
+      "url": "https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=263",
+      "resolved_url": null,
+      "sha256": "27025530b16ec6f96ea14ff46365eeba6c9e75a0c67965370124d0a014fc3403",
+      "bytes": 5937,
+      "quotes": [
+        "The Entertainer, by S. Joplin (1868–1917)",
+        "Copyright: Public Domain",
+        "Source: Reproduction of original edition (1902)",
+        "Music ID Number: Mutopia-2016/11/25-263",
+        "Maintainer: Chris Sawer",
+        "Typeset using: LilyPond, version 2.19.32"
+      ]
+    },
+    {
+      "id": "mutopia-title-search",
+      "url": "https://www.mutopiaproject.org/cgibin/make-table.cgi?searchingfor=entertainer",
+      "resolved_url": null,
+      "sha256": "f2864e423d0e0864813c2b81081c636d806318e15bd5b2327c702b5582f2af7e",
+      "bytes": 5338,
+      "quotes": [
+        "The Entertainer",
+        "by S. Joplin (1868–1917)",
+        "piece-info.cgi?id=263"
+      ]
+    }
+  ],
+  "notes": [
+    "Mutopia holds one typesetting of this work: its title search for 'entertainer' (evidence mutopia-title-search) lists only id 263.",
+    "The licence is stated inside the LilyPond file (its license field, and the copyright footer markup). The MIDI file states none: it has no copyright meta event and no text event that mentions a licence.",
+    "The MIDI file was last modified on 2016-01-21 and the LilyPond file on 2016-11-25; the change log's only later commit is 'Improve formatting'. The MIDI names GNU LilyPond 2.19.32, the version the LilyPond file declares.",
+    "The source statement names a reproduction of the 1902 original edition without saying which reproduction. The publisher and year recorded here are the original edition's, from the Library of Congress and IMSLP records; Mutopia's contribution page discourages facsimile or reproduction sources.",
+    "Mutopia's 'Public Domain' links to Creative Commons' Public Domain Certification 1.0 US, which Creative Commons retired in 2010 and describes as based on United States law.",
+    "The composition is public domain by its dates (first published 1902; the composer died in 1917), not by any host's label."
+  ]
+}
