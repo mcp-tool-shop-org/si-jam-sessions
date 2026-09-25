@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98.1"
+license = "MIT"
+repository = "https://github.com/mcp-tool-shop-org/si-jam-sessions"
+publish = false
