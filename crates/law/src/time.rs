@@ -263,6 +263,34 @@ mod tests {
         assert_ne!(105 % 2, 0, "a 128th cannot be halved");
     }
 
+    /// The tuplet table at PPQ 3360, in ticks: the note, then a 3:2, a 5:4
+    /// and a 7:4 tuplet note of that value. The expected values are copied
+    /// from rust-knowledge wave 5, integer-time lane (compiler-measured, then
+    /// re-derived in Python bigint by a separate verifier); they are not
+    /// computed here.
+    #[test]
+    fn the_tuplet_table_matches_the_knowledge_base() {
+        let table: [(&str, [u64; 4]); 8] = [
+            ("whole", [13_440, 8_960, 10_752, 7_680]),
+            ("half", [6_720, 4_480, 5_376, 3_840]),
+            ("quarter", [3_360, 2_240, 2_688, 1_920]),
+            ("eighth", [1_680, 1_120, 1_344, 960]),
+            ("16th", [840, 560, 672, 480]),
+            ("32nd", [420, 280, 336, 240]),
+            ("64th", [210, 140, 168, 120]),
+            ("128th", [105, 70, 84, 60]),
+        ];
+        for ((name, ticks), (expected_name, [note, three, five, seven])) in LEVELS.iter().zip(table)
+        {
+            assert_eq!((*name, *ticks), (expected_name, note));
+            // m in the time of n is ticks × m / n; each must divide exactly.
+            for (n, m, expected) in [(3, 2, three), (5, 4, five), (7, 4, seven)] {
+                assert_eq!(ticks * m % n, 0, "a {name} {n}:{m} tuplet is not whole");
+                assert_eq!(ticks * m / n, expected, "a {name} {n}:{m} tuplet");
+            }
+        }
+    }
+
     // --- Rescaling -----------------------------------------------------------
 
     #[test]
@@ -359,6 +387,23 @@ mod tests {
 
         let changes: vec::Vec<_> = m.changes().collect();
         assert_eq!(changes, [(0, 500_000, 0), (3_361, 450_000, 24_007)]);
+    }
+
+    /// Two one-tick segments at the slowest tempo. The expected values are
+    /// copied from rust-knowledge wave 5, integer-time lane (compiler-measured,
+    /// then re-derived in Python bigint by a separate verifier); they are not
+    /// computed here. One tick at 0xFFFFFF us/quarter is 239.67... samples,
+    /// so two ticks are 479.35... and the law's position is 479. Summing the
+    /// two segments' floors independently gives 478: that is the drift value.
+    #[test]
+    fn two_one_tick_segments_at_the_slowest_tempo_carry_to_479() {
+        let m = map(&[(0, 16_777_215), (1, 16_777_215)]);
+        assert_eq!(m.sample_at(2), Ok(479));
+        let drift = m.sample_at(1).unwrap() * 2;
+        assert_eq!(
+            drift, 478,
+            "the per-segment floors, which the law must not sum"
+        );
     }
 
     /// `N(t)` computed from scratch, segment by segment, with no carry.
