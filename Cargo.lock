@@ -55,6 +55,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ingest"
+version = "0.1.0"
+dependencies = [
+ "midly",
+ "score-model",
+]
+
+[[package]]
 name = "law"
 version = "0.1.0"
 dependencies = [
