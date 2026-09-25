@@ -630,8 +630,7 @@ fn a_public_domain_typesetting_carries_no_credit() {
 #[test]
 fn an_own_engraving_is_its_own_tier() {
     let mut f = Fixture::new();
-    // No host page, so the in-file comparison does not apply: a file that states nothing
-    // is admitted in this tier.
+    // No host page to compare with: the files must state no licence of their own.
     f.ly_header("");
     f.receipt.arrangement = Arrangement::ThisProject(ThisProject {
         engraver: named("si-jam-sessions"),
@@ -648,6 +647,53 @@ fn an_own_engraving_is_its_own_tier() {
     });
     f.receipt.composition.first_publication_year = Some(1950);
     assert!(matches!(f.refused(), Refusal::NotPublicDomainUs { .. }));
+}
+
+#[test]
+fn an_own_engraving_whose_files_state_a_licence_is_refused() {
+    let own = |f: &mut Fixture| {
+        f.receipt.arrangement = Arrangement::ThisProject(ThisProject {
+            engraver: named("si-jam-sessions"),
+        });
+    };
+    // Any statement refuses, restrictive or not, in either file.
+    for header in [
+        "  license = \"Copyright 2024. All rights reserved.\"\n",
+        "  license = \"Public Domain\"\n",
+        "  copyright = \\markup { \"Engraved 2026\" }\n",
+    ] {
+        let mut f = Fixture::new();
+        f.ly_header(header);
+        own(&mut f);
+        assert_eq!(
+            f.refused(),
+            Refusal::OwnEngravingStatesLicence {
+                name: named(LY_NAME)
+            },
+            "{header}"
+        );
+    }
+    let mut f = Fixture::new();
+    f.ly_header("");
+    f.mid = smf_with(&[(0x02, b"All rights reserved")], 1);
+    f.refresh();
+    own(&mut f);
+    assert_eq!(
+        f.refused(),
+        Refusal::OwnEngravingStatesLicence {
+            name: named(MID_NAME)
+        }
+    );
+    // The receipt's record is still checked against the bytes.
+    let mut f = Fixture::new();
+    own(&mut f);
+    f.receipt.files[0].in_file_licence.clear();
+    assert_eq!(
+        f.refused(),
+        Refusal::InFileMisrecorded {
+            name: named(LY_NAME)
+        }
+    );
 }
 
 // Check 4: source edition.

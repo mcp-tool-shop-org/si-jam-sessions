@@ -9,7 +9,9 @@ use sha2::{Digest, Sha256};
 use crate::error::ReceiptError;
 use crate::infile::{self, Unreadable};
 use crate::licence::{self, AdmittedClass, LicenceRefusal};
-use crate::receipt::{Arrangement, EditionKind, Receipt, StatementField, ThirdParty};
+use crate::receipt::{
+    Arrangement, EditionKind, FileEntry, Receipt, Statement, StatementField, ThirdParty,
+};
 use crate::{
     EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR, LAST_OUT_OF_TERM_EDITION_YEAR,
     US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR,
@@ -135,6 +137,11 @@ pub enum Refusal {
     },
     /// No file states a licence equal to the host page's.
     NoInFileLicence,
+    /// A file of this project's own engraving states a licence. Its licence is the
+    /// product's; until the product's licence text is fixed, its files must state none.
+    OwnEngravingStatesLicence {
+        name: String,
+    },
 }
 
 /// Admits or refuses a score. Pure: no clock, no I/O, no global state.
@@ -151,17 +158,19 @@ pub enum Refusal {
 ///    exactly when the tier needs one; or an engraving by this project;
 /// 4. the source edition: publisher, year and evidence present, the year not before first
 ///    publication, and the edition shown to be out of any scholarly-edition term;
-/// 5. the in-file licence (third-party typesettings only): every file read again, its
-///    statements equal to the receipt's record of them, each agreeing with the host
-///    page's licence, and at least one file stating it outright.
+/// 5. the in-file licence: every file read again, and its statements equal to the
+///    receipt's record of them. For a third-party typesetting, each statement agrees with
+///    the host page's licence and at least one file states it outright. For this
+///    project's own engraving, which has no host page, no file may state a licence.
 pub fn admit(receipt: &Receipt, supplied: &[Supplied<'_>]) -> Result<Admitted, Refusal> {
     receipt.check_structure().map_err(Refusal::Receipt)?;
     let files = check_files(receipt, supplied)?;
     check_composition(receipt)?;
     let tier = check_arrangement(receipt)?;
     check_edition(receipt)?;
-    if let Arrangement::ThirdParty(third) = &receipt.arrangement {
-        check_in_file(receipt, third, &files)?;
+    match &receipt.arrangement {
+        Arrangement::ThirdParty(third) => check_in_file(receipt, third, &files)?,
+        Arrangement::ThisProject(_) => check_own_files(receipt, &files)?,
     }
     Ok(Admitted {
         tier,
@@ -301,28 +310,45 @@ fn check_edition(receipt: &Receipt) -> Result<(), Refusal> {
     })
 }
 
+/// Reads a file's licence statements again and checks the receipt recorded them exactly.
+fn recorded_statements(f: &FileEntry, files: &Files<'_>) -> Result<Vec<Statement>, Refusal> {
+    // Check 1 guarantees exactly one supplied file per listed file.
+    let Some(bytes) = files.get(f.name.as_str()) else {
+        return Err(Refusal::MissingFile {
+            name: f.name.clone(),
+        });
+    };
+    let found = infile::statements(f.media, bytes).map_err(|why| Refusal::Unreadable {
+        name: f.name.clone(),
+        why,
+    })?;
+    if found != f.in_file_licence {
+        return Err(Refusal::InFileMisrecorded {
+            name: f.name.clone(),
+        });
+    }
+    Ok(found)
+}
+
+/// Check 5 for this project's own engraving: its files state no licence of their own.
+fn check_own_files(receipt: &Receipt, files: &Files<'_>) -> Result<(), Refusal> {
+    for f in &receipt.files {
+        if !recorded_statements(f, files)?.is_empty() {
+            return Err(Refusal::OwnEngravingStatesLicence {
+                name: f.name.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
 fn check_in_file(receipt: &Receipt, third: &ThirdParty, files: &Files<'_>) -> Result<(), Refusal> {
     // Check 3 has already refused a page licence that does not normalise.
     let page = licence::normalise(&third.page_licence.text)
         .ok_or(Refusal::Licence(LicenceRefusal::Unknown))?;
     let mut stated = false;
     for f in &receipt.files {
-        // Check 1 guarantees exactly one supplied file per listed file.
-        let Some(bytes) = files.get(f.name.as_str()) else {
-            return Err(Refusal::MissingFile {
-                name: f.name.clone(),
-            });
-        };
-        let found: Vec<_> =
-            infile::statements(f.media, bytes).map_err(|why| Refusal::Unreadable {
-                name: f.name.clone(),
-                why,
-            })?;
-        if found != f.in_file_licence {
-            return Err(Refusal::InFileMisrecorded {
-                name: f.name.clone(),
-            });
-        }
+        let found = recorded_statements(f, files)?;
         for st in &found {
             let agrees = match licence::normalise(&st.text) {
                 None => false,
