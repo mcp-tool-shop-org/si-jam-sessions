@@ -276,8 +276,10 @@ pub const LIVE_REACH_SAMPLES: u32 = 3_840;
 /// longer a candidate for it.
 ///
 /// It is derived from H rather than pinned on its own, so the snapshot header,
-/// which carries H and Q, carries it too.
-pub const LIVE_ALLOWANCE_SAMPLES: u32 = 4_800;
+/// which carries H and Q, carries it too, and a changed H moves it with every
+/// hash. Const evaluation fails the build if the product overflows.
+#[allow(clippy::arithmetic_side_effects)]
+pub const LIVE_ALLOWANCE_SAMPLES: u32 = HORIZON_QUANTA * QUANTUM_SAMPLES;
 
 /// When a score note of a live take closes: once the playhead has passed its
 /// onset plus the reach plus the delivery allowance, 8,640 samples (180 ms).
@@ -287,7 +289,8 @@ pub const LIVE_ALLOWANCE_SAMPLES: u32 = 4_800;
 /// `o + 8,640`. By then every live note that could answer it (onset at most
 /// `o + reach`) has had its whole allowance to arrive. A closed note's verdict,
 /// a citation or never played, is final.
-pub const CLOSE_SAMPLES: u32 = 8_640;
+#[allow(clippy::arithmetic_side_effects)]
+pub const CLOSE_SAMPLES: u32 = LIVE_REACH_SAMPLES + LIVE_ALLOWANCE_SAMPLES;
 
 /// The largest sample position the law holds: `i64::MAX`. Every onset fits an
 /// `i64`, so every difference of two onsets is an exact `i64`. At 48 kHz this
@@ -307,6 +310,4 @@ const _: () = {
     assert!(SAMPLE_RATE.is_multiple_of(QUANTUM_SAMPLES));
     assert!(MAX_SAMPLE == i64::MAX as u64);
     assert!(LIVE_REACH_SAMPLES == 2 * GATE_SAMPLES);
-    assert!(LIVE_ALLOWANCE_SAMPLES == HORIZON_QUANTA * QUANTUM_SAMPLES);
-    assert!(CLOSE_SAMPLES == LIVE_REACH_SAMPLES + LIVE_ALLOWANCE_SAMPLES);
 };
