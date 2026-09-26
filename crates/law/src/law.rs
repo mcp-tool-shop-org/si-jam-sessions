@@ -9,14 +9,14 @@ use score_model::IngestedScore;
 use sha2::{Digest, Sha256};
 
 use crate::frames::{self, Frames, LiveLength};
-use crate::grade::{self, Reached, Verdict};
+use crate::grade::{self, Naming, Verdict};
 use crate::live::{self, LiveNote, LiveNoteOff};
 use crate::refusal::{IngestRefusal, Refusal};
 use crate::score::LawScore;
 use crate::snapshot;
-use crate::take::TakeNote;
+use crate::take::{ScoreNoteId, TakeNote};
 use crate::wire;
-use crate::{HORIZON_QUANTA, MAX_SAMPLE};
+use crate::{CLOSE_SAMPLES, HORIZON_QUANTA, MAX_SAMPLE, QUANTUM_SAMPLES};
 
 /// Where an ingested score came from: the tier the licence predicate admitted
 /// it into, and the SHA-256 of its receipt's canonical encoding. The receipt
@@ -49,6 +49,16 @@ pub struct Provenance {
 /// admitted at its own onset, at or before the horizon, and never refused for
 /// lateness. The committed frames ([`Law::frames`]) are read out of committed
 /// quanta only.
+///
+/// # Live takes
+///
+/// The first step decides what the take is ([`TakeKind`]): a take admitted
+/// before the transport ran is a proposed take, graded whole as law version 3
+/// graded every take; a transport that starts with the take empty makes a live
+/// take, graded as it is played. In a live take, each score note closes once
+/// the playhead, the first sample of the playhead quantum, has passed its
+/// onset plus [`CLOSE_SAMPLES`]; a closed score note's verdict is final, and
+/// the verdicts and rows show only final ones ([`Law::verdicts`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Law {
     score: LawScore,
@@ -58,9 +68,28 @@ pub struct Law {
     /// increasing in their keys, which are keys of `take`. Not hashed.
     live: Vec<LiveLength>,
     steps: u64,
+    kind: TakeKind,
     /// `None` for a score loaded as bytes ([`Law::load`]), which no receipt
     /// admitted; the snapshot says so.
     provenance: Option<Provenance>,
+}
+
+/// What a take is, decided when the transport first steps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TakeKind {
+    /// No note, and the transport has not run. Read as law version 3 reads an
+    /// empty take: every score note never played.
+    Empty,
+    /// Its notes were admitted before the transport ran ([`Law::admit`]): the
+    /// constructed take, or a recorded take played back. Graded whole, as law
+    /// version 3 graded every take, whatever the transport's position; a note
+    /// admitted into it later, proposed or live, is graded the same way.
+    Proposed,
+    /// The transport started with the take empty: a take made while it runs,
+    /// of live notes and proposals. Its score notes close from the playhead
+    /// ([`CLOSE_SAMPLES`]) and only final verdicts are shown; a live note never
+    /// cites a closed score note, and a proposal that does is refused.
+    Live,
 }
 
 impl Law {
@@ -76,6 +105,7 @@ impl Law {
             take: Vec::new(),
             live: Vec::new(),
             steps: 0,
+            kind: TakeKind::Empty,
             provenance: None,
         })
     }
@@ -136,6 +166,7 @@ impl Law {
             take: Vec::new(),
             live: Vec::new(),
             steps: 0,
+            kind: TakeKind::Empty,
             provenance: Some(Provenance {
                 tier: admitted.tier,
                 receipt_digest: admitted.receipt_digest,
@@ -164,6 +195,55 @@ impl Law {
         self.steps
     }
 
+    /// What the take is, decided when the transport first steps.
+    pub fn take_kind(&self) -> TakeKind {
+        self.kind
+    }
+
+    /// The playhead: the first sample of the playhead quantum, `(steps - 1) *
+    /// Q`, or `None` while the transport is stopped. Past `u64::MAX` it reads
+    /// `u64::MAX`, which is past every close point.
+    pub fn playhead_sample(&self) -> Option<u64> {
+        self.steps
+            .checked_sub(1)
+            .map(|playhead| playhead.saturating_mul(u64::from(QUANTUM_SAMPLES)))
+    }
+
+    /// A score note's close point: its onset plus [`CLOSE_SAMPLES`]. In a live
+    /// take the note is closed once the playhead has passed it.
+    pub fn close_point(&self, note: ScoreNoteId) -> Result<u64, Refusal> {
+        let n = self.score.note(note).ok_or(Refusal::TakeCitation {
+            index: 0,
+            cites: note.0,
+            notes: self.score.notes().len(),
+        })?;
+        n.onset_sample
+            .checked_add(u64::from(CLOSE_SAMPLES))
+            .ok_or(Refusal::Overflow)
+    }
+
+    /// Whether a score note is closed: the take is live and the playhead has
+    /// passed the note's close point. Its verdict is then final.
+    pub fn is_closed(&self, note: ScoreNoteId) -> Result<bool, Refusal> {
+        if self.kind != TakeKind::Live {
+            return Ok(false);
+        }
+        let close = self.close_point(note)?;
+        Ok(self.playhead_sample().is_some_and(|at| at > close))
+    }
+
+    /// The earliest onset a score note may have and still be open to a new
+    /// citation: in a live take, the playhead less [`CLOSE_SAMPLES`]; in a
+    /// proposed take, 0.
+    fn open_from(&self) -> Result<u64, Refusal> {
+        if self.kind == TakeKind::Proposed {
+            return Ok(0);
+        }
+        Ok(self
+            .playhead_sample()
+            .map_or(0, |at| at.saturating_sub(u64::from(CLOSE_SAMPLES))))
+    }
+
     /// The last committed quantum, or `None` while the transport is stopped.
     pub fn committed_horizon(&self) -> Result<Option<u64>, Refusal> {
         match self.steps.checked_sub(1) {
@@ -176,7 +256,8 @@ impl Law {
     }
 
     /// Steps one quantum. Nothing is proposed or needed; the horizon moves
-    /// forward by one quantum.
+    /// forward by one quantum. A first step with the take empty makes it a
+    /// live take ([`TakeKind`]).
     pub fn step(&mut self) -> Result<(), Refusal> {
         let refused = Refusal::StepOverflow { steps: self.steps };
         let next = self.steps.checked_add(1).ok_or(refused)?;
@@ -184,6 +265,9 @@ impl Law {
         // u64, so the horizon and every lateness stay representable.
         next.checked_add(u64::from(HORIZON_QUANTA)).ok_or(refused)?;
         self.steps = next;
+        if self.kind == TakeKind::Empty {
+            self.kind = TakeKind::Live;
+        }
         Ok(())
     }
 
@@ -196,13 +280,20 @@ impl Law {
     /// 2. strictly after the note before it in the order
     ///    [`TakeNote::key`] (a total order: no ties);
     /// 3. not in a committed quantum ([`Refusal::Late`], with the lateness);
-    /// 4. not the key of a note already admitted.
+    /// 4. in a live take, no citation of a closed score note
+    ///    ([`Refusal::TakeCitesClosed`]): its verdict is final;
+    /// 5. not the key of a note already admitted.
     ///
     /// On success the notes merge into the take, which stays in key order, so
-    /// the take does not depend on how its notes were batched.
+    /// the take does not depend on how its notes were batched. Notes admitted
+    /// before the transport has run make a proposed take ([`TakeKind`]).
     pub fn admit(&mut self, notes: &[TakeNote]) -> Result<(), Refusal> {
         let horizon = self.committed_horizon()?;
-        self.admit_under(notes, horizon)
+        self.admit_under(notes, horizon)?;
+        if self.kind == TakeKind::Empty && !notes.is_empty() {
+            self.kind = TakeKind::Proposed;
+        }
+        Ok(())
     }
 
     /// Admission, as [`Law::admit`] states it. The live verb shares it: a
@@ -256,6 +347,15 @@ impl Law {
                         quantum,
                         horizon,
                         lateness,
+                    });
+                }
+                if let Some(id) = note.cites
+                    && self.is_closed(id)?
+                {
+                    return Err(Refusal::TakeCitesClosed {
+                        index,
+                        cites: id.0,
+                        close_sample: self.close_point(id)?,
                     });
                 }
             }
@@ -349,12 +449,14 @@ impl Law {
     /// 5. no admitted note has its onset, its pitch and its citation.
     ///
     /// The law decides what the note cites, by the rule in `live::cite`: the
-    /// host decides nothing, and a score note is cited at most once. The note
-    /// then goes through the take's admission without the horizon check and is
-    /// graded with the take, so a note played live gets the verdict and the row
-    /// it would get admitted as a take. Its length, set by the note-off, is kept
-    /// for the committed frames and is not hashed: the snapshot holds the take
-    /// as a take.
+    /// host decides nothing, a score note is cited at most once, and in a live
+    /// take a closed score note is not cited: a note delivered after the note
+    /// it answers has closed cites the next open candidate, or is an addition.
+    /// The note then goes through the take's admission without the horizon
+    /// check and is graded with the take, so a note played live gets the
+    /// verdict and the row it would get admitted as a take. Its length, set by
+    /// the note-off, is kept for the committed frames and is not hashed: the
+    /// snapshot holds the take as a take.
     ///
     /// Returns the take note as admitted, with its citation.
     pub fn live(&mut self, note: LiveNote) -> Result<TakeNote, Refusal> {
@@ -375,7 +477,13 @@ impl Law {
             onset_sample,
             pitch,
             velocity,
-            cites: live::cite(&self.score, &self.cited()?, onset_sample, pitch)?,
+            cites: live::cite(
+                &self.score,
+                &self.cited()?,
+                self.open_from()?,
+                onset_sample,
+                pitch,
+            )?,
         };
         // Room for the length first, so nothing can fail once the note is in
         // the take.
@@ -396,6 +504,7 @@ impl Law {
             LiveLength {
                 key,
                 duration_samples: None,
+                admitted_at: self.steps,
             },
         );
         Ok(admitted)
@@ -465,44 +574,46 @@ impl Law {
         frames::collect(&self.score, &self.take, &self.live, first, last)
     }
 
-    /// Every note graded; see [`Verdict`] for the order.
+    /// The graded record.
     ///
-    /// **In a live session** (the take holds a note the live verb admitted), a
-    /// score note no take note cites is never played only once its reach window,
-    /// `onset ± LIVE_REACH_SAMPLES`, lies wholly at or before the committed
-    /// horizon; until then it has no verdict and no row, because the
-    /// performance has not reached it. A live note that arrives after the
-    /// window has passed can still cite it: live notes arrive behind the
-    /// horizon, and a window passes the horizon about 20 ms before its note is
-    /// due (the reach, 80 ms, is shorter than H, 100 ms).
-    ///
-    /// Any other take, the constructed take among them, is graded as version 3
-    /// graded it: every uncited score note is never played, whatever the
+    /// **A proposed take** (the constructed take among them) is graded as law
+    /// version 3 graded every take: each score note in id order with the take
+    /// notes that cite it or never played, then the additions, whatever the
     /// transport's position.
+    ///
+    /// **A live take** shows only verdicts that can no longer change, in the
+    /// order they became final. A score note's verdicts, its citations or
+    /// never played, are final once it closes: when the playhead passes its
+    /// onset plus [`CLOSE_SAMPLES`], the reach and then the host's delivery
+    /// allowance. An addition is final once the playhead passes its own onset
+    /// plus the same, or, delivered later than that, from the next step. A
+    /// score note still open has no verdict yet. So the verdicts after any
+    /// step begin with the verdicts after every earlier step, unchanged: a row
+    /// once shown is a printout of what the law committed, and it stays as it
+    /// was shown.
     pub fn verdicts(&self) -> Result<Vec<Verdict>, Refusal> {
-        let reached = if self.live.is_empty() {
-            Reached::All
-        } else {
-            match self.committed_horizon()? {
-                // A live note needs a running transport, so a live session's
-                // transport runs; a stopped one would have reached nothing.
-                None => Reached::Nothing,
-                // The horizon's last sample. Past u64, everything has passed.
-                Some(horizon) => Reached::Through(
-                    horizon
-                        .saturating_add(1)
-                        .saturating_mul(u64::from(crate::QUANTUM_SAMPLES))
-                        .saturating_sub(1),
-                ),
+        match self.kind {
+            TakeKind::Live => {
+                grade::final_verdicts(&self.score, &self.take, &self.live, self.steps)
             }
-        };
-        grade::verdicts(&self.score, &self.take, reached)
+            TakeKind::Empty | TakeKind::Proposed => grade::verdicts(&self.score, &self.take),
+        }
+    }
+
+    /// How the rows name an addition's take note: by index in a proposed take,
+    /// as version 3 does; by onset and pitch in a live take, whose indices a
+    /// late live note can move.
+    fn naming(&self) -> Naming {
+        match self.kind {
+            TakeKind::Live => Naming::Onset,
+            TakeKind::Empty | TakeKind::Proposed => Naming::Index,
+        }
     }
 
     /// One row per verdict, in verdict order, each stating its comparison in
     /// digits.
     pub fn rows(&self) -> Result<Vec<String>, Refusal> {
-        grade::rows(&self.verdicts()?)
+        grade::rows(&self.verdicts()?, self.naming())
     }
 
     /// The canonical snapshot: the pins, where the score came from, the score
@@ -510,14 +621,13 @@ impl Law {
     /// verdicts and the rows, as explicit little-endian bytes in a declared
     /// order (see [`crate::SNAPSHOT_FORMAT`]).
     ///
-    /// The transport position is not in it: for a take admitted as a batch,
-    /// the snapshot is the graded record, the same however many quanta the host
-    /// stepped to reach it. In a live session the position enters in one way
-    /// only: an uncited score note gets its never-played verdict and row once
-    /// its reach window has passed the committed horizon ([`Law::verdicts`]).
+    /// The transport position is not in it: for a proposed take, the snapshot
+    /// is the graded record, the same however many quanta the host stepped to
+    /// reach it. For a live take the position decides one thing only, which
+    /// verdicts are final and so held ([`Law::verdicts`]).
     pub fn snapshot_bytes(&self) -> Result<Vec<u8>, Refusal> {
         let verdicts = self.verdicts()?;
-        let rows = grade::rows(&verdicts)?;
+        let rows = grade::rows(&verdicts, self.naming())?;
         snapshot::encode(
             &self.score,
             self.provenance.as_ref(),

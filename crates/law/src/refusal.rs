@@ -164,6 +164,15 @@ pub enum Refusal {
     FramesStopped,
     /// A frame window reaches past the committed horizon.
     FramesNotCommitted { last: u64, horizon: u64 },
+    /// Take note `index`, proposed into a live take, cites a score note that
+    /// has closed ([`crate::CLOSE_SAMPLES`]): its verdict is final.
+    /// `close_sample` is the note's close point, which the playhead has
+    /// passed.
+    TakeCitesClosed {
+        index: usize,
+        cites: u32,
+        close_sample: u64,
+    },
 }
 
 impl Refusal {
@@ -204,9 +213,10 @@ impl Refusal {
     /// | 170 | [`Refusal::FramesWindow`] |
     /// | 171 | [`Refusal::FramesStopped`] |
     /// | 172 | [`Refusal::FramesNotCommitted`] |
+    /// | 173 | [`Refusal::TakeCitesClosed`] |
     ///
-    /// Codes 160 to 172 came with law version 4, the live verbs and the frame
-    /// export. They follow every code the ingest verb uses (see
+    /// Codes 160 to 173 came with law version 4, the live verbs, the frame
+    /// export and the live take's closed score notes. They follow every code the ingest verb uses (see
     /// [`IngestRefusal::code`]), so no status names two refusals. 166 is not
     /// used: it named a live note ending past the last sample while the live
     /// verb took a length, before the note-off verb replaced it, and it never
@@ -260,6 +270,7 @@ impl Refusal {
             Refusal::FramesWindow { .. } => 170,
             Refusal::FramesStopped => 171,
             Refusal::FramesNotCommitted { .. } => 172,
+            Refusal::TakeCitesClosed { .. } => 173,
         }
     }
 }
@@ -482,6 +493,15 @@ impl fmt::Display for Refusal {
                 f,
                 "frames refused: the window ends at quantum {last}, after the committed horizon \
                  {horizon}"
+            ),
+            Refusal::TakeCitesClosed {
+                index,
+                cites,
+                close_sample,
+            } => write!(
+                f,
+                "take refused: note {index} cites score note {cites}, which closed when the \
+                 playhead passed sample {close_sample}; its verdict is final"
             ),
         }
     }

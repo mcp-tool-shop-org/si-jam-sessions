@@ -5,10 +5,11 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::{self, Write};
 
+use crate::frames::LiveLength;
 use crate::refusal::Refusal;
 use crate::score::{LawNote, LawScore};
 use crate::take::{ScoreNoteId, TakeNote};
-use crate::{GATE_SAMPLES, LIVE_REACH_SAMPLES, SAMPLES_PER_MS};
+use crate::{CLOSE_SAMPLES, GATE_SAMPLES, QUANTUM_SAMPLES, SAMPLES_PER_MS};
 
 /// How a cited take note compares with the score note it cites.
 ///
@@ -126,49 +127,10 @@ fn cited(note: ScoreNoteId, take: u32, t: &TakeNote, s: &LawNote) -> Result<Verd
     })
 }
 
-/// Which score notes the performance has reached: an uncited score note is
-/// never played only once it is reached.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Reached {
-    /// Every score note: a take admitted as a batch, graded as a whole.
-    All,
-    /// A live session: the score notes whose reach window,
-    /// `onset ± LIVE_REACH_SAMPLES`, ends at or before this sample.
-    Through(u64),
-    /// A live session with nothing committed. The live verb refuses a note
-    /// while the transport is stopped, so no take is graded this way.
-    Nothing,
-}
-
-impl Reached {
-    fn reaches(self, onset_sample: u64) -> bool {
-        match self {
-            Reached::All => true,
-            Reached::Through(last) => {
-                onset_sample.saturating_add(u64::from(LIVE_REACH_SAMPLES)) <= last
-            }
-            Reached::Nothing => false,
-        }
-    }
-}
-
-/// Grades a take against a score.
-///
-/// The verdicts come in one fixed order:
-/// 1. for each score note in id order, a [`Verdict::Cited`] for every take
-///    note that cites it, in take order, or one [`Verdict::NeverPlayed`] when
-///    none does and `reached` reaches it;
-/// 2. then a [`Verdict::Addition`] for every take note that cites nothing, in
-///    take order.
-///
-/// Every take note gets exactly one verdict, and so does every reached score
-/// note that no take note cites. With [`Reached::All`], that is every score
-/// note that no take note cites, as law version 3 graded.
-pub(crate) fn verdicts(
-    score: &LawScore,
-    take: &[TakeNote],
-    reached: Reached,
-) -> Result<Vec<Verdict>, Refusal> {
+/// Every take note's citation as (score note, take index), sorted. Take
+/// indices are distinct, so no two pairs are equal and the unstable sort has
+/// one possible result.
+fn citations(take: &[TakeNote]) -> Result<Vec<(ScoreNoteId, u32)>, Refusal> {
     let too_long = Refusal::TakeTooLong { count: take.len() };
     let mut citations: Vec<(ScoreNoteId, u32)> = reserved(take.len())?;
     for (index, t) in take.iter().enumerate() {
@@ -176,9 +138,24 @@ pub(crate) fn verdicts(
             citations.push((id, u32::try_from(index).map_err(|_| too_long)?));
         }
     }
-    // Sorted by (score note, take index). Take indices are distinct, so no two
-    // pairs are equal and the unstable sort has one possible result.
     citations.sort_unstable();
+    Ok(citations)
+}
+
+/// Grades a proposed take against a score, as law version 3 graded every take.
+///
+/// The verdicts come in one fixed order:
+/// 1. for each score note in id order, a [`Verdict::Cited`] for every take
+///    note that cites it, in take order, or one [`Verdict::NeverPlayed`] when
+///    none does;
+/// 2. then a [`Verdict::Addition`] for every take note that cites nothing, in
+///    take order.
+///
+/// Every take note gets exactly one verdict, and so does every score note that
+/// no take note cites. A live take is graded by [`final_verdicts`].
+pub(crate) fn verdicts(score: &LawScore, take: &[TakeNote]) -> Result<Vec<Verdict>, Refusal> {
+    let too_long = Refusal::TakeTooLong { count: take.len() };
+    let citations = citations(take)?;
 
     let notes = score.notes();
     let total = notes
@@ -204,7 +181,7 @@ pub(crate) fn verdicts(
                 .ok_or(Refusal::Overflow)?;
             out.push(cited(id, take_index, t, s)?);
         }
-        if !played && reached.reaches(s.onset_sample) {
+        if !played {
             out.push(Verdict::NeverPlayed {
                 note: id,
                 onset_sample: s.onset_sample,
@@ -231,6 +208,137 @@ pub(crate) fn verdicts(
         }
     }
     Ok(out)
+}
+
+/// A row's place in a live take's stream: the step from which it is final,
+/// its close point, score notes (0) before additions (1), then the score
+/// note's id and the take index, or the addition's take index. Every row has
+/// its own place.
+type Place = (u64, u64, u8, u64, u64);
+
+/// The verdicts of a live take that are final after `steps` steps, in the
+/// order they became final.
+///
+/// Every row has a close point: its onset plus [`CLOSE_SAMPLES`], where the
+/// onset is the score note's for a citation or a never-played verdict, and
+/// the take note's own for an addition. The playhead after `n` steps is
+/// `(n - 1) * Q`, and a row is final from the first step whose playhead has
+/// passed its close point: step `close / Q + 2`.
+/// - A score note closes there. Every take note that cites it was admitted
+///   before (the live verb cites only open notes, and a proposal that cites a
+///   closed one is refused), so its rows, one per citing take note in take
+///   order or one never-played, are all known before they are shown.
+/// - An addition's content is known at admission. It is shown from its close
+///   point, or, when it was admitted after its close point had passed (a live
+///   note delivered past its allowance), from the step after the one it was
+///   admitted at.
+///
+/// So a row's place in the stream is fixed before the step that shows it is
+/// reached, and the rows shown after any step begin with the rows shown after
+/// every earlier step, in the same order. A score note still open has no row.
+pub(crate) fn final_verdicts(
+    score: &LawScore,
+    take: &[TakeNote],
+    live: &[LiveLength],
+    steps: u64,
+) -> Result<Vec<Verdict>, Refusal> {
+    let too_long = Refusal::TakeTooLong { count: take.len() };
+    let quantum = u64::from(QUANTUM_SAMPLES);
+    let close = u64::from(CLOSE_SAMPLES);
+    let final_from = |onset: u64| -> Result<(u64, u64), Refusal> {
+        let point = onset.checked_add(close).ok_or(Refusal::Overflow)?;
+        let step = point
+            .checked_div(quantum)
+            .and_then(|n| n.checked_add(2))
+            .ok_or(Refusal::Overflow)?;
+        Ok((step, point))
+    };
+    let citations = citations(take)?;
+    let notes = score.notes();
+    let mut placed: Vec<(Place, Verdict)> = Vec::new();
+    let mut pending = citations.iter().peekable();
+    for (index, s) in notes.iter().enumerate() {
+        let id = ScoreNoteId(
+            u32::try_from(index).map_err(|_| Refusal::TooManyNotes { count: notes.len() })?,
+        );
+        let (step, point) = final_from(s.onset_sample)?;
+        let shown = step <= steps;
+        let mut played = false;
+        while let Some(&&(cites, take_index)) = pending.peek() {
+            if cites != id {
+                break;
+            }
+            pending.next();
+            played = true;
+            if shown {
+                let t = usize::try_from(take_index)
+                    .ok()
+                    .and_then(|i| take.get(i))
+                    .ok_or(Refusal::Overflow)?;
+                let place = (step, point, 0, u64::from(id.0), u64::from(take_index));
+                placed.try_reserve(1).map_err(|_| Refusal::OutOfMemory)?;
+                placed.push((place, cited(id, take_index, t, s)?));
+            }
+        }
+        if shown && !played {
+            let place = (step, point, 0, u64::from(id.0), 0);
+            placed.try_reserve(1).map_err(|_| Refusal::OutOfMemory)?;
+            placed.push((
+                place,
+                Verdict::NeverPlayed {
+                    note: id,
+                    onset_sample: s.onset_sample,
+                    pitch: s.pitch,
+                },
+            ));
+        }
+    }
+    if let Some(&&(cites, take_index)) = pending.peek() {
+        return Err(Refusal::TakeCitation {
+            index: usize::try_from(take_index).map_err(|_| Refusal::Overflow)?,
+            cites: cites.0,
+            notes: notes.len(),
+        });
+    }
+    for (index, t) in take.iter().enumerate() {
+        if t.cites.is_some() {
+            continue;
+        }
+        let (mut step, point) = final_from(t.onset_sample)?;
+        if let Ok(i) = live.binary_search_by(|l| l.key.cmp(&t.key())) {
+            let admitted = live.get(i).ok_or(Refusal::Overflow)?.admitted_at;
+            step = step.max(admitted.checked_add(1).ok_or(Refusal::Overflow)?);
+        }
+        if step <= steps {
+            let take_index = u32::try_from(index).map_err(|_| too_long)?;
+            let place = (step, point, 1, u64::from(take_index), 0);
+            placed.try_reserve(1).map_err(|_| Refusal::OutOfMemory)?;
+            placed.push((
+                place,
+                Verdict::Addition {
+                    take: take_index,
+                    onset_sample: t.onset_sample,
+                    pitch: t.pitch,
+                },
+            ));
+        }
+    }
+    // Places are distinct, so the unstable sort has one possible result.
+    placed.sort_unstable_by_key(|&(place, _)| place);
+    let mut out = reserved(placed.len())?;
+    out.extend(placed.into_iter().map(|(_, verdict)| verdict));
+    Ok(out)
+}
+
+/// How an addition's row names its take note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Naming {
+    /// By its index in the take, as law version 3 names it: a proposed take.
+    Index,
+    /// By its onset and pitch alone: a live take. A live note delivered past
+    /// its allowance can land before notes already shown and move their
+    /// indices, and a row once shown never changes.
+    Onset,
 }
 
 /// The longest row is under 130 bytes (twenty-digit numbers included).
@@ -272,7 +380,7 @@ fn tenths_of_ms(samples: u64) -> Result<u64, Refusal> {
     u64::try_from(tenths).map_err(|_| Refusal::Overflow)
 }
 
-fn write_row(line: &mut Line, verdict: &Verdict) -> Result<(), Refusal> {
+fn write_row(line: &mut Line, verdict: &Verdict, naming: Naming) -> Result<(), Refusal> {
     let word = verdict.word();
     let written = match *verdict {
         Verdict::Cited {
@@ -298,11 +406,18 @@ fn write_row(line: &mut Line, verdict: &Verdict) -> Result<(), Refusal> {
             take,
             onset_sample,
             pitch,
-        } => write!(
-            line,
-            "take note {take}: onset {onset_sample} samples, pitch {pitch}, cites no score note: \
-             {word}"
-        ),
+        } => match naming {
+            Naming::Index => write!(
+                line,
+                "take note {take}: onset {onset_sample} samples, pitch {pitch}, cites no score \
+                 note: {word}"
+            ),
+            Naming::Onset => write!(
+                line,
+                "take note at onset {onset_sample} samples, pitch {pitch}, cites no score note: \
+                 {word}"
+            ),
+        },
         Verdict::NeverPlayed {
             note,
             onset_sample,
@@ -325,16 +440,23 @@ fn write_row(line: &mut Line, verdict: &Verdict) -> Result<(), Refusal> {
 /// note 18: onset 98400 samples, pitch 67, no take note cites it: never played
 /// ```
 ///
+/// In a live take an addition's row names its take note by onset and pitch
+/// alone ([`Naming::Onset`]):
+///
+/// ```text
+/// take note at onset 96000 samples, pitch 60, cites no score note: addition
+/// ```
+///
 /// A cited row gives the onset difference (take minus score) in samples and in
 /// milliseconds to one decimal, the gate, and the take's pitch against the
 /// score's. Every cited row carries the pitch comparison, so a wrong pitch is
 /// read from its digits as a timing verdict is.
-pub(crate) fn row(verdict: &Verdict) -> Result<String, Refusal> {
+pub(crate) fn row(verdict: &Verdict, naming: Naming) -> Result<String, Refusal> {
     let mut line = Line {
         bytes: [0; ROW_CAPACITY],
         len: 0,
     };
-    write_row(&mut line, verdict)?;
+    write_row(&mut line, verdict, naming)?;
     let bytes = line.bytes.get(..line.len).ok_or(Refusal::Overflow)?;
     let text = core::str::from_utf8(bytes).map_err(|_| Refusal::Overflow)?;
     let mut out = String::new();
@@ -345,10 +467,10 @@ pub(crate) fn row(verdict: &Verdict) -> Result<String, Refusal> {
 }
 
 /// One row per verdict, in verdict order.
-pub(crate) fn rows(verdicts: &[Verdict]) -> Result<Vec<String>, Refusal> {
+pub(crate) fn rows(verdicts: &[Verdict], naming: Naming) -> Result<Vec<String>, Refusal> {
     let mut out = reserved(verdicts.len())?;
     for verdict in verdicts {
-        out.push(row(verdict)?);
+        out.push(row(verdict, naming)?);
     }
     Ok(out)
 }
@@ -418,7 +540,7 @@ mod tests {
         ];
         for (delta, expected) in cases {
             let take = [played(&s, 3, delta, 0)];
-            let v = verdicts(&s, &take, Reached::All).unwrap();
+            let v = verdicts(&s, &take).unwrap();
             let cited = v
                 .iter()
                 .find(|v| matches!(v, Verdict::Cited { .. }))
@@ -431,12 +553,12 @@ mod tests {
     fn rows_state_the_comparison_in_digits() {
         let s = score();
         let row_for = |delta: i64, pitch_offset: u8| {
-            let v = verdicts(&s, &[played(&s, 2, delta, pitch_offset)], Reached::All).unwrap();
+            let v = verdicts(&s, &[played(&s, 2, delta, pitch_offset)]).unwrap();
             let cited = v
                 .into_iter()
                 .find(|v| matches!(v, Verdict::Cited { .. }))
                 .unwrap();
-            row(&cited).unwrap()
+            row(&cited, Naming::Index).unwrap()
         };
         assert_eq!(
             row_for(2_160, 0),
@@ -498,7 +620,7 @@ mod tests {
     fn a_wrong_pitch_is_the_verdict_whatever_its_timing() {
         let s = score();
         for delta in [0, 2_160, -2_160] {
-            let v = verdicts(&s, &[played(&s, 5, delta, 2)], Reached::All).unwrap();
+            let v = verdicts(&s, &[played(&s, 5, delta, 2)]).unwrap();
             assert_eq!(kind_of(&v[5]), CitedKind::WrongPitch, "delta {delta}");
         }
     }
@@ -524,7 +646,7 @@ mod tests {
         let mut sorted = take;
         sorted.sort_by_key(TakeNote::key);
         assert_eq!(sorted[1], addition, "10,000 falls between notes 0 and 1");
-        let v = verdicts(&s, &sorted, Reached::All).unwrap();
+        let v = verdicts(&s, &sorted).unwrap();
         let summary: vec::Vec<(&str, Option<u32>)> = v
             .iter()
             .map(|v| {
@@ -551,11 +673,11 @@ mod tests {
             ]
         );
         assert_eq!(
-            row(&v[9]).unwrap(),
+            row(&v[9], Naming::Index).unwrap(),
             "take note 1: onset 10000 samples, pitch 90, cites no score note: addition"
         );
         assert_eq!(
-            row(&v[3]).unwrap(),
+            row(&v[3], Naming::Index).unwrap(),
             "note 2: onset 48000 samples, pitch 64, no take note cites it: never played"
         );
         assert_eq!(v.iter().map(Verdict::kind_code).max(), Some(5));
@@ -579,7 +701,7 @@ mod tests {
             };
             take.push(played(&s, id, delta, pitch));
         }
-        let v = verdicts(&s, &take, Reached::All).unwrap();
+        let v = verdicts(&s, &take).unwrap();
         let words: vec::Vec<&str> = v.iter().map(Verdict::word).collect();
         assert_eq!(
             words,
@@ -595,11 +717,11 @@ mod tests {
             ]
         );
         assert_eq!(
-            row(&v[1]).unwrap(),
+            row(&v[1], Naming::Index).unwrap(),
             "note 1: onset +1440 samples (+30.0 ms) vs gate \u{b1}1920, pitch 62 vs 62: match"
         );
         assert_eq!(
-            row(&v[5]).unwrap(),
+            row(&v[5], Naming::Index).unwrap(),
             "note 5: onset -2160 samples (-45.0 ms) vs gate \u{b1}1920, pitch 70 vs 70: early"
         );
     }
@@ -614,7 +736,7 @@ mod tests {
             cites: Some(ScoreNoteId(8)),
         };
         assert_eq!(
-            verdicts(&s, &[stray], Reached::All),
+            verdicts(&s, &[stray]),
             Err(Refusal::TakeCitation {
                 index: 0,
                 cites: 8,

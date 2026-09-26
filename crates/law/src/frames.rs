@@ -105,12 +105,15 @@ const _: () = {
     assert!(WHOLE_NOTE_TICKS.is_multiple_of(1 << 7));
 };
 
-/// The length of a live note, which the take does not hold: `None` while the
-/// note is held, until its note-off.
+/// What the law keeps of a live note beyond the take: its length, `None`
+/// while the note is held, until its note-off; and the step count when it was
+/// admitted, which places a late addition's row ([`crate::Law::verdicts`]).
+/// Neither is hashed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct LiveLength {
     pub(crate) key: TakeKey,
     pub(crate) duration_samples: Option<u64>,
+    pub(crate) admitted_at: u64,
 }
 
 /// The window's samples, `first × Q ..= (last + 1) × Q - 1`, cut to the law's

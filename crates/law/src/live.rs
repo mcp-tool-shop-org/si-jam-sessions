@@ -46,7 +46,9 @@ pub struct LiveNoteOff {
 }
 
 /// The score note a live note of `pitch` at `onset` answers, or `None` for an
-/// addition. `cited[i]` says whether a take note already cites score note `i`.
+/// addition. `cited[i]` says whether a take note already cites score note `i`,
+/// and a score note with an onset before `open_from` has closed
+/// ([`crate::CLOSE_SAMPLES`]); 0 when nothing has.
 ///
 /// 1. **The same pitch, within the reach.** Among the score notes of the live
 ///    note's pitch whose onset is at most [`LIVE_REACH_SAMPLES`] away, the
@@ -64,6 +66,11 @@ pub struct LiveNoteOff {
 /// cites is passed over at both steps, so a second live note in its reach
 /// cites the next candidate in the same order, or becomes an addition.
 ///
+/// **A closed score note is not a candidate.** Its verdict is final. A live
+/// note that arrives after the note it answers has closed cites the next
+/// candidate still open, in the same order, or becomes an addition; it is
+/// never refused for arriving late.
+///
 /// **Chords.** Step 1 runs before step 2, so every note of a chord that is
 /// played at its own pitch finds its own score note, in whatever order the
 /// chord's keys go down. A wrong key that goes down before the right one takes
@@ -76,16 +83,17 @@ pub struct LiveNoteOff {
 pub(crate) fn cite(
     score: &LawScore,
     cited: &[bool],
+    open_from: u64,
     onset: u64,
     pitch: u8,
 ) -> Result<Option<ScoreNoteId>, Refusal> {
     let reach = u64::from(LIVE_REACH_SAMPLES);
     let gate = u64::from(GATE_SAMPLES);
-    let low = onset.saturating_sub(reach);
+    let low = onset.saturating_sub(reach).max(open_from);
     let high = onset.checked_add(reach).ok_or(Refusal::Overflow)?;
     let notes = score.notes();
     // Score notes are in canonical order, which is onset order: the tempo map
-    // is monotone in the tick.
+    // is monotone in the tick. Closed notes are all before `open_from`.
     let start = notes.partition_point(|n| n.onset_sample < low);
     // (distance, after the live note, id)
     let mut same: Option<(u64, bool, u32)> = None;

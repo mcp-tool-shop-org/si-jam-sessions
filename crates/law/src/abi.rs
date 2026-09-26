@@ -59,7 +59,9 @@
 //! already read.
 //!
 //! These verbs came with law version 4 (`law_version()`); version 3 has none
-//! of them.
+//! of them. In a live take (the transport started with the take empty),
+//! `law_rows` and the snapshot hold only verdicts that can no longer change,
+//! in the order they became final ([`Law::verdicts`]).
 //!
 //! # Threads
 //!
@@ -796,9 +798,49 @@ mod tests {
         );
     }
 
+    /// Steps the C ABI's law and the Rust law together.
+    fn step_both(native: &mut Law, steps: u64) {
+        for _ in 0..steps {
+            assert_eq!(law_step(), 0);
+            native.step().unwrap();
+        }
+    }
+
+    /// Passes live notes, `(onset, pitch, velocity, status, cites)`, to both
+    /// laws: each status is the Rust law's, and each citation is the one
+    /// expected.
+    fn live_notes(native: &mut Law, notes: &[(i64, u32, u32, u32, Option<u32>)]) {
+        for &(onset_sample, pitch, velocity, code, cites) in notes {
+            let status = law_live_note(onset_sample, pitch, velocity);
+            let rust = native.live(LiveNote {
+                onset_sample,
+                pitch,
+                velocity,
+            });
+            let rust_code = rust.as_ref().map_or_else(|r| r.code(), |_| 0);
+            assert_eq!((status, rust_code), (code, code), "onset {onset_sample}");
+            if let Ok(admitted) = rust {
+                assert_eq!(admitted.cites.map(|id| id.0), cites, "onset {onset_sample}");
+            }
+        }
+    }
+
+    /// The C ABI's snapshot and rows are the Rust law's; returns the rows.
+    fn same_record(native: &Law) -> std::string::String {
+        assert_eq!(law_snapshot(), 0);
+        assert_eq!(
+            read(law_snapshot_ptr(), law_snapshot_len()),
+            native.snapshot_bytes().unwrap()
+        );
+        let rows = std::string::String::from_utf8(read(law_rows_ptr(), law_rows_len())).unwrap();
+        assert_eq!(rows, native.rows().unwrap().join("\n"));
+        rows
+    }
+
     /// The live verbs, the horizon and the frame export through the C ABI: each
     /// status is the Rust law's, the frames are the Rust law's frames in their
-    /// layout, and the snapshot after live notes is the Rust law's.
+    /// layout, and a live take's snapshot and rows are the Rust law's at every
+    /// point, showing each score note's row only once it has closed.
     #[test]
     fn the_live_and_frame_exports_agree_with_the_rust_law() {
         let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -822,44 +864,32 @@ mod tests {
         assert_eq!(law_live_note_off(60, 10), 160);
         assert_eq!(law_frames(0, 0), 171);
 
-        let mut native = Law::load(&ingested()).unwrap();
-        for _ in 0..1_100 {
-            assert_eq!(law_step(), 0);
-            native.step().unwrap();
-        }
-        let horizon = 1_099 + u64::from(HORIZON_QUANTA);
-        assert_eq!(law_horizon(), horizon);
-        let ahead = (horizon + 1) * u64::from(QUANTUM_SAMPLES);
         // The score: note 0 (sample 0, pitch 60), note 1 (0, 64), note 2
-        // (24,000, 62), note 3 (48,000, 65).
-        let notes: [(i64, u32, u32, u32, Option<u32>); 11] = [
-            (0, 60, 64, 0, Some(0)),
-            (24_050, 62, 80, 0, Some(2)),
-            (48_000, 66, 1, 0, Some(3)),
-            // Note 0 is cited, so the same key again cites note 1, then
-            // nothing: an addition, which a third time is a duplicate.
-            (0, 60, 90, 0, Some(1)),
-            (0, 60, 90, 0, None),
-            (0, 60, 90, 167, None),
-            (-1, 60, 64, 161, None),
-            (30, 128, 64, 163, None),
-            (30, 61, 0, 164, None),
-            (ahead as i64, 61, 64, 162, None),
-            (i64::MAX - 5, 61, 64, 162, None),
-        ];
-        for (onset_sample, pitch, velocity, code, cites) in notes {
-            let status = law_live_note(onset_sample, pitch, velocity);
-            let rust = native.live(LiveNote {
-                onset_sample,
-                pitch,
-                velocity,
-            });
-            let rust_code = rust.as_ref().map_or_else(|r| r.code(), |_| 0);
-            assert_eq!((status, rust_code), (code, code), "onset {onset_sample}");
-            if let Ok(admitted) = rust {
-                assert_eq!(admitted.cites.map(|id| id.0), cites, "onset {onset_sample}");
-            }
-        }
+        // (24,000, 62), note 3 (48,000, 65). Each closes when the playhead
+        // passes its onset plus 8,640.
+        let q = u64::from(QUANTUM_SAMPLES);
+        let h = u64::from(HORIZON_QUANTA);
+        let mut native = Law::load(&ingested()).unwrap();
+        step_both(&mut native, 100);
+        let horizon = 99 + h;
+        assert_eq!(law_horizon(), horizon);
+        let ahead = (horizon + 1) * q;
+        live_notes(
+            &mut native,
+            &[
+                (0, 60, 64, 0, Some(0)),
+                // Note 0 is cited, so the same key again cites note 1, then
+                // nothing: an addition, which a third time is a duplicate.
+                (0, 60, 90, 0, Some(1)),
+                (0, 60, 90, 0, None),
+                (0, 60, 90, 167, None),
+                (-1, 60, 64, 161, None),
+                (30, 128, 64, 163, None),
+                (30, 61, 0, 164, None),
+                (ahead as i64, 61, 64, 162, None),
+                (i64::MAX - 5, 61, 64, 162, None),
+            ],
+        );
         assert_eq!(
             refusal_text(),
             std::format!(
@@ -869,17 +899,61 @@ mod tests {
                 (i64::MAX as u64 - 5) / 48
             )
         );
+        assert_eq!(same_record(&native), "", "nothing has closed");
 
-        // Held: three notes of pitch 60 at sample 0, one each of 62 and 66.
-        // A note-off ends the latest by key: the one citing note 1.
-        let offs: [(u32, i64, u32); 7] = [
+        // The playhead at 28,752: notes 0 and 1 have closed, and so has the
+        // addition at sample 0.
+        step_both(&mut native, 500);
+        assert_eq!(
+            same_record(&native),
+            "note 0: onset +0 samples (+0.0 ms) vs gate \u{b1}1920, pitch 60 vs 60: match\n\
+             note 1: onset +0 samples (+0.0 ms) vs gate \u{b1}1920, pitch 60 vs 64: wrong pitch\n\
+             take note at onset 0 samples, pitch 60, cites no score note: addition"
+        );
+        // Note 2 is open, so a note for it is graded against it.
+        live_notes(&mut native, &[(24_050, 62, 80, 0, Some(2))]);
+
+        // The playhead at 52,752: note 2 has closed, note 3 has not.
+        step_both(&mut native, 500);
+        let horizon = 1_099 + h;
+        live_notes(
+            &mut native,
+            &[
+                (48_000, 66, 1, 0, Some(3)),
+                // Delivered long after note 2 closed: never refused, an
+                // addition.
+                (24_100, 62, 70, 0, None),
+            ],
+        );
+        // A proposal into the live take may not cite the closed note 2.
+        let proposal = TakeNote {
+            onset_sample: (horizon + 1) * q,
+            pitch: 62,
+            velocity: 5,
+            cites: Some(ScoreNoteId(2)),
+        };
+        let code = call(&wire::encode_take(&[proposal]).unwrap(), law_admit_take);
+        assert_eq!(code, native.admit(&[proposal]).unwrap_err().code());
+        assert_eq!(code, 173);
+        assert_eq!(
+            refusal_text(),
+            "take refused: note 0 cites score note 2, which closed when the playhead passed \
+             sample 32640; its verdict is final"
+        );
+
+        // Held: three notes of pitch 60 at sample 0, two of 62, one of 66. A
+        // note-off ends the latest of its pitch by key: first the 60 that
+        // cites note 1, then the 62 addition at 24,100.
+        let ahead = (horizon + 1) * q;
+        let offs: [(u32, i64, u32); 8] = [
             (60, 100, 0),
             (60, 0, 165),
             (61, 100, 168),
             (128, 100, 163),
             (60, -1, 161),
             (60, ahead as i64, 162),
-            (62, 24_060, 0),
+            (62, 24_200, 0),
+            (62, 24_300, 0),
         ];
         for (pitch, off_sample, code) in offs {
             let status = law_live_note_off(pitch, off_sample);
@@ -917,7 +991,7 @@ mod tests {
             wire::encode_frames(&native.frames(0, horizon).unwrap()).unwrap()
         );
         let decoded = wire::decode_frames(&frames).unwrap();
-        assert_eq!(decoded.notes.len(), 4 + 5);
+        assert_eq!(decoded.notes.len(), 4 + 6);
         assert_eq!(law_frames(horizon + 1, horizon + 1), 172);
         assert_eq!(
             refusal_text(),
@@ -963,10 +1037,12 @@ mod tests {
         assert_eq!(law_horizon(), 0);
         SHARED.busy.store(false, Ordering::SeqCst);
 
-        assert_eq!(law_snapshot(), 0);
-        assert_eq!(
-            read(law_snapshot_ptr(), law_snapshot_len()),
-            native.snapshot_bytes().unwrap()
-        );
+        // Once every note has closed, every row is shown.
+        step_both(&mut native, 1_000);
+        let rows = same_record(&native);
+        assert_eq!(rows.lines().count(), 4 + 3);
+        assert!(rows.contains(
+            "note 3: onset +0 samples (+0.0 ms) vs gate \u{b1}1920, pitch 66 vs 65: wrong pitch"
+        ));
     }
 }

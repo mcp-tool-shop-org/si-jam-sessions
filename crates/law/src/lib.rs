@@ -79,7 +79,7 @@ pub mod wire;
 
 pub use frames::{Beat, FrameNote, Frames, Voice};
 pub use grade::{CitedKind, Verdict};
-pub use law::{Law, Provenance};
+pub use law::{Law, Provenance, TakeKind};
 pub use live::{LiveNote, LiveNoteOff};
 pub use refusal::{Event, IngestRefusal, Refusal, WireFault};
 pub use score::{LawMeter, LawNote, LawScore, LawTempo};
@@ -116,17 +116,30 @@ pub use time::{TempoMap, rescale_tick};
 ///     onset, never refused for lateness. The law cites it by the rule of
 ///     [`LIVE_REACH_SAMPLES`], each score note at most once, and it goes
 ///     through the take's own admission and grading.
-///   - In a live session, an uncited score note is never played once its
-///     reach window has passed the committed horizon (see [`Law::verdicts`]).
-///   - `law_horizon` reads the committed horizon, and refusal codes 160 to 172
+///   - A take made while the transport runs (the transport started with the
+///     take empty) is a live take. In a live take each score note closes when
+///     the playhead passes its onset plus
+///     [`CLOSE_SAMPLES`]: the reach, then the host's delivery allowance
+///     ([`LIVE_ALLOWANCE_SAMPLES`]). A closed score note's verdict is final: no
+///     live note cites it after that, and a proposal that cites it is
+///     refused. The law's rows and verdicts show only final ones, in the order
+///     they became final, so a row once shown never changes (see
+///     [`Law::verdicts`]).
+///   - `law_horizon` reads the committed horizon, and refusal codes 160 to 173
 ///     name the new refusals.
 ///
-///   Nothing version 3 computed changes: a take admitted as a batch is graded,
-///   rowed and hashed as before, and the constructed take's snapshot differs
-///   from version 3's in its law-version word alone. So version 4 names golden
-///   `fd574ccc…`, and that snapshot with byte 12 written back to 3 hashes to
-///   `145c7af9…`. A host tells the verbs are there from `law_version()`:
-///   version 3 on `main` is the law without them.
+///   Nothing version 3 computed changes: a proposed take (every take version 3
+///   knew) is graded, rowed and hashed as before, and the constructed take's
+///   snapshot differs from version 3's in its law-version word alone. So
+///   version 4 names golden `fd574ccc…`, and that snapshot with byte 12
+///   written back to 3 hashes to `145c7af9…`. A host tells the verbs are there
+///   from `law_version()`: version 3 on `main` is the law without them.
+///
+///   Refined on its branch, golden unchanged: as pushed at `8d79de0`, a live
+///   session gave an unplayed score note its never-played row once the note's
+///   reach window passed the committed horizon, about 20 ms before the note
+///   was heard, and a later live note could replace that row. Version 4 now
+///   closes score notes from the playhead, as above.
 ///
 /// The predicate's rules are the law's, and the law pins their version and
 /// date cut-offs below. Moving any of them fails the build there until the
@@ -250,6 +263,32 @@ pub const GATE_SAMPLES: u32 = 1_920;
 /// it too.
 pub const LIVE_REACH_SAMPLES: u32 = 3_840;
 
+/// How far the playhead may pass a live note's onset before the host must
+/// have handed the note over: H, 4,800 samples (100 ms). This is the
+/// delivery allowance.
+///
+/// The host commits H quanta ahead of its step clock, and it has the same H
+/// behind the step clock to deliver what a person played. A live note heard at
+/// sample `s` and delivered while the playhead is at or before `s + 4,800` is
+/// always graded against the score note it answers, because no score note it
+/// can answer has closed yet ([`CLOSE_SAMPLES`]). A note delivered later is
+/// still admitted, never refused, but a score note that has closed is no
+/// longer a candidate for it.
+///
+/// It is derived from H rather than pinned on its own, so the snapshot header,
+/// which carries H and Q, carries it too.
+pub const LIVE_ALLOWANCE_SAMPLES: u32 = 4_800;
+
+/// When a score note of a live take closes: once the playhead has passed its
+/// onset plus the reach plus the delivery allowance, 8,640 samples (180 ms).
+///
+/// The playhead is the first sample of the playhead quantum: after `n` steps,
+/// `(n - 1) * Q`. A score note with onset `o` is closed once that is past
+/// `o + 8,640`. By then every live note that could answer it (onset at most
+/// `o + reach`) has had its whole allowance to arrive. A closed note's verdict,
+/// a citation or never played, is final.
+pub const CLOSE_SAMPLES: u32 = 8_640;
+
 /// The largest sample position the law holds: `i64::MAX`. Every onset fits an
 /// `i64`, so every difference of two onsets is an exact `i64`. At 48 kHz this
 /// is about six million years.
@@ -268,4 +307,6 @@ const _: () = {
     assert!(SAMPLE_RATE.is_multiple_of(QUANTUM_SAMPLES));
     assert!(MAX_SAMPLE == i64::MAX as u64);
     assert!(LIVE_REACH_SAMPLES == 2 * GATE_SAMPLES);
+    assert!(LIVE_ALLOWANCE_SAMPLES == HORIZON_QUANTA * QUANTUM_SAMPLES);
+    assert!(CLOSE_SAMPLES == LIVE_REACH_SAMPLES + LIVE_ALLOWANCE_SAMPLES);
 };
