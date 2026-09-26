@@ -39,7 +39,8 @@ impl fmt::Display for Event {
     }
 }
 
-/// What was wrong with bytes the host passed in (see [`crate::wire`]).
+/// What was wrong with bytes the host passed in, or with frame bytes a host
+/// decodes (see [`crate::wire`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WireFault {
     /// The first four bytes are not the expected magic.
@@ -57,6 +58,11 @@ pub enum WireFault {
     /// A container file's name is not after the name before it: the names
     /// are out of order, or one is repeated.
     FileOrder,
+    /// A frame's voice is not 0 (score), 1 (take) or 2 (live), or a score
+    /// frame does not name its own note.
+    Voice,
+    /// A beat's downbeat flag is not 0 or 1, or is not 1 exactly on beat 0.
+    Downbeat,
 }
 
 /// Why the law refused.
@@ -121,6 +127,52 @@ pub enum Refusal {
     Overflow,
     /// Another call into the law's C ABI was running.
     Busy,
+    /// A live note-on or note-off arrived while the transport is stopped:
+    /// nothing is committed yet, so there is no clock for it to be a record on.
+    LiveStopped,
+    /// A live note-on or note-off is before sample 0, where the take starts.
+    /// `sample` is the note-on's onset or the note-off's release.
+    LiveBeforeStart { sample: i64 },
+    /// A live note-on or note-off is in a quantum after the committed horizon.
+    /// A live note records what was played, and that quantum has not been
+    /// reached.
+    LiveAhead {
+        sample: u64,
+        quantum: u64,
+        horizon: u64,
+    },
+    /// A live note's pitch is above 127.
+    LivePitch { pitch: u32 },
+    /// A live note's velocity is outside 1..=127.
+    LiveVelocity { velocity: u32 },
+    /// A live note-off is not after the note-on it ends: the note would last
+    /// no samples. The note stays held.
+    LiveEmpty { onset_sample: u64, off_sample: u64 },
+    /// A live note has the onset, the pitch and the citation of a note
+    /// already admitted.
+    LiveDuplicate {
+        onset_sample: u64,
+        pitch: u8,
+        cites: Option<u32>,
+    },
+    /// A live note-off for a pitch no live note is holding.
+    LiveNotHeld { pitch: u8 },
+    /// A frame window's first quantum is after its last.
+    FramesWindow { first: u64, last: u64 },
+    /// Frames were asked for while the transport is stopped: no quantum is
+    /// committed.
+    FramesStopped,
+    /// A frame window reaches past the committed horizon.
+    FramesNotCommitted { last: u64, horizon: u64 },
+    /// Take note `index`, proposed into a live take, cites a score note that
+    /// has closed ([`crate::CLOSE_SAMPLES`]): its verdict is final.
+    /// `close_sample` is the note's close point, which the playhead has
+    /// passed.
+    TakeCitesClosed {
+        index: usize,
+        cites: u32,
+        close_sample: u64,
+    },
 }
 
 impl Refusal {
@@ -150,6 +202,25 @@ impl Refusal {
     /// | 61 | [`Refusal::OutOfMemory`] |
     /// | 62 | [`Refusal::Overflow`] |
     /// | 63 | [`Refusal::Busy`] |
+    /// | 160 | [`Refusal::LiveStopped`] |
+    /// | 161 | [`Refusal::LiveBeforeStart`] |
+    /// | 162 | [`Refusal::LiveAhead`] |
+    /// | 163 | [`Refusal::LivePitch`] |
+    /// | 164 | [`Refusal::LiveVelocity`] |
+    /// | 165 | [`Refusal::LiveEmpty`] |
+    /// | 167 | [`Refusal::LiveDuplicate`] |
+    /// | 168 | [`Refusal::LiveNotHeld`] |
+    /// | 170 | [`Refusal::FramesWindow`] |
+    /// | 171 | [`Refusal::FramesStopped`] |
+    /// | 172 | [`Refusal::FramesNotCommitted`] |
+    /// | 173 | [`Refusal::TakeCitesClosed`] |
+    ///
+    /// Codes 160 to 173 came with law version 4, the live verbs, the frame
+    /// export and the live take's closed score notes. They follow every code the ingest verb uses (see
+    /// [`IngestRefusal::code`]), so no status names two refusals. 166 is not
+    /// used: it named a live note ending past the last sample while the live
+    /// verb took a length, before the note-off verb replaced it, and it never
+    /// reached `main`.
     pub fn code(&self) -> u32 {
         match self {
             Refusal::Model(error) => match error {
@@ -188,6 +259,18 @@ impl Refusal {
             Refusal::OutOfMemory => 61,
             Refusal::Overflow => 62,
             Refusal::Busy => 63,
+            Refusal::LiveStopped => 160,
+            Refusal::LiveBeforeStart { .. } => 161,
+            Refusal::LiveAhead { .. } => 162,
+            Refusal::LivePitch { .. } => 163,
+            Refusal::LiveVelocity { .. } => 164,
+            Refusal::LiveEmpty { .. } => 165,
+            Refusal::LiveDuplicate { .. } => 167,
+            Refusal::LiveNotHeld { .. } => 168,
+            Refusal::FramesWindow { .. } => 170,
+            Refusal::FramesStopped => 171,
+            Refusal::FramesNotCommitted { .. } => 172,
+            Refusal::TakeCitesClosed { .. } => 173,
         }
     }
 }
@@ -334,6 +417,12 @@ impl fmt::Display for Refusal {
                         "a file name is not after the one before it, so the names are out of \
                          order or repeated"
                     }
+                    WireFault::Voice => {
+                        "a frame's voice is not 0, 1 or 2, or a score frame does not name its note"
+                    }
+                    WireFault::Downbeat => {
+                        "a downbeat flag is not 0 or 1, or is not 1 exactly on beat 0"
+                    }
                 };
                 write!(f, "bytes refused at offset {offset}: {what}")
             }
@@ -341,6 +430,79 @@ impl fmt::Display for Refusal {
             Refusal::OutOfMemory => write!(f, "refused: an allocation failed"),
             Refusal::Overflow => write!(f, "refused: an integer overflowed"),
             Refusal::Busy => write!(f, "refused: another call into the law is running"),
+            Refusal::LiveStopped => write!(
+                f,
+                "live note refused: the transport is stopped, so no quantum is committed"
+            ),
+            Refusal::LiveBeforeStart { sample } => write!(
+                f,
+                "live note refused: sample {sample} is before sample 0, where the take starts"
+            ),
+            Refusal::LiveAhead {
+                sample,
+                quantum,
+                horizon,
+            } => write!(
+                f,
+                "live note refused: sample {sample} falls in quantum {quantum}, after the \
+                 committed horizon {horizon}; a live note records what was played"
+            ),
+            Refusal::LivePitch { pitch } => {
+                write!(f, "live note refused: pitch {pitch} is above 127")
+            }
+            Refusal::LiveVelocity { velocity } => write!(
+                f,
+                "live note refused: velocity {velocity} is outside 1..=127"
+            ),
+            Refusal::LiveEmpty {
+                onset_sample,
+                off_sample,
+            } => write!(
+                f,
+                "live note-off refused: sample {off_sample} is not after the note-on at sample \
+                 {onset_sample} it ends, so the note stays held"
+            ),
+            Refusal::LiveDuplicate {
+                onset_sample,
+                pitch,
+                cites,
+            } => {
+                write!(
+                    f,
+                    "live note refused: a note at onset sample {onset_sample} with pitch {pitch} "
+                )?;
+                match cites {
+                    Some(id) => write!(f, "citing score note {id}")?,
+                    None => write!(f, "citing no score note")?,
+                }
+                write!(f, " is already admitted")
+            }
+            Refusal::LiveNotHeld { pitch } => write!(
+                f,
+                "live note-off refused: no live note of pitch {pitch} is held"
+            ),
+            Refusal::FramesWindow { first, last } => write!(
+                f,
+                "frames refused: the window's first quantum {first} is after its last {last}"
+            ),
+            Refusal::FramesStopped => write!(
+                f,
+                "frames refused: the transport is stopped, so no quantum is committed"
+            ),
+            Refusal::FramesNotCommitted { last, horizon } => write!(
+                f,
+                "frames refused: the window ends at quantum {last}, after the committed horizon \
+                 {horizon}"
+            ),
+            Refusal::TakeCitesClosed {
+                index,
+                cites,
+                close_sample,
+            } => write!(
+                f,
+                "take refused: note {index} cites score note {cites}, which closed when the \
+                 playhead passed sample {close_sample}; its verdict is final"
+            ),
         }
     }
 }

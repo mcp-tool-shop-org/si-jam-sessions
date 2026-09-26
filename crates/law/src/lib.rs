@@ -49,6 +49,7 @@ extern crate alloc;
 extern crate std as _;
 
 pub mod abi;
+mod frames;
 mod grade;
 #[cfg(test)]
 #[allow(
@@ -59,6 +60,16 @@ mod grade;
 )]
 mod ingest_tests;
 mod law;
+mod live;
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used
+)]
+mod live_tests;
 mod refusal;
 mod score;
 mod snapshot;
@@ -66,8 +77,10 @@ mod take;
 mod time;
 pub mod wire;
 
+pub use frames::{Beat, FrameNote, Frames, Voice};
 pub use grade::{CitedKind, Verdict};
-pub use law::{Law, Provenance};
+pub use law::{Law, Provenance, TakeKind};
+pub use live::{LiveNote, LiveNoteOff};
 pub use refusal::{Event, IngestRefusal, Refusal, WireFault};
 pub use score::{LawMeter, LawNote, LawScore, LawTempo};
 pub use snapshot::{SNAPSHOT_FORMAT, SNAPSHOT_MAGIC};
@@ -94,11 +107,44 @@ pub use time::{TempoMap, rescale_tick};
 ///   it. Version 2 named golden `f12b07b0…` on a pushed head, so the law with
 ///   predicate version 2 needed a new number; it names golden `145c7af9…`.
 ///   The SMF reader's two track-count refusals have codes of their own.
+/// - 4: the host's verbs, under the same predicate version 2 and cut-offs.
+///   - The frame export ([`Law::frames`], `law_frames`) reads the committed
+///     quanta of a window: every note-on of the score, the take and the live
+///     take, and every beat. It changes nothing.
+///   - The live verbs (`law_live_note` and `law_live_note_off`, [`Law::live`]
+///     and [`Law::live_off`]) admit a person's note as a record at its own
+///     onset, never refused for lateness. The law cites it by the rule of
+///     [`LIVE_REACH_SAMPLES`], each score note at most once, and it goes
+///     through the take's own admission and grading.
+///   - A take made while the transport runs (the transport started with the
+///     take empty) is a live take. In a live take each score note closes when
+///     the playhead passes its onset plus
+///     [`CLOSE_SAMPLES`]: the reach, then the host's delivery allowance
+///     ([`LIVE_ALLOWANCE_SAMPLES`]). A closed score note's verdict is final: no
+///     live note cites it after that, and a proposal that cites it is
+///     refused. The law's rows and verdicts show only final ones, in the order
+///     they became final, so a row once shown never changes (see
+///     [`Law::verdicts`]).
+///   - `law_horizon` reads the committed horizon, and refusal codes 160 to 173
+///     name the new refusals.
+///
+///   Nothing version 3 computed changes: a proposed take (every take version 3
+///   knew) is graded, rowed and hashed as before, and the constructed take's
+///   snapshot differs from version 3's in its law-version word alone. So
+///   version 4 names golden `fd574ccc…`, and that snapshot with byte 12
+///   written back to 3 hashes to `145c7af9…`. A host tells the verbs are there
+///   from `law_version()`: version 3 on `main` is the law without them.
+///
+///   Refined on its branch, golden unchanged: as pushed at `8d79de0`, a live
+///   session gave an unplayed score note its never-played row once the note's
+///   reach window passed the committed horizon, about 20 ms before the note
+///   was heard, and a later live note could replace that row. Version 4 now
+///   closes score notes from the playhead, as above.
 ///
 /// The predicate's rules are the law's, and the law pins their version and
 /// date cut-offs below. Moving any of them fails the build there until the
 /// pin is updated, and by rule the law version with it.
-pub const LAW_VERSION: u32 = 3;
+pub const LAW_VERSION: u32 = 4;
 
 // The licence predicate this law version admits scores under. provenance's
 // cut-offs move every January (`RULES_YEAR`), and a moved cut-off can change
@@ -108,7 +154,7 @@ pub const LAW_VERSION: u32 = 3;
 // rule above and the golden, which carries both numbers, do. The snapshot
 // header carries the same values, so a changed one also moves every hash.
 const _: () = {
-    assert!(LAW_VERSION == 3);
+    assert!(LAW_VERSION == 4);
     assert!(provenance::PREDICATE_VERSION == 2);
     assert!(provenance::RULES_YEAR == 2026);
     assert!(provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR == 1930);
@@ -188,6 +234,65 @@ pub const HORIZON_QUANTA: u32 = 100;
 /// sibling's labelled data.
 pub const GATE_SAMPLES: u32 = 1_920;
 
+/// How far a live note of a score note's pitch may be from it and still
+/// answer it: twice the gate, 3,840 samples (80 ms).
+///
+/// A person's note does not say which score note it answers, and the host
+/// decides nothing, so the live verb decides ([`Law::live`]). This is slice
+/// 1's placeholder score follower:
+/// - a live note answers the nearest score note of its own pitch up to this
+///   far away, and grades match, early or late;
+/// - failing that, the nearest score note of any pitch within the gate, and
+///   grades wrong pitch;
+/// - failing both, it is an addition;
+/// - a score note is cited at most once: one already cited is passed over,
+///   so a second live note in its reach takes the next candidate or becomes an
+///   addition;
+/// - ties in distance break toward the score note before the live note, for
+///   either pitch; then the lowest id for the same pitch, and the nearest
+///   pitch, then the lower pitch, then the lowest id for another pitch
+///   (`live::cite` states them in full);
+/// - same-pitch candidates are taken before other pitches, so every note of a
+///   chord played at its own pitch finds its own score note.
+///
+/// Why twice the gate: the constructed take plays notes up to 60 ms late
+/// (2,880 samples, one and a half gates), and a note played that late is still
+/// the note it was meant to be, graded late. Past two gates the rule stops
+/// guessing and calls the note an addition, which leaves its score note never
+/// played; both rows say so in digits. It is derived from the gate rather than
+/// pinned on its own, so the snapshot header, which carries the gate, carries
+/// it too.
+pub const LIVE_REACH_SAMPLES: u32 = 3_840;
+
+/// How far the playhead may pass a live note's onset before the host must
+/// have handed the note over: H, 4,800 samples (100 ms). This is the
+/// delivery allowance.
+///
+/// The host commits H quanta ahead of its step clock, and it has the same H
+/// behind the step clock to deliver what a person played. A live note heard at
+/// sample `s` and delivered while the playhead is at or before `s + 4,800` is
+/// always graded against the score note it answers, because no score note it
+/// can answer has closed yet ([`CLOSE_SAMPLES`]). A note delivered later is
+/// still admitted, never refused, but a score note that has closed is no
+/// longer a candidate for it.
+///
+/// It is derived from H rather than pinned on its own, so the snapshot header,
+/// which carries H and Q, carries it too, and a changed H moves it with every
+/// hash. Const evaluation fails the build if the product overflows.
+#[allow(clippy::arithmetic_side_effects)]
+pub const LIVE_ALLOWANCE_SAMPLES: u32 = HORIZON_QUANTA * QUANTUM_SAMPLES;
+
+/// When a score note of a live take closes: once the playhead has passed its
+/// onset plus the reach plus the delivery allowance, 8,640 samples (180 ms).
+///
+/// The playhead is the first sample of the playhead quantum: after `n` steps,
+/// `(n - 1) * Q`. A score note with onset `o` is closed once that is past
+/// `o + 8,640`. By then every live note that could answer it (onset at most
+/// `o + reach`) has had its whole allowance to arrive. A closed note's verdict,
+/// a citation or never played, is final.
+#[allow(clippy::arithmetic_side_effects)]
+pub const CLOSE_SAMPLES: u32 = LIVE_REACH_SAMPLES + LIVE_ALLOWANCE_SAMPLES;
+
 /// The largest sample position the law holds: `i64::MAX`. Every onset fits an
 /// `i64`, so every difference of two onsets is an exact `i64`. At 48 kHz this
 /// is about six million years.
@@ -205,4 +310,5 @@ const _: () = {
     assert!(GATE_SAMPLES.is_multiple_of(QUANTUM_SAMPLES));
     assert!(SAMPLE_RATE.is_multiple_of(QUANTUM_SAMPLES));
     assert!(MAX_SAMPLE == i64::MAX as u64);
+    assert!(LIVE_REACH_SAMPLES == 2 * GATE_SAMPLES);
 };

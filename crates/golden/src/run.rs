@@ -701,6 +701,151 @@ mod tests {
         compute(&Inputs::read(&repo_root()).unwrap(), SEED, TakeEdit::None).unwrap()
     }
 
+    /// The constructed take played live, as a person at a keyboard would hand
+    /// it over: through the C ABI, the transport running from sample 0, each
+    /// note-on at the very edge of its delivery allowance (the playhead
+    /// quantum that holds its onset plus 4,800 samples) and each note-off at
+    /// its own, in the order of their samples; then the transport runs on
+    /// until every score note has closed. The law cites every note as the
+    /// constructed take does, each score note once, so the rows are the
+    /// committed rows in the committed order, and the snapshot's SHA-256 is
+    /// the committed golden. The lengths are not hashed.
+    #[test]
+    fn the_constructed_take_played_live_is_the_golden() {
+        let root = repo_root();
+        let g = golden();
+        let committed = GoldenFile::read(&root).unwrap().golden().unwrap();
+        assert_eq!(g.golden, committed);
+        let notes = wire::decode_take(&g.take).unwrap();
+        assert_eq!(notes.len(), g.take_notes);
+        assert_eq!(g.take_notes, 2_621);
+        let score = Law::ingest(&g.container).unwrap().score().clone();
+        let q = u64::from(QUANTUM_SAMPLES);
+        let allowance = u64::from(law::LIVE_ALLOWANCE_SAMPLES);
+        let length = |n: &TakeNote| {
+            n.cites
+                .and_then(|id| score.note(id))
+                .map_or(1, |s| s.duration_samples)
+        };
+        // (playhead quantum, sample, note-off first at one sample, the note)
+        let mut due: Vec<(u64, u64, bool, TakeNote)> = Vec::new();
+        for n in &notes {
+            let on = n.onset_sample;
+            let off = on + length(n);
+            due.push(((on + allowance) / q, on, true, *n));
+            due.push(((off + allowance) / q, off, false, *n));
+        }
+        due.sort_by_key(|&(at, sample, on, n)| (at, sample, on, n.key()));
+
+        let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        pass(&g.container, abi::law_ingest, "law_ingest").unwrap();
+        let mut steps = 0u64;
+        for (at, sample, on, n) in due {
+            while steps < at + 1 {
+                assert_eq!(abi::law_step(), 0);
+                steps += 1;
+            }
+            let sample = i64::try_from(sample).unwrap();
+            let status = if on {
+                abi::law_live_note(sample, u32::from(n.pitch), u32::from(n.velocity))
+            } else {
+                abi::law_live_note_off(u32::from(n.pitch), sample)
+            };
+            if status != 0 {
+                panic!("{}", refusal("a live verb", status));
+            }
+        }
+        let last = score.notes().iter().map(|n| n.onset_sample).max().unwrap();
+        while (steps - 1) * q <= last + u64::from(law::CLOSE_SAMPLES) {
+            assert_eq!(abi::law_step(), 0);
+            steps += 1;
+        }
+        assert_eq!(snapshot_hash().unwrap(), committed);
+        let rows = read_out(abi::law_rows_ptr(), abi::law_rows_len());
+        assert_eq!(rows, g.rows.as_bytes());
+        assert_eq!(
+            fs::read(root.join(ROWS_FILE)).unwrap(),
+            [rows, b"\n".to_vec()].concat()
+        );
+    }
+
+    /// The row stream of a live take only grows. The constructed take is
+    /// played live through the Rust law with a random delivery lag per note,
+    /// anywhere from the quantum of its onset to the edge of its allowance,
+    /// several notes handed over in one step in a random order (SplitMix64,
+    /// two seeds). The rows are read every 2,003 steps across the whole
+    /// piece, and each reading begins with the one before it, unchanged.
+    /// Every note cites the score note the constructed take cites, and at the
+    /// end the rows and the snapshot's SHA-256 are the committed ones.
+    #[test]
+    fn the_row_stream_of_the_take_played_live_is_prefix_stable() {
+        let g = golden();
+        let committed = GoldenFile::read(&repo_root()).unwrap().golden().unwrap();
+        let notes = wire::decode_take(&g.take).unwrap();
+        assert_eq!(notes.len(), 2_621);
+        let q = u64::from(QUANTUM_SAMPLES);
+        let allowance = u64::from(law::LIVE_ALLOWANCE_SAMPLES);
+        for seed in [0x5eed_0001_u64, 0x5eed_0002] {
+            let mut rng = crate::prng::SplitMix64::new(seed);
+            let mut law = Law::ingest(&g.container).unwrap();
+            // (playhead quantum, a random order within it, the note)
+            let mut due: Vec<(u64, u64, TakeNote)> = notes
+                .iter()
+                .map(|n| {
+                    let earliest = n.onset_sample / q;
+                    let latest = (n.onset_sample + allowance) / q;
+                    let at = earliest + rng.below(latest - earliest + 1).unwrap();
+                    (at, rng.next_u64(), *n)
+                })
+                .collect();
+            due.sort_by_key(|&(at, order, _)| (at, order));
+            let last = law
+                .score()
+                .notes()
+                .iter()
+                .map(|n| n.onset_sample)
+                .max()
+                .unwrap();
+            let end = last + u64::from(law::CLOSE_SAMPLES);
+            let mut seen: Vec<String> = Vec::new();
+            let mut next = 0;
+            let mut readings = 0;
+            law.step().unwrap();
+            while law.playhead_sample().unwrap() <= end {
+                let playhead = law.steps() - 1;
+                while next < due.len() && due[next].0 <= playhead {
+                    let n = due[next].2;
+                    let admitted = law
+                        .live(law::LiveNote {
+                            onset_sample: i64::try_from(n.onset_sample).unwrap(),
+                            pitch: u32::from(n.pitch),
+                            velocity: u32::from(n.velocity),
+                        })
+                        .unwrap();
+                    assert_eq!(admitted, n, "seed {seed:#x}");
+                    next += 1;
+                }
+                if law.steps().is_multiple_of(2_003) {
+                    let now = law.rows().unwrap();
+                    assert!(
+                        now.starts_with(&seen),
+                        "seed {seed:#x}: the rows at step {} do not begin with the rows before",
+                        law.steps()
+                    );
+                    seen = now;
+                    readings += 1;
+                }
+                law.step().unwrap();
+            }
+            assert_eq!(next, due.len());
+            assert!(readings > 100, "{readings}");
+            let rows = law.rows().unwrap();
+            assert!(rows.starts_with(&seen));
+            assert_eq!(rows.join("\n"), g.rows, "seed {seed:#x}");
+            assert_eq!(law.hash().unwrap(), committed, "seed {seed:#x}");
+        }
+    }
+
     /// The expected verdicts of PHASE-0's constructed take, graded by the law
     /// from the committed inputs, and the rows that state them in digits.
     #[test]
@@ -800,6 +945,22 @@ mod tests {
             g.snapshot[36..40],
             provenance::PREDICATE_VERSION.to_le_bytes()
         );
+    }
+
+    /// Law version 4 changes nothing version 3 computed: its snapshot of the
+    /// constructed take, with the law-version word (bytes 12 to 15) written back
+    /// to 3, is version 3's snapshot byte for byte, so it hashes to version 3's
+    /// golden.
+    #[test]
+    fn the_version_4_snapshot_is_version_3_but_for_its_version_word() {
+        const VERSION_3_GOLDEN: &str =
+            "145c7af9f964a47f2e21566dd253ff5de6cc5cd65c6f2cbf5f04afe745c03b40";
+        let g = golden();
+        let mut bytes = g.snapshot.clone();
+        assert_eq!(bytes[12..16], [4, 0, 0, 0]);
+        bytes[12] = 3;
+        assert_eq!(hex(&sha256(&bytes)), VERSION_3_GOLDEN);
+        assert_ne!(hex(&g.golden), VERSION_3_GOLDEN);
     }
 
     #[test]

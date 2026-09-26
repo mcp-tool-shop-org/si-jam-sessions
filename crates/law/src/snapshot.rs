@@ -57,6 +57,10 @@ pub const SNAPSHOT_MAGIC: [u8; 8] = *b"SIJAMLAW";
 /// hashed too: a change to a row's wording is a change to a label.
 ///
 /// Format 2 added the predicate's pins to the header and the "PROV" section.
+/// Law version 4 keeps format 2. A live take's snapshot holds only the
+/// verdicts that are final, in the order they became final, and names an
+/// addition in its row by onset and pitch; how each verdict and row is written
+/// does not change.
 pub const SNAPSHOT_FORMAT: u32 = 2;
 
 struct Out {
