@@ -7,8 +7,9 @@
 //! That boundary is only as strong as review: a named binding
 //! (`extern crate std;` or `extern crate std as x;`) inside any module gives
 //! that module the whole of std, and it still compiles. This guard fails the
-//! build on such a binding anywhere in the law or the score model, except inside
-//! a `#[cfg(test)]` item, where test code may use std freely.
+//! build on such a binding anywhere in the law or the crates it embeds (the
+//! score model, the SMF reader and the licence predicate), except inside a
+//! `#[cfg(test)]` item, where test code may use std freely.
 //!
 //! Comments, string literals and char literals are blanked first, so text that
 //! mentions `extern crate std` is not a binding.
@@ -118,6 +119,8 @@ fn std_is_bound_only_unnamed_outside_tests() {
     let mut files = Vec::new();
     sources(&crates.join("law").join("src"), &mut files);
     sources(&crates.join("score-model").join("src"), &mut files);
+    sources(&crates.join("ingest").join("src"), &mut files);
+    sources(&crates.join("provenance").join("src"), &mut files);
     files.sort();
     assert!(
         files.len() >= 10,

@@ -1,0 +1,47 @@
+# JavaScriptCore 319571, as `jsvu --os=linux64 javascriptcore@319571` (jsvu 3.0.5)
+# installs it in ~/.jsvu/engines/javascriptcore-319571: the shell, and in lib/ the
+# loader that runs it (ld-linux-x86-64.so.2), the engine (libjavascriptcoregtk)
+# and every library and soname link beside them. Measured in CI run 36222063475;
+# runs 36218776912 and 36221391031 installed the same files. Checked by
+# verify.sh before the shell runs.
+file 2cfa4e2f17e34d72818389ba691b1832e3062e40bf6caebf5638628a4b24b5f8 javascriptcore-319571
+dir lib
+file 223b94a42758f2434da331cc0aa62db1af5b456481762c5caceefa1a2d1eb8fb lib/ld-linux-x86-64.so.2
+link lib/libatomic.so.1 -> libatomic.so.1.2.0
+file eac440708f874c4d446671efb5353cebeaa829bd1f18cd8d5065cd6efefa387b lib/libatomic.so.1.2.0
+link lib/libbacktrace.so.0 -> libbacktrace.so.0.0.0
+file e0b9e5a977c8896d006e78377cc68721a9d9ea5e298b2a04cf169b957ee02bf6 lib/libbacktrace.so.0.0.0
+link lib/libblkid.so.1 -> libblkid.so.1.1.0
+file 833b9e2be89934aec5d23cce05d7bc5470ff3a46d43a3564f00fd9fe677d4691 lib/libblkid.so.1.1.0
+file d763925433ff9b757390549e1b20c085f5e6de27ae700fe89194178d96a8a2b0 lib/libc.so.6
+link lib/libffi.so.8 -> libffi.so.8.2.0
+file 1a0dc86f787f73e025a6e521056360afcbe70f2a82cd808132fefc2b4ee95daa lib/libffi.so.8.2.0
+file 9d339ecb409578d6a5d587e6c537a8f9589b8a13fefba30d167433a4b5758bee lib/libgcc_s.so.1
+link lib/libgio-2.0.so.0 -> libgio-2.0.so.0.8800.0
+file 0e2800fb5c3e60b7a644405b5601120008116c38a78c1f04fe0c52d81200c55f lib/libgio-2.0.so.0.8800.0
+link lib/libglib-2.0.so.0 -> libglib-2.0.so.0.8800.0
+file 29a6e3b17710f39de325675d29a05054b93bbe6ae5ae2d55929646e8e6e7f9c5 lib/libglib-2.0.so.0.8800.0
+link lib/libgmodule-2.0.so.0 -> libgmodule-2.0.so.0.8800.0
+file 879baf3993fff29f727e0d35249d566a951a434f2feafc6c90d30601beeb7882 lib/libgmodule-2.0.so.0.8800.0
+link lib/libgobject-2.0.so.0 -> libgobject-2.0.so.0.8800.0
+file 0864a413a75dfacd692263ad1318738f145cfa9675ff6fd7769a5aa89d8774dc lib/libgobject-2.0.so.0.8800.0
+link lib/libicudata.so.78 -> libicudata.so.78.2
+file 3a08c11ef1d168a1edc3b0437cecb8b42e621f67706980a0502c97364bf744a7 lib/libicudata.so.78.2
+link lib/libicui18n.so.78 -> libicui18n.so.78.2
+file 14b42ecb935cb21758a24a61052e7b4cd410553e4deae37736cd8c748a1511f4 lib/libicui18n.so.78.2
+link lib/libicuuc.so.78 -> libicuuc.so.78.2
+file 1eb54ce8839e953fbaa755522f3488039d879be3a61b272df3cabd6c00f08d2d lib/libicuuc.so.78.2
+link lib/libjavascriptcoregtk-6.0.so.1 -> libjavascriptcoregtk-6.0.so.1.8.3
+file 3ca396dc0e132a68375df2ea720707390542a5b5b562d2121a836e5a2a1ef8f4 lib/libjavascriptcoregtk-6.0.so.1.8.3
+file 670fb59bd462ee2f833e2ed7c0a1814e0dcdbec0b8bfa048bec46e2e6fd66334 lib/libm.so.6
+link lib/libmount.so.1 -> libmount.so.1.1.0
+file 62c7444572d9ae0de91ddcf7f334a952ba94f5f582f38ee2032914813af3892f lib/libmount.so.1.1.0
+link lib/libpcre2-8.so.0 -> libpcre2-8.so.0.14.0
+file 4a6b6b2078685b074869d75cb068664d7da6b3036df7bca0442b1bbbd4ac7e65 lib/libpcre2-8.so.0.14.0
+file 7538ee77765a27966563c0d22437a3080dcdb346ff76cc16d71a3ce3379a716a lib/libselinux.so.1
+link lib/libstdc++.so.6 -> libstdc++.so.6.0.35
+file 5bb0d21308f123b6ad46c6f35b42cedfcb8d6d439a53aa3dae04d880aaffdde3 lib/libstdc++.so.6.0.35
+link lib/libsystemd.so.0 -> libsystemd.so.0.42.0
+file 5250db9dbf86eff4003a287efe752f7c38de8f42db3081d2fec825697fb3c79c lib/libsystemd.so.0.42.0
+link lib/libz.so.1 -> libz.so.1.3.1
+file fbf56b0e59287033b6579bbbeae2f9de2fe86ad5bf2bd44d44aad67a15109318 lib/libz.so.1.3.1

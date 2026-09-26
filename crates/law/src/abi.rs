@@ -19,10 +19,16 @@
 //!
 //! 1. `law_alloc(len)` returns a pointer to `len` bytes of linear memory (null
 //!    when `len` is 0 or the allocation fails).
-//! 2. The host writes the bytes there: a score or a take in the layout of
-//!    [`crate::wire`].
-//! 3. `law_load_score(ptr, len)` or `law_admit_take(ptr, len)`.
+//! 2. The host writes the bytes there: a container, a score or a take in the
+//!    layout of [`crate::wire`].
+//! 3. `law_ingest(ptr, len)`, `law_load_score(ptr, len)` or
+//!    `law_admit_take(ptr, len)`.
 //! 4. `law_free(ptr, len)` returns the buffer.
+//!
+//! `law_ingest` is the ingest verb: the container holds a receipt and every
+//! file it receipts, and the licence predicate admits the score before the SMF
+//! reader reads it ([`Law::ingest`]). `law_load_score` takes a score already in
+//! the law's wire layout, which no receipt admitted; its snapshot says so.
 //!
 //! # Reading bytes out
 //!
@@ -62,7 +68,7 @@ use core::ptr::{null, null_mut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::law::digest;
-use crate::refusal::Refusal;
+use crate::refusal::{IngestRefusal, Refusal};
 use crate::{LAW_VERSION, Law, wire};
 
 struct State {
@@ -135,15 +141,27 @@ fn with_status(f: impl FnOnce(&mut State) -> u32) -> u32 {
 fn status(state: &mut State, result: Result<(), Refusal>) -> u32 {
     match result {
         Ok(()) => 0,
-        Err(refusal) => {
-            let mut text = String::new();
-            state.refusal.clear();
-            if write!(text, "{refusal}").is_ok() {
-                state.refusal = text.into_bytes();
-            }
-            refusal.code()
-        }
+        Err(refusal) => refused(state, refusal.code(), &refusal),
     }
+}
+
+/// [`status`] for the ingest verb, whose refusals carry the licence
+/// predicate's and the SMF reader's.
+fn ingest_status(state: &mut State, result: Result<(), IngestRefusal>) -> u32 {
+    match result {
+        Ok(()) => 0,
+        Err(refusal) => refused(state, refusal.code(), &refusal),
+    }
+}
+
+/// Stores a refusal's text as the reason and returns its code.
+fn refused(state: &mut State, code: u32, reason: &dyn core::fmt::Display) -> u32 {
+    let mut text = String::new();
+    state.refusal.clear();
+    if write!(text, "{reason}").is_ok() {
+        state.refusal = text.into_bytes();
+    }
+    code
 }
 
 /// A `u32` length for the host. Every buffer read out is built by
@@ -224,9 +242,37 @@ pub unsafe extern "C" fn law_free(ptr: *mut u8, len: u32) -> u32 {
     })
 }
 
+/// The ingest verb ([`Law::ingest`]): a receipt and every file it receipts,
+/// in the [`crate::wire`] container layout. The licence predicate admits the
+/// score or refuses it, the receipt's SMF file is read and rescaled to the
+/// law's PPQ, and the score is loaded with the transport stopped: the take is
+/// emptied and the step count is zero. On a refusal the law keeps what it
+/// held, and the code and reason name the layer that refused (see
+/// [`IngestRefusal::code`]).
+///
+/// # Safety
+///
+/// `ptr` must point to `len` bytes that are readable and not written during
+/// the call, or be null (which is refused).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn law_ingest(ptr: *const u8, len: u32) -> u32 {
+    with_status(|state| {
+        // SAFETY: the caller's contract is `input`'s.
+        let result = unsafe { input(ptr, len) }
+            .map_err(IngestRefusal::Law)
+            .and_then(Law::ingest)
+            .map(|law| {
+                state.law = Some(law);
+                state.clear_outputs();
+            });
+        ingest_status(state, result)
+    })
+}
+
 /// Loads a score from bytes in the [`crate::wire`] score layout and stops the
 /// transport: the take is emptied and the step count is zero. On a refusal the
-/// law keeps what it held.
+/// law keeps what it held. No receipt admitted this score: its snapshot
+/// records it as unreceipted, and [`law_ingest`] is the verb that admits one.
 ///
 /// # Safety
 ///
@@ -479,6 +525,74 @@ mod tests {
         );
         assert_eq!(law_snapshot_len(), 0);
         assert_eq!(read(law_hash_ptr(), 32), [0; 32]);
+    }
+
+    #[test]
+    fn the_ingest_export_agrees_with_the_rust_law() {
+        let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        reset();
+        let container = crate::ingest_tests::entertainer();
+        assert_eq!(call(&container, law_ingest), 0);
+        assert_eq!(law_refusal_len(), 0);
+        assert_eq!(law_steps(), 0);
+
+        let mut native = Law::ingest(&container).unwrap();
+        let first = native.score().notes()[0];
+        let take = [TakeNote {
+            onset_sample: first.onset_sample + 1_440,
+            pitch: first.pitch,
+            velocity: 90,
+            cites: Some(ScoreNoteId(0)),
+        }];
+        assert_eq!(call(&wire::encode_take(&take).unwrap(), law_admit_take), 0);
+        for _ in 0..10 {
+            assert_eq!(law_step(), 0);
+        }
+        assert_eq!(law_snapshot(), 0);
+        native.admit(&take).unwrap();
+        assert_eq!(
+            read(law_snapshot_ptr(), law_snapshot_len()),
+            native.snapshot_bytes().unwrap()
+        );
+        assert_eq!(read(law_hash_ptr(), 32), native.hash().unwrap());
+        let rows = std::string::String::from_utf8(read(law_rows_ptr(), law_rows_len())).unwrap();
+        assert!(rows.starts_with(
+            "note 0: onset +1440 samples (+30.0 ms) vs gate \u{b1}1920, pitch 74 vs 74: match\n"
+        ));
+        assert_eq!(rows.lines().count(), 2621);
+    }
+
+    #[test]
+    fn an_ingest_refusal_crosses_with_its_layers_code_and_reason() {
+        let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        reset();
+        use crate::ingest_tests::{MID, RECEIPT, container, entertainer};
+        assert_eq!(call(&entertainer(), law_ingest), 0);
+        assert_eq!(law_snapshot(), 0);
+        let held = read(law_hash_ptr(), 32);
+
+        let missing = container(RECEIPT, &[("entertainer.mid", MID)]);
+        assert_eq!(call(&missing, law_ingest), 101);
+        assert_eq!(
+            refusal_text(),
+            "score refused by the licence predicate: the receipt lists entertainer.ly, which \
+             was not supplied"
+        );
+        assert_eq!(call(b"SJIN", law_ingest), 50);
+        assert_eq!(
+            refusal_text(),
+            "bytes refused at offset 4: the bytes end early"
+        );
+        // SAFETY: a null pointer is refused before anything is read.
+        unsafe {
+            assert_eq!(law_ingest(core::ptr::null(), 4), 60);
+        }
+        assert_eq!(law_snapshot(), 0);
+        assert_eq!(
+            read(law_hash_ptr(), 32),
+            held,
+            "a refused ingest keeps the score the law held"
+        );
     }
 
     #[test]

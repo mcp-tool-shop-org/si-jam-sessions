@@ -1,11 +1,15 @@
 //! Why the law refused, as a value.
 //!
-//! Every check inside the law returns `Result<_, Refusal>`. The C ABI turns a
-//! refusal into its [`Refusal::code`] and keeps its text for the host; nothing
-//! in the law panics on its way out.
+//! Every check inside the law returns `Result<_, Refusal>`, and the ingest verb
+//! returns `Result<_, IngestRefusal>`, which also carries the refusals of the
+//! licence predicate and the SMF reader it runs. The C ABI turns a refusal
+//! into its code and keeps its text for the host; nothing in the law panics on
+//! its way out.
 
 use core::fmt;
 
+use ingest::IngestError;
+use provenance::{LicenceRefusal, ReceiptError};
 use score_model::{MAX_US_PER_QUARTER, ModelError};
 
 use crate::{MAX_SAMPLE, PPQ};
@@ -48,6 +52,11 @@ pub enum WireFault {
     Trailing,
     /// A take note's citation tag is neither 0 nor 1, or tag 0 carries an id.
     CitationTag,
+    /// A container file's name is empty or not UTF-8.
+    FileName,
+    /// A container file's name is not after the name before it: the names
+    /// are out of order, or one is repeated.
+    FileOrder,
 }
 
 /// Why the law refused.
@@ -320,6 +329,11 @@ impl fmt::Display for Refusal {
                     WireFault::Truncated => "the bytes end early",
                     WireFault::Trailing => "bytes remain after the layout",
                     WireFault::CitationTag => "a citation tag is not 0 or 1, or tag 0 has an id",
+                    WireFault::FileName => "a file name is empty or not UTF-8",
+                    WireFault::FileOrder => {
+                        "a file name is not after the one before it, so the names are out of \
+                         order or repeated"
+                    }
                 };
                 write!(f, "bytes refused at offset {offset}: {what}")
             }
@@ -327,6 +341,332 @@ impl fmt::Display for Refusal {
             Refusal::OutOfMemory => write!(f, "refused: an allocation failed"),
             Refusal::Overflow => write!(f, "refused: an integer overflowed"),
             Refusal::Busy => write!(f, "refused: another call into the law is running"),
+        }
+    }
+}
+
+/// Why the ingest verb ([`crate::Law::ingest`]) refused a score.
+///
+/// The verb runs its layers in order, and the refusal names the layer that
+/// stopped it: the container's bytes, then the receipt and the licence
+/// predicate, then the count of SMF files on the receipt, then the SMF reader,
+/// then the law's own load of the score.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IngestRefusal {
+    /// The container's bytes do not decode ([`Refusal::Wire`]), or the law's
+    /// own load of the ingested score refused it (a [`Refusal`] from
+    /// [`crate::LawScore::from_ingested`]).
+    Law(Refusal),
+    /// The receipt does not load, or the licence predicate refused the score.
+    Licence(provenance::Refusal),
+    /// The receipt lists this many SMF files; the verb reads exactly one.
+    SmfCount { count: usize },
+    /// The SMF reader refused the receipt's SMF file.
+    Smf(IngestError),
+}
+
+impl IngestRefusal {
+    /// The status code an export returns for this refusal. A [`Refusal`]
+    /// keeps its own code; the other layers have codes of their own, stable
+    /// within a law version.
+    ///
+    /// | Code | Refusal |
+    /// |---|---|
+    /// | as [`Refusal::code`] | [`IngestRefusal::Law`] |
+    /// | 70–85 | [`IngestRefusal::Smf`], one per `IngestError` variant in declaration order |
+    /// | 90 | [`IngestRefusal::SmfCount`]: no SMF file |
+    /// | 91 | [`IngestRefusal::SmfCount`]: more than one |
+    /// | 100 | the receipt does not load, or breaks a structural rule |
+    /// | 101–105 | the files: missing, unexpected, supplied twice, size, SHA-256 |
+    /// | 110–115 | the composition: no authors, no death year, no first-publication year, unevidenced, not public domain in the US, not in the EU |
+    /// | 120–122 | the arrangement: no typesetter, no engraver, a quote not in its evidence |
+    /// | 123–129 | the licence: unknown, all rights reserved, no redistribution, share-alike, non-commercial, no derivatives, AI-restricted |
+    /// | 130–131 | the credit-ledger id: missing, unexpected |
+    /// | 132 | an evidence quote that holds the licence or terms text also negates it |
+    /// | 140–144 | the source edition: no publisher, no year, before first publication, scholarly and in term, term not shown |
+    /// | 150–154 | the in-file licence: unreadable, misrecorded, disagrees with the page, stated nowhere, stated by an own engraving |
+    pub fn code(&self) -> u32 {
+        match self {
+            IngestRefusal::Law(refusal) => refusal.code(),
+            IngestRefusal::Smf(error) => match error {
+                IngestError::NotPlainSmf { .. } => 70,
+                IngestError::Invalid(_) => 71,
+                IngestError::Malformed(_) => 72,
+                IngestError::TrackCountMismatch { .. } => 73,
+                IngestError::SingleTrackFormat { .. } => 74,
+                IngestError::SmpteTiming => 75,
+                IngestError::SmpteOffset { .. } => 76,
+                IngestError::SequentialFormat => 77,
+                IngestError::TooManyTracks => 78,
+                IngestError::TickOverflow { .. } => 79,
+                IngestError::ConflictingTempo { .. } => 80,
+                IngestError::ConflictingMeter { .. } => 81,
+                IngestError::OrphanNoteOff { .. } => 82,
+                IngestError::UnterminatedNote { .. } => 83,
+                IngestError::ZeroLengthNote { .. } => 84,
+                IngestError::Model(_) => 85,
+            },
+            IngestRefusal::SmfCount { count: 0 } => 90,
+            IngestRefusal::SmfCount { .. } => 91,
+            IngestRefusal::Licence(refusal) => licence_code(refusal),
+        }
+    }
+}
+
+fn licence_code(refusal: &provenance::Refusal) -> u32 {
+    use provenance::Refusal as P;
+    match refusal {
+        P::Receipt(_) => 100,
+        P::MissingFile { .. } => 101,
+        P::UnexpectedFile { .. } => 102,
+        P::DuplicateFile { .. } => 103,
+        P::SizeMismatch { .. } => 104,
+        P::HashMismatch { .. } => 105,
+        P::NoAuthors => 110,
+        P::MissingDeathYear { .. } => 111,
+        P::MissingFirstPublicationYear => 112,
+        P::Unevidenced { .. } => 113,
+        P::NotPublicDomainUs { .. } => 114,
+        P::NotPublicDomainEu { .. } => 115,
+        P::MissingTypesetter => 120,
+        P::MissingEngraver => 121,
+        P::QuoteNotInEvidence { .. } => 122,
+        P::Licence(licence) => match licence {
+            LicenceRefusal::Unknown => 123,
+            LicenceRefusal::AllRightsReserved => 124,
+            LicenceRefusal::NoRedistribution => 125,
+            LicenceRefusal::ShareAlike => 126,
+            LicenceRefusal::NonCommercial => 127,
+            LicenceRefusal::NoDerivatives => 128,
+            LicenceRefusal::AiRestricted => 129,
+        },
+        P::MissingCreditLedgerId => 130,
+        P::UnexpectedCreditLedgerId => 131,
+        P::QuoteNegated { .. } => 132,
+        P::MissingEditionPublisher => 140,
+        P::MissingEditionYear => 141,
+        P::EditionBeforeFirstPublication { .. } => 142,
+        P::ScholarlyEditionInTerm { .. } => 143,
+        P::EditionTermNotShown { .. } => 144,
+        P::Unreadable { .. } => 150,
+        P::InFileMisrecorded { .. } => 151,
+        P::InFileLicenceMismatch { .. } => 152,
+        P::NoInFileLicence => 153,
+        P::OwnEngravingStatesLicence { .. } => 154,
+    }
+}
+
+fn receipt_reason(f: &mut fmt::Formatter<'_>, error: &ReceiptError) -> fmt::Result {
+    match error {
+        ReceiptError::Json { offset, problem } => write!(
+            f,
+            "it is not in the accepted JSON subset at byte {offset} ({problem:?})"
+        ),
+        ReceiptError::MissingKey { object, key } => write!(f, "{object} has no key \"{key}\""),
+        ReceiptError::UnknownKey { object, key } => {
+            write!(f, "{object} has the unknown key \"{key}\"")
+        }
+        ReceiptError::BadValue { object, key } => write!(
+            f,
+            "{object}'s \"{key}\" has the wrong type, is out of range, or is outside its \
+             vocabulary"
+        ),
+        ReceiptError::UnsupportedSchema(schema) => {
+            write!(f, "receipt schema {schema} is not one this law reads")
+        }
+        ReceiptError::InvalidDate => write!(f, "its fetch date is not a calendar day"),
+        ReceiptError::FilesNotSorted => write!(f, "its files are not sorted by name"),
+        ReceiptError::EvidenceNotSorted => write!(f, "its evidence is not sorted by id"),
+        ReceiptError::RestrictionsNotSorted => write!(f, "its restrictions are not sorted"),
+        ReceiptError::BadName => write!(f, "a file or evidence name is not a plain name"),
+        ReceiptError::Canonical { offset, problem } => write!(
+            f,
+            "its canonical bytes are malformed at byte {offset} ({problem:?})"
+        ),
+    }
+}
+
+fn licence_reason(f: &mut fmt::Formatter<'_>, refusal: &provenance::Refusal) -> fmt::Result {
+    use provenance::Refusal as P;
+    match refusal {
+        P::Receipt(error) => {
+            write!(f, "the receipt does not load: ")?;
+            receipt_reason(f, error)
+        }
+        P::MissingFile { name } => write!(f, "the receipt lists {name}, which was not supplied"),
+        P::UnexpectedFile { name } => write!(f, "{name} was supplied but is not on the receipt"),
+        P::DuplicateFile { name } => write!(f, "{name} was supplied twice"),
+        P::SizeMismatch { name } => write!(f, "{name}'s size is not the receipt's"),
+        P::HashMismatch { name } => write!(f, "{name}'s SHA-256 is not the receipt's"),
+        P::NoAuthors => write!(f, "the composition has no authors"),
+        P::MissingDeathYear { author } => {
+            write!(f, "{author}'s death year is not on the receipt")
+        }
+        P::MissingFirstPublicationYear => {
+            write!(f, "the work's first-publication year is not on the receipt")
+        }
+        P::Unevidenced { what } => write!(f, "the {what} has no recorded evidence"),
+        P::NotPublicDomainUs {
+            first_publication_year,
+        } => write!(
+            f,
+            "first published in {first_publication_year}, after {}: not public domain in the \
+             United States",
+            provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR
+        ),
+        P::NotPublicDomainEu { author, death_year } => write!(
+            f,
+            "{author} died in {death_year}, after {}: not public domain in the European Union",
+            provenance::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR
+        ),
+        P::MissingTypesetter => write!(f, "the typesetter is not named"),
+        P::MissingEngraver => write!(f, "the engraver is not named"),
+        P::QuoteNotInEvidence { what } => write!(
+            f,
+            "the {what} text is not among its evidence's recorded quotes"
+        ),
+        P::Licence(licence) => {
+            let why = match licence {
+                LicenceRefusal::Unknown => "it is unknown, or not one this law version admits",
+                LicenceRefusal::AllRightsReserved => "all rights are reserved",
+                LicenceRefusal::NoRedistribution => "it forbids redistribution",
+                LicenceRefusal::ShareAlike => "it is share-alike",
+                LicenceRefusal::NonCommercial => "it is non-commercial",
+                LicenceRefusal::NoDerivatives => "it forbids derivatives",
+                LicenceRefusal::AiRestricted => "it restricts use by or for AI models",
+            };
+            write!(f, "the licence refuses the score: {why}")
+        }
+        P::MissingCreditLedgerId => write!(f, "a CC-BY-4.0 score needs a credit-ledger id"),
+        P::UnexpectedCreditLedgerId => {
+            write!(f, "a public-domain score carries a credit-ledger id")
+        }
+        P::QuoteNegated { what } => write!(
+            f,
+            "an evidence quote that holds the {what} text also negates, limits or conditions it"
+        ),
+        P::MissingEditionPublisher => {
+            write!(f, "the source edition's publisher is not on the receipt")
+        }
+        P::MissingEditionYear => write!(f, "the source edition's year is not on the receipt"),
+        P::EditionBeforeFirstPublication { edition_year } => write!(
+            f,
+            "the source edition of {edition_year} is dated before the work's first publication"
+        ),
+        P::ScholarlyEditionInTerm { edition_year } => write!(
+            f,
+            "the scholarly edition of {edition_year} is still inside its term"
+        ),
+        P::EditionTermNotShown { edition_year } => write!(
+            f,
+            "the edition of {edition_year} is too recent for its date to show it is out of term"
+        ),
+        P::Unreadable { name, why } => {
+            write!(f, "{name}'s licence statements cannot be read ({why:?})")
+        }
+        P::InFileMisrecorded { name } => write!(
+            f,
+            "the receipt's record of {name}'s licence statements is not what the file says"
+        ),
+        P::InFileLicenceMismatch { name } => write!(
+            f,
+            "a licence statement in {name} disagrees with the host page's licence"
+        ),
+        P::NoInFileLicence => write!(f, "no file states the host page's licence"),
+        P::OwnEngravingStatesLicence { name } => write!(
+            f,
+            "{name}, an engraving by this project, states a licence of its own"
+        ),
+    }
+}
+
+fn smf_reason(f: &mut fmt::Formatter<'_>, error: &IngestError) -> fmt::Result {
+    match error {
+        IngestError::NotPlainSmf { offset } => write!(
+            f,
+            "the file is not a plain SMF: the chunk at byte {offset} is not its header or a track"
+        ),
+        IngestError::Invalid(message) => write!(f, "the file is not an SMF: {message}"),
+        IngestError::Malformed(message) => write!(f, "the SMF is malformed: {message}"),
+        IngestError::TrackCountMismatch { declared, found } => write!(
+            f,
+            "the SMF header declares {declared} tracks and the file holds {found}"
+        ),
+        IngestError::SingleTrackFormat { tracks } => write!(
+            f,
+            "the SMF is format 0, a single track, and holds {tracks} tracks"
+        ),
+        IngestError::SmpteTiming => {
+            write!(f, "the SMF is timed in SMPTE frames, not ticks per quarter")
+        }
+        IngestError::SmpteOffset { track, tick } => {
+            write!(f, "track {track} has an SMPTE offset at tick {tick}")
+        }
+        IngestError::SequentialFormat => {
+            write!(f, "the SMF is format 2, independent sequences")
+        }
+        IngestError::TooManyTracks => write!(f, "the SMF has more tracks than a u16 indexes"),
+        IngestError::TickOverflow { track } => {
+            write!(f, "track {track}'s ticks do not fit a u64")
+        }
+        IngestError::ConflictingTempo { tick } => {
+            write!(f, "two tracks set different tempos at tick {tick}")
+        }
+        IngestError::ConflictingMeter { tick } => {
+            write!(f, "two tracks set different meters at tick {tick}")
+        }
+        IngestError::OrphanNoteOff {
+            track,
+            channel,
+            pitch,
+            tick,
+        } => write!(
+            f,
+            "track {track} channel {channel} releases pitch {pitch} at tick {tick} with no note \
+             sounding"
+        ),
+        IngestError::UnterminatedNote {
+            track,
+            channel,
+            pitch,
+            start_tick,
+        } => write!(
+            f,
+            "track {track} channel {channel} pitch {pitch} starts at tick {start_tick} and is \
+             still sounding when the track ends"
+        ),
+        IngestError::ZeroLengthNote {
+            track,
+            channel,
+            pitch,
+            tick,
+        } => write!(
+            f,
+            "track {track} channel {channel} pitch {pitch} ends at tick {tick}, the tick it starts"
+        ),
+        IngestError::Model(error) => model_reason(f, error),
+    }
+}
+
+impl fmt::Display for IngestRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IngestRefusal::Law(refusal) => write!(f, "{refusal}"),
+            IngestRefusal::Licence(refusal) => {
+                write!(f, "score refused by the licence predicate: ")?;
+                licence_reason(f, refusal)
+            }
+            IngestRefusal::SmfCount { count: 0 } => {
+                write!(f, "score refused: the receipt lists no SMF file")
+            }
+            IngestRefusal::SmfCount { count } => write!(
+                f,
+                "score refused: the receipt lists {count} SMF files, and the ingest verb reads one"
+            ),
+            IngestRefusal::Smf(error) => {
+                write!(f, "score refused by the SMF reader: ")?;
+                smf_reason(f, error)
+            }
         }
     }
 }

@@ -1,0 +1,8 @@
+# SpiderMonkey 156.0.1, as `jsvu --os=linux64 spidermonkey@156.0.1` (jsvu 3.0.5)
+# installs it in ~/.jsvu/engines/spidermonkey-156.0.1: the shell and the libraries
+# it loads. Measured in CI run 36222063475; runs 36218776912 and 36221391031
+# installed the same files. Checked by verify.sh before the shell runs.
+file 5b58ab985ff86df7b5aaa82ae93d30994dca8424dd73874ca1e8d758363cad35 libnspr4.so
+file 53500e349938de3e5c85d313893637afda21a005a44d70af48d635d9cd728c48 libplc4.so
+file 5e26b7c04511674f422b52267f72536adf13aab477b93ac330d49570d206bb18 libplds4.so
+file c2801f99b48e7a8ba777681090dc95cac5a5c1d36511b9de74dd25db6bbf021c spidermonkey-156.0.1

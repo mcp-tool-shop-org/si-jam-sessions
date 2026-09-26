@@ -1,0 +1,19 @@
+[package]
+name = "golden"
+version = "0.1.0"
+description = "The golden-hash harness of si-jam-sessions slice 1: the constructed take, write-golden, and the JavaScript-engine checks."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# A native harness. It links the law's rlib and is never part of the law's wasm.
+[dependencies]
+law = { path = "../law" }
+provenance = { path = "../provenance" }
+# SHA-256 of each input and output the golden file records. No default features.
+sha2 = { version = "=0.11.0", default-features = false }
+
+[dev-dependencies]
+score-model = { path = "../score-model" }

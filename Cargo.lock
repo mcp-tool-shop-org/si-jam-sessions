@@ -46,6 +46,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "golden"
+version = "0.1.0"
+dependencies = [
+ "law",
+ "provenance",
+ "score-model",
+ "sha2",
+]
+
+[[package]]
 name = "hybrid-array"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -66,6 +76,8 @@ dependencies = [
 name = "law"
 version = "0.1.0"
 dependencies = [
+ "ingest",
+ "provenance",
  "score-model",
  "sha2",
 ]

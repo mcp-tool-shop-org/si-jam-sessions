@@ -1,4 +1,6 @@
-//! No `f32` or `f64` in the law's source, nor in the score model it embeds.
+//! No `f32` or `f64` in the law's source, nor in the crates it embeds: the
+//! score model, the SMF reader (`ingest`) and the licence predicate
+//! (`provenance`).
 //!
 //! Comments, string literals and char literals are blanked first: text is not
 //! a number the code computes with. The rest is scanned, and the scan fails on:
@@ -67,6 +69,8 @@ fn the_law_has_no_float() {
     let mut files = Vec::new();
     sources(&crates.join("law").join("src"), &mut files);
     sources(&crates.join("score-model").join("src"), &mut files);
+    sources(&crates.join("ingest").join("src"), &mut files);
+    sources(&crates.join("provenance").join("src"), &mut files);
     files.sort();
     assert!(
         files.len() >= 10,
