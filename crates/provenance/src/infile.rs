@@ -15,10 +15,12 @@
 //! braces) is unreadable, and an unreadable file is refused.
 //!
 //! **SMF.** Every copyright meta event (`FF 02`) is a [`StatementField::SmfCopyright`].
-//! Every other text meta event (text, track name, instrument, lyric, marker, cue point,
-//! program, device) whose text mentions copyright or a licence, or names a restriction
-//! such as a ban on AI use (see [`smf_marker`]), is a [`StatementField::SmfText`], so a
-//! notice written into the wrong event is still read.
+//! Every other event that carries bytes (a text meta event: text, track name, instrument,
+//! lyric, marker, cue point, program, device; a sequencer-specific or unknown meta event;
+//! a SysEx or escape event) whose bytes mention copyright or a licence, or name a
+//! restriction such as a ban on AI use (see [`smf_marker`]), is a
+//! [`StatementField::SmfText`], so a notice written into the wrong event is still read.
+//! Marked bytes that are not UTF-8 are unreadable.
 //! Only a plain SMF is read: the bytes open with one `MThd` chunk of length 6, and every
 //! later chunk is an `MTrk`. midly would unwrap a RIFF (RMID) file and skip unknown chunks
 //! unread, even with `strict`, and either could hold a licence notice this reader never
@@ -92,19 +94,24 @@ fn smf(bytes: &[u8]) -> Result<Vec<Statement>, Unreadable> {
     let mut out = Vec::new();
     for track in &tracks {
         for event in track {
-            let TrackEventKind::Meta(meta) = event.kind else {
-                continue;
-            };
-            let (field, raw) = match meta {
-                MetaMessage::Copyright(raw) => (StatementField::SmfCopyright, raw),
-                MetaMessage::Text(raw)
-                | MetaMessage::TrackName(raw)
-                | MetaMessage::InstrumentName(raw)
-                | MetaMessage::Lyric(raw)
-                | MetaMessage::Marker(raw)
-                | MetaMessage::CuePoint(raw)
-                | MetaMessage::ProgramName(raw)
-                | MetaMessage::DeviceName(raw)
+            let (field, raw) = match event.kind {
+                TrackEventKind::Meta(MetaMessage::Copyright(raw)) => {
+                    (StatementField::SmfCopyright, raw)
+                }
+                TrackEventKind::Meta(
+                    MetaMessage::Text(raw)
+                    | MetaMessage::TrackName(raw)
+                    | MetaMessage::InstrumentName(raw)
+                    | MetaMessage::Lyric(raw)
+                    | MetaMessage::Marker(raw)
+                    | MetaMessage::CuePoint(raw)
+                    | MetaMessage::ProgramName(raw)
+                    | MetaMessage::DeviceName(raw)
+                    | MetaMessage::SequencerSpecific(raw)
+                    | MetaMessage::Unknown(_, raw),
+                )
+                | TrackEventKind::SysEx(raw)
+                | TrackEventKind::Escape(raw)
                     if smf_marker(raw) =>
                 {
                     (StatementField::SmfText, raw)
@@ -197,8 +204,8 @@ fn plain_smf(bytes: &[u8]) -> Result<u16, Unreadable> {
 
 /// True if SMF text bytes are a licence statement. They mention copyright or a licence:
 /// one of `copyright`, `(c)`, `licen`, `public domain`, `creative commons`,
-/// `rights reserved` (ASCII, any case), or a copyright sign (U+00A9 in UTF-8, or byte
-/// `A9` in text that is not UTF-8). Or they hold a restriction phrase
+/// `rights reserved`, `cc0` (ASCII, any case), or a copyright sign (U+00A9 in UTF-8, or
+/// byte `A9` in text that is not UTF-8). Or they hold a restriction phrase
 /// (`licence::restriction_in`, on the text's words), which is how a ban on AI use in a
 /// text event is read.
 pub fn smf_marker(raw: &[u8]) -> bool {
@@ -209,6 +216,7 @@ pub fn smf_marker(raw: &[u8]) -> bool {
         b"public domain",
         b"creative commons",
         b"rights reserved",
+        b"cc0",
     ];
     let lower: Vec<u8> = raw.iter().map(u8::to_ascii_lowercase).collect();
     let ascii_hit = MARKERS
@@ -706,6 +714,61 @@ mod tests {
         let latin1 = smf_with_meta(&[(0x02, b"\xa9 2001")]);
         assert_eq!(
             statements(Media::Smf, &latin1),
+            Err(Unreadable::SmfTextNotUtf8)
+        );
+    }
+
+    /// Predicate version 3 admits CC0 1.0, so a text event that names CC0 states a
+    /// licence: a CC0 notice written into the wrong event is still read.
+    #[test]
+    fn a_text_event_that_names_cc0_is_a_statement() {
+        assert!(smf_marker(b"CC0 1.0"));
+        assert!(smf_marker(b"Dedicated under cc0"));
+        let file = smf_with_meta(&[(0x03, b"Piano"), (0x01, b"CC0 1.0")]);
+        assert_eq!(
+            statements(Media::Smf, &file).unwrap(),
+            vec![st(StatementField::SmfText, "CC0 1.0")]
+        );
+    }
+
+    /// An SMF whose one track holds `event` (its bytes as written, at delta time 0), then a
+    /// note.
+    fn smf_with_event(event: &[u8]) -> Vec<u8> {
+        let mut track = vec![0x00];
+        track.extend_from_slice(event);
+        track.extend_from_slice(&[
+            0x00, 0x90, 60, 64, 0x60, 0x80, 60, 0, 0x00, 0xFF, 0x2F, 0x00,
+        ]);
+        let mut out = Vec::new();
+        out.extend_from_slice(b"MThd\0\0\0\x06\0\0\0\x01\0\x60MTrk");
+        out.extend_from_slice(&u32::try_from(track.len()).unwrap().to_be_bytes());
+        out.extend_from_slice(&track);
+        out
+    }
+
+    /// A notice can hide in an event whose type is not text: a sequencer-specific or
+    /// unknown meta event, a SysEx or an escape. Their bytes are read as a text event's
+    /// are, and marked bytes that are not UTF-8 make the file unreadable.
+    #[test]
+    fn a_notice_in_an_event_that_is_not_text_is_read() {
+        for kind in [0x7F, 0x60] {
+            let file = smf_with_meta(&[(0x03, b"Piano"), (kind, b"All rights reserved")]);
+            assert_eq!(
+                statements(Media::Smf, &file).unwrap(),
+                vec![st(StatementField::SmfText, "All rights reserved")],
+                "meta {kind:#04x}"
+            );
+        }
+        let unmarked = smf_with_meta(&[(0x7F, b"\x00\x00\x41\x01")]);
+        assert!(statements(Media::Smf, &unmarked).unwrap().is_empty());
+        let escape = smf_with_event(b"\xF7\x07CC0 1.0");
+        assert_eq!(
+            statements(Media::Smf, &escape).unwrap(),
+            vec![st(StatementField::SmfText, "CC0 1.0")]
+        );
+        let sysex = smf_with_event(b"\xF0\x0Fcopyright 2026\xF7");
+        assert_eq!(
+            statements(Media::Smf, &sysex),
             Err(Unreadable::SmfTextNotUtf8)
         );
     }

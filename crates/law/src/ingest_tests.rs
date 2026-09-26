@@ -6,7 +6,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use ingest::IngestError;
-use provenance::{LicenceRefusal, ReceiptError, Tier, Unreadable};
+use provenance::{AuthorRole, LicenceRefusal, ReceiptError, Tier, Unreadable};
 use sha2::{Digest, Sha256};
 
 use crate::refusal::{Event, IngestRefusal, Refusal, WireFault};
@@ -478,6 +478,10 @@ fn every_ingest_refusal_has_its_own_code_and_a_reason() {
             author: name(),
             death_year: 1956,
         },
+        P::AnonymousNotPublicDomainEu {
+            role: AuthorRole::Composer,
+            first_publication_year: 1956,
+        },
         P::MissingTypesetter,
         P::MissingEngraver,
         P::QuoteNotInEvidence { what: "terms" },
@@ -496,6 +500,8 @@ fn every_ingest_refusal_has_its_own_code_and_a_reason() {
         P::EditionBeforeFirstPublication { edition_year: 1900 },
         P::ScholarlyEditionInTerm { edition_year: 2010 },
         P::EditionTermNotShown { edition_year: 2010 },
+        P::AnonymousEditionNotPublicDomainUs { edition_year: 1931 },
+        P::AnonymousEditionNotPublicDomainEu { edition_year: 1956 },
         P::Unreadable {
             name: name(),
             why: Unreadable::NotUtf8,
@@ -544,4 +550,95 @@ fn every_ingest_refusal_has_its_own_code_and_a_reason() {
     // A refusal the law makes keeps the law's code.
     let law = IngestRefusal::Law(Refusal::NoScore);
     assert_eq!(law.code(), 30);
+}
+
+/// Predicate version 3's refusals, each with a code of its own in its layer's range
+/// and a reason in words: an anonymous work past the EU cut-off for anonymous works,
+/// an anonymous edition past either cut-off, and an unknown author with a death year,
+/// which the receipt's structure refuses.
+#[test]
+fn the_predicate_version_3_refusals_have_codes_and_reasons() {
+    use provenance::Refusal as P;
+    let cases = [
+        (
+            P::AnonymousNotPublicDomainEu {
+                role: AuthorRole::Composer,
+                first_publication_year: 1956,
+            },
+            116,
+            "the composer is unknown and the work was first published in 1956, after \
+             1955: not public domain in the European Union",
+        ),
+        (
+            P::AnonymousEditionNotPublicDomainUs { edition_year: 1931 },
+            145,
+            "the anonymous edition of 1931 was published after 1930: not public domain in \
+             the United States",
+        ),
+        (
+            P::AnonymousEditionNotPublicDomainEu { edition_year: 1956 },
+            146,
+            "the anonymous edition of 1956 was published after 1955: not public domain in \
+             the European Union",
+        ),
+        (
+            P::Receipt(ReceiptError::AnonymousAuthorDeathYear),
+            100,
+            "the receipt does not load: an author it records as unknown has a death year",
+        ),
+        (
+            P::Receipt(ReceiptError::EmptyAuthorName),
+            100,
+            "the receipt does not load: an author's name is empty",
+        ),
+    ];
+    for (refusal, code, reason) in cases {
+        let r = IngestRefusal::Licence(refusal);
+        assert_eq!(r.code(), code, "{r}");
+        assert_eq!(
+            format!("{r}"),
+            format!("score refused by the licence predicate: {reason}")
+        );
+    }
+}
+
+// --- The Battle Hymn fixture ----------------------------------------------
+
+const BATTLE_HYMN_RECEIPT: &[u8] =
+    include_bytes!("../../provenance/fixtures/battle-hymn/receipt.json");
+const BATTLE_HYMN_LY: &[u8] =
+    include_bytes!("../../provenance/fixtures/battle-hymn/battle-hymn.ly");
+const BATTLE_HYMN_MID: &[u8] =
+    include_bytes!("../../provenance/fixtures/battle-hymn/battle-hymn.mid");
+
+/// The ingest verb admits the Battle Hymn fixture: this project's own CC0 engraving of a
+/// work whose composer is unknown, from an anonymous edition. The snapshot commits the
+/// own-engraving tier and the fixture receipt's digest.
+#[test]
+fn the_battle_hymn_fixture_is_ingested_as_an_own_engraving() {
+    let law = Law::ingest(&container(
+        BATTLE_HYMN_RECEIPT,
+        &[
+            ("battle-hymn.ly", BATTLE_HYMN_LY),
+            ("battle-hymn.mid", BATTLE_HYMN_MID),
+        ],
+    ))
+    .unwrap();
+    let digest = provenance::Receipt::from_json(BATTLE_HYMN_RECEIPT)
+        .unwrap()
+        .digest();
+    assert_eq!(
+        law.provenance(),
+        Some(&Provenance {
+            tier: Tier::OwnEngraving,
+            receipt_digest: digest,
+        })
+    );
+    assert_eq!(law.score().notes().len(), 2, "the placeholder's two notes");
+    let bytes = law.snapshot_bytes().unwrap();
+    assert_eq!(&bytes[56..60], b"PROV");
+    assert_eq!(&bytes[60..64], &[1, 0, 0, 0], "one record");
+    assert_eq!(bytes[64], 2, "tier 2, own engraving");
+    assert_eq!(&bytes[65..97], &digest);
+    assert_eq!(&bytes[97..101], &[0, 0, 0, 0], "no credit-ledger id");
 }

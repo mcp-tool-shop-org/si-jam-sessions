@@ -1035,10 +1035,10 @@ mod tests {
         assert_eq!(header.len(), 56);
         assert_eq!(&bytes[..header.len()], header.as_slice());
         assert_eq!(&bytes[8..12], &[2, 0, 0, 0], "snapshot format 2");
-        assert_eq!(&bytes[12..16], &[4, 0, 0, 0], "law version 4");
+        assert_eq!(&bytes[12..16], &[5, 0, 0, 0], "law version 5");
         assert_eq!(&bytes[16..20], &[0x20, 0x0D, 0, 0], "3360 little-endian");
         assert_eq!(&bytes[20..24], &[0x80, 0xBB, 0, 0], "48000 little-endian");
-        assert_eq!(&bytes[36..40], &[2, 0, 0, 0], "predicate version 2");
+        assert_eq!(&bytes[36..40], &[3, 0, 0, 0], "predicate version 3");
         assert_eq!(&bytes[40..44], &[0xEA, 0x07, 0, 0], "rules year 2026");
         assert_eq!(&bytes[44..48], &[0x8A, 0x07, 0, 0], "US cut-off 1930");
         assert_eq!(&bytes[48..52], &[0xA3, 0x07, 0, 0], "EU cut-off 1955");

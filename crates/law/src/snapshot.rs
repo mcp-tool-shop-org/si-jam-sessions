@@ -60,7 +60,8 @@ pub const SNAPSHOT_MAGIC: [u8; 8] = *b"SIJAMLAW";
 /// Law version 4 keeps format 2. A live take's snapshot holds only the
 /// verdicts that are final, in the order they became final, and names an
 /// addition in its row by onset and pitch; how each verdict and row is written
-/// does not change.
+/// does not change. Law version 5 keeps format 2 too: licence predicate
+/// version 3 changes the values in two header words, not the layout.
 pub const SNAPSHOT_FORMAT: u32 = 2;
 
 struct Out {

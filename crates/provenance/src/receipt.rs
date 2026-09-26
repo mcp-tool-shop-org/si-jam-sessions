@@ -71,7 +71,8 @@ closed_enum! {
 }
 
 closed_enum! {
-    /// What kind of edition the typesetting follows.
+    /// What kind of edition the typesetting follows: what the edition adds to the work,
+    /// and so which term protects what it adds.
     pub enum EditionKind {
         /// The work's first publication.
         FirstEdition = (0, "first-edition"),
@@ -81,6 +82,11 @@ closed_enum! {
         Scholarly = (2, "scholarly"),
         /// Not established.
         Unknown = (3, "unknown"),
+        /// An edition that adds a setting of its own, such as a harmonisation, an
+        /// accompaniment or editing, and does not name who made it. The receipt records
+        /// that author as unknown. What the edition adds is an anonymous work, whose term
+        /// runs from the edition's publication.
+        Anonymous = (4, "anonymous"),
     }
 }
 
@@ -157,17 +163,25 @@ pub struct Date {
 /// The musical work, independent of any edition or typesetting.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Composition {
-    /// Everyone whose death starts the EU term. In order of credit.
+    /// Every author of the work, in order of credit. The EU term runs from the death of
+    /// the last named author, or, when an author is unknown, from the work's publication.
     pub authors: Vec<Author>,
+    /// The year the work as a whole was first published: for a work whose parts appeared
+    /// at different times, the year its last part did.
     pub first_publication_year: Option<u16>,
     /// Ids of the evidence that supports the years.
     pub evidence: Vec<String>,
 }
 
+/// One author of the work, named or unknown.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Author {
-    pub name: String,
+    /// The author's name, or `None` for an author the sources do not identify: the author
+    /// of an anonymous work. A claimant is never recorded here; claimants go in the
+    /// receipt's notes. A pseudonym that leaves no doubt who the author is names them.
+    pub name: Option<String>,
     pub role: AuthorRole,
+    /// The year a named author died. An unknown author has none.
     pub death_year: Option<u16>,
 }
 
@@ -277,6 +291,22 @@ impl Receipt {
         }
         if !self.fetched_on.is_valid() {
             return Err(ReceiptError::InvalidDate);
+        }
+        if self
+            .composition
+            .authors
+            .iter()
+            .any(|a| a.name.is_none() && a.death_year.is_some())
+        {
+            return Err(ReceiptError::AnonymousAuthorDeathYear);
+        }
+        if self
+            .composition
+            .authors
+            .iter()
+            .any(|a| a.name.as_deref().is_some_and(|n| n.trim().is_empty()))
+        {
+            return Err(ReceiptError::EmptyAuthorName);
         }
         for pair in self.files.windows(2) {
             if pair[0].name >= pair[1].name {

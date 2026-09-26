@@ -8,13 +8,13 @@ use sha2::{Digest, Sha256};
 
 use crate::error::ReceiptError;
 use crate::infile::{self, Unreadable};
-use crate::licence::{self, AdmittedClass, LicenceRefusal};
+use crate::licence::{self, AdmittedClass, LicenceRefusal, OWN_ENGRAVING_LICENCE};
 use crate::receipt::{
-    Arrangement, EditionKind, FileEntry, Receipt, Statement, StatementField, ThirdParty,
+    Arrangement, AuthorRole, EditionKind, FileEntry, Receipt, Statement, StatementField, ThirdParty,
 };
 use crate::{
-    EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR, LAST_OUT_OF_TERM_EDITION_YEAR,
-    US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR,
+    EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR, EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR,
+    LAST_OUT_OF_TERM_EDITION_YEAR, US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR,
 };
 
 /// A file handed to the predicate: its name in the receipt and its bytes.
@@ -90,6 +90,12 @@ pub enum Refusal {
         author: String,
         death_year: u16,
     },
+    /// An author of the work is unknown, and the work was first published after the EU
+    /// cut-off for an anonymous work. `role` is the first unknown author's.
+    AnonymousNotPublicDomainEu {
+        role: AuthorRole,
+        first_publication_year: u16,
+    },
 
     // Check 3: the arrangement.
     MissingTypesetter,
@@ -98,8 +104,9 @@ pub enum Refusal {
     QuoteNotInEvidence {
         what: &'static str,
     },
-    /// An evidence quote that holds the licence or terms text also negates, limits or
-    /// conditions it (see `licence::negates`), so the evidence does not affirm it.
+    /// An evidence quote that holds the licence or terms text also negates, limits,
+    /// prohibits or conditions it (see `licence::negates`), so the evidence does not
+    /// affirm it.
     QuoteNegated {
         what: &'static str,
     },
@@ -125,6 +132,14 @@ pub enum Refusal {
     EditionTermNotShown {
         edition_year: u16,
     },
+    /// An anonymous edition published after the US cut-off.
+    AnonymousEditionNotPublicDomainUs {
+        edition_year: u16,
+    },
+    /// An anonymous edition published after the EU cut-off for an anonymous work.
+    AnonymousEditionNotPublicDomainEu {
+        edition_year: u16,
+    },
 
     // Check 5: the in-file licence.
     /// A file could not be read for licence statements.
@@ -142,8 +157,9 @@ pub enum Refusal {
     },
     /// No file states a licence equal to the host page's.
     NoInFileLicence,
-    /// A file of this project's own engraving states a licence. Its licence is the
-    /// product's; until the product's licence text is fixed, its files must state none.
+    /// A file of this project's own engraving states a licence other than
+    /// [`crate::OWN_ENGRAVING_LICENCE`], `CC0 1.0`, the licence of the project's own
+    /// engravings.
     OwnEngravingStatesLicence {
         name: String,
     },
@@ -156,21 +172,36 @@ pub enum Refusal {
 /// 0. the receipt's structure;
 /// 1. the files: every listed file supplied once, nothing else supplied, sizes and
 ///    SHA-256 equal to the receipt;
-/// 2. the composition: authors, death years, first-publication year and their evidence
-///    present; public domain in the US and in the EU by this law version's cut-offs;
+/// 2. the composition: authors, a death year for every named author, the
+///    first-publication year and their evidence present; then public domain by this law
+///    version's cut-offs: when an author is unknown, the EU rule for an anonymous work
+///    (first published at or before [`crate::EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR`]);
+///    the US rule (first published at or before
+///    [`crate::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR`]); and the EU rule for every named
+///    author (dead at or before [`crate::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR`]);
 /// 3. the arrangement: a named typesetter; the page licence and the terms each held, as
 ///    whole words, by a quote of their evidence; no restriction declared in the terms and
 ///    no restriction phrase in those quotes; no quote holding either text that also
 ///    negates it; an admitted licence; and the credit-ledger id present exactly when the
 ///    tier needs one. Or an engraving by this project;
 /// 4. the source edition: publisher, year and evidence present, the year not before first
-///    publication, and the edition shown to be out of any scholarly-edition term;
+///    publication; for an anonymous edition, the year at or before both jurisdictions'
+///    cut-offs for an anonymous work, the EU's checked first; and the edition shown to be
+///    out of any scholarly-edition term;
 /// 5. the in-file licence: every file read again, and its statements equal to the
 ///    receipt's record of them. For a third-party typesetting, a statement that names a
 ///    restriction is refused by that restriction's name; every other statement must agree
 ///    with the host page's licence (equal to it, or for a markup, holding it as a whole
 ///    phrase without negating it); and at least one file must state it outright. For this
-///    project's own engraving, which has no host page, no file may state a licence.
+///    project's own engraving, which has no host page, a file may state
+///    [`crate::OWN_ENGRAVING_LICENCE`] and nothing else.
+///
+/// The EU rule for an anonymous work runs before the US rule, where the named path's EU
+/// rule runs after it. Both publication rules read one year, and the anonymous EU cut-off
+/// (1955 in rules year 2026) is later than the US one (1930), so after the US rule it
+/// could never refuse anything, and a change that deleted it would go unseen. Checked
+/// first, each rule refuses years of its own: 1931 to 1955 by the US rule, 1956 on by the
+/// EU rule. A receipt with no unknown author meets its checks in version 2's order.
 pub fn admit(receipt: &Receipt, supplied: &[Supplied<'_>]) -> Result<Admitted, Refusal> {
     receipt.check_structure().map_err(Refusal::Receipt)?;
     let files = check_files(receipt, supplied)?;
@@ -224,10 +255,14 @@ fn check_composition(receipt: &Receipt) -> Result<(), Refusal> {
     if c.authors.is_empty() {
         return Err(Refusal::NoAuthors);
     }
+    // A named author needs a death year. An unknown author has none (the structure check
+    // refuses one that does); its term runs from the work's publication instead.
     for a in &c.authors {
-        if a.death_year.is_none() {
+        if let Some(name) = &a.name
+            && a.death_year.is_none()
+        {
             return Err(Refusal::MissingDeathYear {
-                author: a.name.clone(),
+                author: name.clone(),
             });
         }
     }
@@ -235,16 +270,31 @@ fn check_composition(receipt: &Receipt) -> Result<(), Refusal> {
         return Err(Refusal::MissingFirstPublicationYear);
     };
     evidenced(receipt, &c.evidence, "composition")?;
+    // An anonymous work's EU term runs 70 years from its publication (Directive
+    // 2006/116/EC, Art. 1(3)). It is checked before the US rule, for the reason on
+    // [`admit`].
+    if let Some(a) = c.authors.iter().find(|a| a.name.is_none())
+        && first > EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR
+    {
+        return Err(Refusal::AnonymousNotPublicDomainEu {
+            role: a.role,
+            first_publication_year: first,
+        });
+    }
     if first > US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR {
         return Err(Refusal::NotPublicDomainUs {
             first_publication_year: first,
         });
     }
     for a in &c.authors {
+        // An unknown author's EU term was checked above.
+        let Some(name) = &a.name else {
+            continue;
+        };
         let death_year = a.death_year.unwrap_or(u16::MAX);
         if death_year > EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR {
             return Err(Refusal::NotPublicDomainEu {
-                author: a.name.clone(),
+                author: name.clone(),
                 death_year,
             });
         }
@@ -326,6 +376,17 @@ fn check_edition(receipt: &Receipt) -> Result<(), Refusal> {
     {
         return Err(Refusal::EditionBeforeFirstPublication { edition_year: year });
     }
+    // What an anonymous edition adds is an anonymous work of its own, first published in
+    // the edition's year: the EU and US publication rules apply to it, the EU's first, for
+    // the reason on [`admit`].
+    if e.kind == EditionKind::Anonymous {
+        if year > EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR {
+            return Err(Refusal::AnonymousEditionNotPublicDomainEu { edition_year: year });
+        }
+        if year > US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR {
+            return Err(Refusal::AnonymousEditionNotPublicDomainUs { edition_year: year });
+        }
+    }
     if year <= LAST_OUT_OF_TERM_EDITION_YEAR {
         return Ok(());
     }
@@ -355,13 +416,17 @@ fn recorded_statements(f: &FileEntry, files: &Files<'_>) -> Result<Vec<Statement
     Ok(found)
 }
 
-/// Check 5 for this project's own engraving: its files state no licence of their own.
+/// Check 5 for this project's own engraving: a file may state the licence of the
+/// project's own engravings, [`OWN_ENGRAVING_LICENCE`], in any field, and nothing else.
 fn check_own_files(receipt: &Receipt, files: &Files<'_>) -> Result<(), Refusal> {
+    let own = licence::normalise(OWN_ENGRAVING_LICENCE);
     for f in &receipt.files {
-        if !recorded_statements(f, files)?.is_empty() {
-            return Err(Refusal::OwnEngravingStatesLicence {
-                name: f.name.clone(),
-            });
+        for st in recorded_statements(f, files)? {
+            if licence::normalise(&st.text) != own {
+                return Err(Refusal::OwnEngravingStatesLicence {
+                    name: f.name.clone(),
+                });
+            }
         }
     }
     Ok(())

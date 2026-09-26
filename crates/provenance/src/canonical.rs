@@ -8,7 +8,10 @@
 //!                · composition · source_edition · arrangement
 //!                · vec<file> files · vec<evidence> evidence · vec<str> notes
 //! composition  = vec<author> authors · opt<u16> first_publication_year · vec<str> evidence
-//! author       = str name · u8 role · opt<u16> death_year
+//! author       = str name · u8 role · death
+//! death        = u8 0  |  u8 1 · u16 death_year  |  u8 2
+//!                (0: a named author, no death year on the record; 1: a named author who
+//!                died in death_year; 2: an unknown author, whose name is empty)
 //! source_edition = str statement · opt<str> publisher · opt<u16> year · u8 kind
 //!                · vec<str> evidence
 //! arrangement  = u8 0 · third_party  |  u8 1 · str engraver
@@ -29,10 +32,18 @@
 //! ```
 //!
 //! Decoding is strict: the magic and version must match, every tag and option flag must
-//! be one this version defines, every string must be UTF-8, nothing may follow the last
-//! field, and the decoded receipt must pass [`Receipt::check_structure`] (which fixes the
-//! order of files, evidence and restrictions). So every accepted byte string re-encodes to
-//! itself, and a receipt has exactly one encoding.
+//! be one this version defines, every string must be UTF-8, an unknown author's name must
+//! be empty, nothing may follow the last field, and the decoded receipt must pass
+//! [`Receipt::check_structure`] (which fixes the order of files, evidence and
+//! restrictions). So every accepted byte string re-encodes to itself, and a receipt has
+//! exactly one encoding.
+//!
+//! Licence predicate version 3 gave this version two values: the author's death tag 2,
+//! an unknown author, and edition kind tag 4, an anonymous edition. Every byte string an
+//! earlier predicate accepted decodes to the same receipt and re-encodes to the same
+//! bytes, so a receipt that uses neither value keeps its digest, and an earlier decoder
+//! refuses one that uses either (`BadFlag`, `BadTag`). The layout is otherwise unchanged,
+//! and so is its version: a new version number would move every receipt's digest.
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -51,6 +62,9 @@ pub const MAGIC: [u8; 4] = *b"SJRC";
 /// The version of this encoding.
 pub const CANONICAL_VERSION: u16 = 1;
 
+/// The author's death tag for an unknown author (see the layout above).
+const UNKNOWN_AUTHOR: u8 = 2;
+
 pub(crate) fn encode(r: &Receipt) -> Vec<u8> {
     let mut w = Writer { out: Vec::new() };
     w.out.extend_from_slice(&MAGIC);
@@ -61,10 +75,17 @@ pub(crate) fn encode(r: &Receipt) -> Vec<u8> {
     w.date(r.fetched_on);
 
     let c = &r.composition;
-    w.vec(&c.authors, |w, a| {
-        w.str(&a.name);
-        w.u8(a.role.tag());
-        w.opt_u16(a.death_year);
+    w.vec(&c.authors, |w, a| match &a.name {
+        Some(name) => {
+            w.str(name);
+            w.u8(a.role.tag());
+            w.opt_u16(a.death_year);
+        }
+        None => {
+            w.str("");
+            w.u8(a.role.tag());
+            w.u8(UNKNOWN_AUTHOR);
+        }
     });
     w.opt_u16(c.first_publication_year);
     w.strs(&c.evidence);
@@ -135,11 +156,29 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Receipt, ReceiptError> {
 
     let composition = Composition {
         authors: r.vec(|r| {
-            Ok(Author {
-                name: r.str()?,
-                role: r.tag(AuthorRole::from_tag)?,
-                death_year: r.opt_u16()?,
-            })
+            let at = r.pos;
+            let name = r.str()?;
+            let role = r.tag(AuthorRole::from_tag)?;
+            let tag_at = r.pos;
+            match r.u8()? {
+                0 => Ok(Author {
+                    name: Some(name),
+                    role,
+                    death_year: None,
+                }),
+                1 => Ok(Author {
+                    name: Some(name),
+                    role,
+                    death_year: Some(r.u16()?),
+                }),
+                UNKNOWN_AUTHOR if name.is_empty() => Ok(Author {
+                    name: None,
+                    role,
+                    death_year: None,
+                }),
+                UNKNOWN_AUTHOR => Err(r.fail_at(at, CanonicalProblem::UnknownAuthorNamed)),
+                _ => Err(r.fail_at(tag_at, CanonicalProblem::BadFlag)),
+            }
         })?,
         first_publication_year: r.opt_u16()?,
         evidence: r.strs()?,

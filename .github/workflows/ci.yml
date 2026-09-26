@@ -68,6 +68,8 @@ on:
       - crates/**
       - scores/**
       - golden/**
+      # The provenance tests check the Battle Hymn fixture against it.
+      - research/battle-hymn/evidence-manifest.json
       - .github/workflows/**
       - .github/engines/**
   pull_request:
@@ -79,6 +81,7 @@ on:
       - crates/**
       - scores/**
       - golden/**
+      - research/battle-hymn/evidence-manifest.json
       - .github/workflows/**
       - .github/engines/**
   workflow_dispatch:
