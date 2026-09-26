@@ -70,7 +70,7 @@ Heard audio is the picture. A played take is not. Its onsets, pitches, velocitie
    - A law bump that moves a label bumps the dataset in the same commit.
 6. **The host.**
    - It receives committed frames. In slice 1 it plays them through oscillator voices together with a click taken from committed beat events.
-   - Samples and a singer are sockets. Every committed note-on carries `note_id` and `onset_sample`, and sockets consume only those fields plus duration and pitch.
+   - Samples and a singer are sockets. Every committed note-on carries `note_id`, `onset_sample`, pitch, velocity and duration, and a socket consumes only those. The first sample socket is the host's piano, the Salamander Grand Piano V3 (CC BY 3.0), fetched by `host fetch-piano` against a pinned SHA-256 and never committed; its credit is printed whenever it plays and written into every WAV it renders. (Amended 2026-09-26: velocity added, because the piano uses it to choose a layer.)
    - Sockets are outside the hash, and the singer is not in v1.
    - The waveform is not hashed.
 
@@ -103,7 +103,7 @@ The studio's [Rust knowledge base](https://github.com/mcp-tool-shop-org/readouts
 | Digest re-pinned only from x86_64 Linux; `--locked`; path remapping; `clippy -D warnings`; `wasm-opt` only if pinned | ci-reproducible-builds lane |
 | `midly` 0.5.3, `default-features = false`, `features = ["alloc", "strict"]`; SMPTE-timed files refused | midi-notation-ingest lane (verified; `strict` path not yet compiler-tested) |
 | MusicXML `<divisions>` mapped to PPQ by integer maths with a divisibility test; ABC durations parsed as exact rationals, never through a crate's `f32` | midi-notation-ingest lane (verified) |
-| Native host: `cpal` 0.18.2 (Apache-2.0, WASAPI shared mode only; it reports xruns on the input path only), `rtrb` SPSC queue, no allocation on the callback | host-audio-and-midi lane (source-verified; compile-only) |
+| Native host: `cpal` 0.18.2 (Apache-2.0, WASAPI shared mode only; it reports xruns on the input path only), `rtrb` SPSC queue, no allocation on the callback; claxon 0.4.3 (FLAC, Apache-2.0) and flate2 1.1.10 (`rust_backend`); the sample archive by SHA-256 | host-audio-and-midi lane (source-verified; compile-only) |
 | cargo-deny allowlist MIT / Apache-2.0 / Unlicense / BSD-1-Clause, plus one scoped exception for build-only `unicode-ident` (Unicode-3.0) | crate-licences lane (verified; measured with `cargo metadata`) |
 
 ## What comes across, and what stays in the sibling
@@ -120,7 +120,7 @@ Measured on `ai-jam-sessions` at `b015f1d`, and corrected there on 2026-09-25.
 
 **Stays in the sibling:**
 - its uncleared songs and their derived data;
-- the Salamander piano and the tract singer;
+- the tract singer (the Salamander piano moved into this project's host in #11);
 - its 54-tool surface;
 - the TypeScript audio stack.
 

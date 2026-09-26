@@ -1,6 +1,6 @@
 # The Rust gate and the golden hash.
 #
-# - rust: format, lints, tests, the wasm law, licences, and the law's empty
+# - rust: format, lints, tests, the wasm law, licences, RustSec advisories, and the law's empty
 #   import section. The tests include the native host's (crates/host), which
 #   need no audio device: its render, scheduling and clock maths are pure, and
 #   cpal is built and linked against ALSA but never opens a device.
@@ -144,8 +144,10 @@ jobs:
         with:
           tool: cargo-deny@0.20.2
 
-      - name: Licences
-        run: cargo deny --locked check licenses
+      # Licences against the allowlist, and every dependency against the RustSec
+      # advisory database (fetched fresh, so a new advisory fails the next run).
+      - name: Licences and advisories
+        run: cargo deny --locked check licenses advisories
 
       # The same assertion as the Rust test, made by the JavaScript engine's own
       # wasm parser on the artifact the build step produced.

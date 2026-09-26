@@ -1,3 +1,9 @@
 target/
 node_modules/
 *.tmp
+site/.astro/
+site/dist/
+site/node_modules/
+site/public/audio/
+.polyglot-cache.json
+__pycache__/

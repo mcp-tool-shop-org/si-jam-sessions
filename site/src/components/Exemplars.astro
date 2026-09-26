@@ -1,0 +1,200 @@
+---
+// The two Battle Hymn exemplars: a player for each recording, a three.js view of both arrangements
+// aligned section by section, and a table of where they differ. The notes are the law's committed
+// notes (`host notes`); the section starts come from tools/site/sections.py.
+import glm from '../data/battle-hymn-glm-5.3.notes.json';
+import kimi from '../data/battle-hymn-kimi-k3.notes.json';
+import sections from '../data/sections.json';
+import { stats, difference, noteName, type NotesFile, type SectionsFile } from '../lib/compare';
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const release = 'https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/';
+const sec = sections as unknown as SectionsFile;
+const files = [glm, kimi] as unknown as NotesFile[];
+const pieces = [
+  {
+    id: 'battle-hymn-glm-5.3',
+    model: 'glm-5.3',
+    tone: 'glm',
+    length: '5:02',
+    size: '116 MB',
+    wav: '85b2d56723cacc6c87895a2784d2cd034dea1142e62de6d8a1a9d2867dad2eed',
+  },
+  {
+    id: 'battle-hymn-kimi-k3',
+    model: 'kimi-k3',
+    tone: 'kimi',
+    length: '4:37',
+    size: '106 MB',
+    wav: 'bf49d310de5e94975b277cd1e7c57134388a0232d53bb059f12e7727baeba017',
+  },
+];
+const st = files.map((f) => stats(f, sec));
+const rows = sec.sections.map((name, i) => ({
+  name,
+  cells: st.map((s) => s[i]),
+  diff: difference(st[0][i], st[1][i], 'glm-5.3', 'kimi-k3'),
+}));
+const cell = (s: (typeof st)[number][number]) =>
+  `${s.seconds.toFixed(1)} s · ${s.perSecond.toFixed(1)} notes/s · ${noteName(s.low)}–${noteName(s.high)} · ${Math.round(s.velocity)}`;
+---
+
+<div class="sj">
+  <div class="sj-players">
+    {pieces.map((p, i) => (
+      <figure class={`sj-player sj-${p.tone}`}>
+        <figcaption>
+          <span class="sj-swatch" aria-hidden="true"></span>
+          <strong>Arranged by {p.model}</strong>
+          <span class="sj-meta">{p.length} · {files[i].notes.length.toLocaleString('en-US')} notes</span>
+        </figcaption>
+        <audio controls preload="metadata" data-piece={p.id}>
+          <source src={`${base}audio/${p.id}.opus`} type='audio/ogg; codecs="opus"' />
+          <source src={`${base}audio/${p.id}.mp3`} type="audio/mpeg" />
+        </audio>
+        <p class="sj-dl">
+          <a href={`${release}${p.id}.wav`}>Uncompressed WAV, {p.size}</a> ·
+          <a href={`${release}${p.id}.notes.json`}>the notes the law committed</a>
+          <code title="SHA-256 of the WAV">{p.wav}</code>
+        </p>
+      </figure>
+    ))}
+  </div>
+
+  <div class="sj-view">
+    <div class="sj-bar">
+      <div class="sj-chips" role="toolbar" aria-label="Jump to a section">
+        {sec.sections.map((name, i) => (
+          <button type="button" data-section={i} aria-pressed={i === 0 ? 'true' : 'false'}>{name}</button>
+        ))}
+      </div>
+      <div class="sj-modes" role="group" aria-label="Camera">
+        <button type="button" data-mode="follow" aria-pressed="true">Follow</button>
+        <button type="button" data-mode="whole" aria-pressed="false">Whole piece</button>
+      </div>
+    </div>
+    <div class="sj-stage">
+      <canvas
+        role="img"
+        aria-label="Both arrangements as a 3D piano roll, aligned section by section: glm-5.3 in blue on the upper lane, kimi-k3 in pink on the lower. Louder notes stand taller. The amber strip between the lanes is taller where the two sections differ more."
+      ></canvas>
+      <p class="sj-legend" aria-hidden="true">
+        <span class="sj-key sj-glm"><span class="sj-swatch"></span>glm-5.3</span>
+        <span class="sj-key sj-kimi"><span class="sj-swatch"></span>kimi-k3</span>
+        <span class="sj-key"><span class="sj-swatch sj-amber"></span>how much they differ</span>
+      </p>
+      <p class="sj-hud" aria-live="polite">{rows[0].name}: {rows[0].diff.text}.</p>
+      <p class="sj-nogl-msg">This browser could not start WebGL, so the 3D view is off. The table below has the same measurements.</p>
+    </div>
+  </div>
+
+  <div class="sj-diff">
+    <h3>Where they differ, section by section</h3>
+    <p class="sj-note">
+      Each cell gives the section's length, notes a second, range and average velocity (out of 127), measured
+      from the notes the law committed. The last column states the largest of five differences: length, notes a
+      second, median note, average velocity, and the most notes sounding at once. Both arrangements follow the same form: an introduction, five verses
+      each with its chorus, and a coda.
+    </p>
+    <div class="sj-scroll">
+      <table>
+        <thead>
+          <tr><th scope="col">Section</th><th scope="col">glm-5.3</th><th scope="col">kimi-k3</th><th scope="col">The largest difference</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr data-section={i} class={i === 0 ? 'sj-current' : ''}>
+              <th scope="row">{r.name}</th>
+              <td>{cell(r.cells[0])}</td>
+              <td>{cell(r.cells[1])}</td>
+              <td>{r.diff.text}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="sj-credit">
+    Piano: <a href="https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html">Salamander Grand Piano V3</a> by
+    Alexander Holm, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>. Both arrangements are
+    dedicated to the public domain under <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>.
+    Each was generated on Ollama Cloud from this project's transcription of the anonymous 1862 Ditson edition, and
+    admitted by the law's licence check with its evidence. Each recording is rendered through the law, and rendering
+    it again on the same machine gives the same bytes.
+  </p>
+</div>
+
+<style>
+  .sj { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+  .sj > * { min-width: 0; }
+  .sj-players { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
+  .sj-player {
+    margin: 0; padding: 1rem; border: 1px solid var(--color-edge); border-radius: 12px;
+    background: var(--color-surface-raised);
+  }
+  .sj-player figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; color: var(--color-heading); }
+  .sj-meta { color: var(--color-dim); font-size: 0.85rem; }
+  .sj-player audio { width: 100%; margin: 0.75rem 0 0.5rem; }
+  .sj-swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; vertical-align: -1px; }
+  .sj-glm .sj-swatch { background: #4a9eff; }
+  .sj-kimi .sj-swatch { background: #ff6b8a; }
+  .sj-amber { background: #ffc857; }
+  .sj-dl { margin: 0; font-size: 0.82rem; color: var(--color-dim); }
+  .sj-dl a, .sj-credit a { color: var(--color-body); text-decoration: underline; }
+  .sj-dl code { display: block; margin-top: 0.35rem; font-size: 0.7rem; word-break: break-all; color: var(--color-dim); }
+  .sj-bar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+  .sj-chips, .sj-modes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .sj-bar button {
+    font: inherit; font-size: 0.78rem; padding: 0.25rem 0.65rem; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--color-edge); background: var(--color-surface-raised); color: var(--color-body);
+  }
+  .sj-bar button[aria-pressed='true'] { border-color: #ffc857; color: #ffc857; }
+  .sj-bar button:focus-visible { outline: 2px solid #ffc857; outline-offset: 2px; }
+  .sj-stage {
+    position: relative; height: clamp(300px, 50vw, 540px); overflow: hidden;
+    border: 1px solid var(--color-edge); border-radius: 12px; background: #09090b;
+  }
+  .sj-stage canvas { display: block; width: 100%; height: 100%; }
+  .sj-legend {
+    position: absolute; top: 0.6rem; left: 0.75rem; margin: 0; display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem;
+    font-size: 0.78rem; color: var(--color-dim); pointer-events: none;
+  }
+  .sj-key { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .sj-hud {
+    position: absolute; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; margin: 0; padding: 0.45rem 0.7rem;
+    border-radius: 8px; background: rgba(9, 9, 11, 0.78); color: var(--color-body); font-size: 0.85rem;
+    pointer-events: none;
+  }
+  .sj-nogl-msg { display: none; margin: 0; padding: 1.5rem; color: var(--color-dim); }
+  .sj-stage.sj-nogl { height: auto; }
+  .sj-stage.sj-nogl canvas, .sj-stage.sj-nogl .sj-hud, .sj-stage.sj-nogl .sj-legend { display: none; }
+  .sj-stage.sj-nogl .sj-nogl-msg { display: block; }
+  .sj-diff h3 { margin: 0 0 0.4rem; color: var(--color-heading); font-size: 1.05rem; }
+  .sj-note { margin: 0 0 0.75rem; color: var(--color-dim); font-size: 0.85rem; }
+  .sj-scroll { overflow-x: auto; }
+  .sj-diff table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 0.8rem; }
+  .sj-diff th, .sj-diff td {
+    padding: 0.45rem 0.5rem; text-align: left; vertical-align: top;
+    border-bottom: 1px solid var(--color-edge-subtle); color: var(--color-body);
+  }
+  .sj-diff thead th { color: var(--color-dim); font-weight: 600; }
+  .sj-diff tr.sj-current th, .sj-diff tr.sj-current td { background: rgba(255, 200, 87, 0.08); }
+  .sj-credit { margin: 0; font-size: 0.82rem; color: var(--color-dim); }
+</style>
+
+<script>
+  // three.js and the notes load only when the section comes near the viewport.
+  const root = document.querySelector<HTMLElement>('.sj');
+  if (root) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        io.disconnect();
+        import('../lib/view').then((m) => m.start(root));
+      },
+      { rootMargin: '600px' },
+    );
+    io.observe(root);
+  }
+</script>

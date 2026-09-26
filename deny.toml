@@ -1,5 +1,5 @@
-# cargo-deny configuration. CI runs the licence check:
-#   cargo deny --locked check licenses
+# cargo-deny configuration. CI runs the licence and advisory checks:
+#   cargo deny --locked check licenses advisories
 #
 # The allowlist is the product's: MIT, Apache-2.0, Unlicense and BSD-1-Clause
 # (PHASE-0, "The Rust constraints the law inherits"). A crate under any other
