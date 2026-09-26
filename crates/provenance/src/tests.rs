@@ -1003,9 +1003,8 @@ fn ai_restrictions_are_refused_wherever_they_are_read() {
 }
 
 /// The whole-word regression found at `fead502`: a markup whose only restriction word was
-/// inflected agreed with the page licence, and was admitted. Every class but AI wording
-/// now matches from the start of a word, so each of these is refused by its class,
-/// wherever it is read.
+/// inflected agreed with the page licence, and was admitted. A restriction's inflections
+/// are now refused by its class, wherever they are read.
 #[test]
 fn an_inflected_restriction_is_refused_by_its_class() {
     use LicenceRefusal::*;
@@ -1055,7 +1054,7 @@ fn an_inflected_restriction_is_refused_by_its_class() {
     );
 }
 
-/// Word-start matching must not reach the admitted texts: a plain "Public Domain" in the
+/// The matching rule must not reach the admitted texts: a plain "Public Domain" in the
 /// licence string and in the markup, and the real Entertainer, whose digest is unchanged.
 #[test]
 fn plain_public_domain_and_the_entertainer_are_still_admitted() {
@@ -1124,6 +1123,35 @@ fn spaced_cc_forms_and_wider_ai_wording_are_refused_by_their_class() {
         wrong.is_empty(),
         "{} of {total} wrong: {wrong:#?}",
         wrong.len()
+    );
+}
+
+/// No stem refuses plain text: a markup that runs a restriction phrase on into an ordinary
+/// word still agrees with the page licence. At `f4038cc`, each of these was refused.
+#[test]
+fn plain_text_in_a_markup_is_admitted() {
+    let markups = [
+        "Placed in the public domain. Dedicated to model trains and their builders.",
+        "Placed in the public domain for deep learners of the piano",
+        "Placed in the public domain; a notation language modelled on LilyPond",
+        "Placed in the public domain; prepared for the CC by Sarah",
+    ];
+    let mut wrong = Vec::new();
+    for markup in markups {
+        let mut f = Fixture::new();
+        f.ly_header(&format!(
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"{markup}\" }}\n"
+        ));
+        let got = f.admit().map(|a| a.tier);
+        if got != Ok(Tier::PublicDomain) {
+            wrong.push(format!("{markup}: {got:?}"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{} of {} wrong: {wrong:#?}",
+        wrong.len(),
+        markups.len()
     );
 }
 

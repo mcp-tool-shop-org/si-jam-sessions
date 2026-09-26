@@ -31,10 +31,9 @@
 //! - **Restriction phrases** (AI use, all rights reserved, no redistribution,
 //!   non-commercial, no derivatives, share-alike) are looked for in the words of every
 //!   licence text the predicate reads, so separators do not matter (`CC BY NC` reads as
-//!   `cc-by-nc`). AI wording's short tokens (`ai`, `a.i.`, `tdm`, `llm`) must be whole
-//!   words; every other phrase matches from the start of a word, so a stem finds its
-//!   inflections (`noncommercially`, `neural nets`). One found anywhere refuses by its
-//!   class. The rule is documented in `licence.rs`.
+//!   `cc-by-nc`). A phrase must be whole words, except a few stems that also find their
+//!   inflections (`noncommercially`, `neural nets`); no stem refuses plain text. One found
+//!   anywhere refuses by its class. The rule is documented in `licence.rs`.
 //! - **A statement** read from a file must equal the page's licence exactly.
 //! - **A LilyPond copyright markup**, which is prose, must hold the page's licence as a
 //!   whole phrase and affirm it: no negating, limiting, lapsing or hedging word and no
@@ -107,18 +106,16 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 ///   phrase is refused by that restriction, AI wording is named before any other
 ///   restriction, and the SMF track-count checks refuse by their own names.
 /// - It matches restriction phrases on a text's words, so separators do not matter
-///   (`CC BY NC`, `cc-by-nc`). AI wording's short tokens must be whole words, and every
-///   other phrase matches from the start of a word, where version 1 matched anywhere. So a
-///   stem still finds its inflections (`noncommercially`, `neural networks`), but a phrase
-///   that starts inside a word, as `no derivatives` does in `piano derivatives`, no longer
-///   refuses.
+///   (`CC BY NC`, `cc-by-nc`), where version 1 matched substrings of the text as written.
+///   A phrase must be whole words, except a few stems that find their inflections
+///   (`noncommercially`, `neural networks`). So a phrase that starts inside a word
+///   (`no derivatives` in `piano derivatives`), or runs on into a plain word
+///   (`no-derivation`, `cc-by-sarah`), no longer refuses.
 ///
-/// The matching rule was settled in two steps before version 2 shipped. Version 2 was
-/// first pushed with whole-word matching for every class, which let inflections through,
-/// so every class but AI wording became stems. The second external review then found CC
-/// forms written with spaces (`CC BY ND`) and AI wording beyond the list (`neural nets`)
-/// passing, so phrases are now matched on a text's words, and AI wording beyond its short
-/// tokens is stems too.
+/// The matching rule was settled in four steps before version 2 shipped: whole words for
+/// every class; then stems for every class but AI wording; then a text's words, with AI
+/// wording's longer phrases as stems too; and then stems only where no plain word runs on
+/// from them.
 pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {

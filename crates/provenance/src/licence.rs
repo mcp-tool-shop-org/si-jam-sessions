@@ -15,10 +15,11 @@
 //! file makes about itself. A phrase found in any of them refuses the score by its class,
 //! even when the page licence is on the admitted list. AI wording is the first class
 //! looked for. Phrases are matched on a text's words, so separators do not matter
-//! (`CC BY NC` reads as `cc-by-nc`). AI wording's short tokens (`ai`, `a.i.`, `tdm`,
-//! `llm`) must be whole words; every other phrase matches from the start of a word, so a
-//! stem finds its inflections: `noncommercial` refuses `noncommercially`, and `neural net`
-//! refuses `neural nets`. The rule is on [`REFUSAL_PHRASES`].
+//! (`CC BY NC` reads as `cc-by-nc`). A phrase must be whole words, except a few stems
+//! that match from the start of a word and so find their inflections: `noncommercial`
+//! refuses `noncommercially`, and `neural net` refuses `neural nets`. A phrase is a stem
+//! only where no plain word runs on from it, so no stem refuses plain text. The rule is on
+//! [`REFUSAL_PHRASES`].
 //!
 //! **A text must affirm, not merely mention.** Where a text may hold the licence alongside
 //! other text (a copyright markup, an evidence quote), it counts only if [`negates`] finds
@@ -91,69 +92,76 @@ struct Phrases {
 ///   other than ASCII letters and digits is one separator. So `cc-by-nc`, `cc by nc` and
 ///   `CC_BY_NC` read alike, and every phrase here is written in that form (`a.i.` is
 ///   `a i`).
-/// - **Whole words.** Only AI wording's short tokens: `ai`, `a i`, `genai`, `tdm`, `llm`
-///   and `llms`. They sit inside common words (`ai` in `domain`) or start them (`aim`,
-///   `air`, `tdma`).
-/// - **Stems.** Every other phrase matches from the start of a word and may end inside
-///   one, so it finds its inflections: `noncommercial` finds `noncommercially`, and
-///   `neural net` finds `neural nets` and `neural networks`. Over-refusal is the safe
-///   direction.
+/// - **Whole words by default.** A phrase must match whole words. AI wording's short
+///   tokens need this most: they sit inside common words (`ai` in `domain`) or start them
+///   (`aim`, `air`, `tdma`).
+/// - **Stems where no plain word runs on from them.** A stem matches from the start of a
+///   word and may end inside one, so it finds its inflections: `noncommercial` finds
+///   `noncommercially`, and `neural net` finds `neural nets` and `neural networks`. A
+///   phrase is a stem only if every word that runs on from it is still the restriction it
+///   names. Otherwise its forms are listed as whole words: `model train` would refuse
+///   `model trains`, and `cc by sa` would refuse `cc by sarah`.
 /// - **Never from inside a word.** A phrase that starts inside a word matches nothing:
 ///   `piano derivatives` holds `no deriv` only inside `piano`.
 const REFUSAL_PHRASES: &[Phrases] = &[
     Phrases {
         class: LicenceRefusal::AiRestricted,
-        whole: &["ai", "a i", "genai", "tdm", "llm", "llms"],
-        stems: &[
-            "artificial intelligen",
-            "machine learn",
-            "deep learn",
-            "neural net",
+        whole: &[
+            "ai",
+            "a i",
+            "genai",
+            "tdm",
+            "llm",
+            "llms",
+            "deep learning",
             "data mining",
             "data mine",
+            "data mined",
+            "data miner",
+            "data miners",
             "language model",
-            "model train",
+            "language models",
+            "language modelling",
+            "language modeling",
+            "model training",
             "training data",
+            "training dataset",
+            "training datasets",
             "training model",
+            "training models",
             "to train",
         ],
+        stems: &["artificial intelligen", "machine learn", "neural net"],
     },
     Phrases {
         class: LicenceRefusal::AllRightsReserved,
-        whole: &[],
-        stems: &["all rights reserved"],
+        whole: &["all rights reserved"],
+        stems: &[],
     },
     Phrases {
         class: LicenceRefusal::NoRedistribution,
-        whole: &[],
+        whole: &["personal use only"],
         stems: &[
             "no redistribut",
             "not for redistribut",
             "may not be redistribut",
             "do not redistribut",
-            "personal use only",
         ],
     },
     Phrases {
         class: LicenceRefusal::NonCommercial,
-        whole: &[],
-        stems: &[
-            "noncommercial",
-            "non commercial",
-            "not for commercial",
-            "no commercial",
-            "cc by nc",
-        ],
+        whole: &["not for commercial", "no commercial", "cc by nc"],
+        stems: &["noncommercial", "non commercial"],
     },
     Phrases {
         class: LicenceRefusal::NoDerivatives,
-        whole: &[],
-        stems: &["noderiv", "no deriv", "cc by nd"],
+        whole: &["no derivative", "no derivatives", "no derivs", "cc by nd"],
+        stems: &["noderiv"],
     },
     Phrases {
         class: LicenceRefusal::ShareAlike,
-        whole: &[],
-        stems: &["sharealike", "share alike", "cc by sa"],
+        whole: &["sharealike", "share alike", "cc by sa"],
+        stems: &[],
     },
 ];
 
@@ -484,11 +492,12 @@ mod tests {
         );
     }
 
-    /// Every phrase but AI wording's short tokens matches from the start of a word, so a
-    /// stem finds its inflections. The first two texts are the markups found admitted as
-    /// public domain at `fead502`, normalised.
+    /// A restriction's inflections are refused by its class: through a stem where no plain
+    /// word runs on from it, and through its forms listed as whole words elsewhere. The
+    /// first two texts are the markups found admitted as public domain at `fead502`,
+    /// normalised.
     #[test]
-    fn restrictions_other_than_ai_match_from_the_start_of_a_word() {
+    fn inflected_restriction_wording_is_refused() {
         use LicenceRefusal::*;
         let cases = [
             ("public domain. free to use noncommercially.", NonCommercial),
@@ -595,11 +604,12 @@ mod tests {
         );
     }
 
-    /// AI wording beyond its short tokens matches from the start of a word. The second
-    /// external review found "no neural nets" and "not for training models" passing at
-    /// `390336b`, where every AI phrase had to be whole words.
+    /// AI wording is refused in its listed forms, and through its three stems
+    /// (`artificial intelligen`, `machine learn`, `neural net`) in their inflections. The
+    /// second external review found "no neural nets" and "not for training models" passing
+    /// at `390336b`, where AI wording was a shorter list of whole words.
     #[test]
-    fn ai_phrases_match_from_the_start_of_a_word() {
+    fn ai_wording_in_its_listed_forms_is_refused() {
         let cases = [
             "no neural nets",
             "not for training models",
@@ -624,6 +634,40 @@ mod tests {
             "{} of {} wrong: {wrong:#?}",
             wrong.len(),
             cases.len()
+        );
+    }
+
+    /// No stem refuses plain text. Each text runs a restriction phrase on into an ordinary
+    /// word, and none of them is a restriction. At `f4038cc`, stems such as `model train`,
+    /// `deep learn` and `cc by sa` refused them.
+    #[test]
+    fn plain_text_that_runs_a_phrase_on_is_not_refused() {
+        let plain = [
+            "public domain",
+            "domain",
+            "dedicated to model trains and their builders",
+            "written for trainees",
+            "written to trainees",
+            "for deep learners of the piano",
+            "a data minefield",
+            "a notation language modelled on lilypond",
+            "piano training modelled on czerny",
+            "the training database",
+            "prepared for the cc by sarah",
+            "no commercially published edition exists",
+            "no derivation from the autograph",
+            "a noncommittal reply",
+        ];
+        let refused: Vec<String> = plain
+            .iter()
+            .filter(|text| restriction_in(text).is_some())
+            .map(|text| alloc::format!("{text:?} gives {:?}", restriction_in(text)))
+            .collect();
+        assert!(
+            refused.is_empty(),
+            "{} of {} refused: {refused:#?}",
+            refused.len(),
+            plain.len()
         );
     }
 
