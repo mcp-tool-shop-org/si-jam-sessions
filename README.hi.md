@@ -42,7 +42,7 @@
 | glm-5.3 | 5:02 | 1,720 | [116 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-glm-5.3.wav), SHA-256 `85b2d567…2eed` |
 | kimi-k3 | 4:37 | 1,924 | [106 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-kimi-k3.wav), SHA-256 `bf49d310…a017` |
 
-प्रस्तुति नियतात्मक है: जिस विंडोज मशीन पर उन्हें बनाया गया था, उस पर दूसरी प्रस्तुति समान बाइट्स देती है। किसी अन्य प्लेटफ़ॉर्म पर प्रस्तुति की तुलना अभी तक नहीं की गई है। एक बार पियानो को प्राप्त करने के बाद, यह कमांड पहले को पुन: प्रस्तुत करता है:
+प्रस्तुति नियतात्मक है: दूसरी प्रस्तुति समान बाइट्स देती है। CI का पियानो कार्य Linux पर दोनों उदाहरणों को पूरा रेंडर करता है, और दोनों SHA-256 रिलीज़ के बराबर हैं: Windows और Linux पर समान। एक बार पियानो को प्राप्त करने के बाद, यह कमांड पहले को पुन: प्रस्तुत करता है:
 
 ```bash
 cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece battle-hymn-glm-5.3 --voice piano

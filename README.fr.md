@@ -48,9 +48,9 @@ preuves.
 | glm-5.3 | 5:02 | 1,720 | [116 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-glm-5.3.wav), SHA-256 `85b2d567…2eed` |
 | kimi-k3 | 4:37 | 1,924 | [106 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-kimi-k3.wav), SHA-256 `bf49d310…a017` |
 
-Le rendu est déterministe : sur la machine Windows qui les a créés, un deuxième rendu donne les mêmes octets. Un
-rendu sur une autre plateforme n’a pas encore été comparé. Après avoir récupéré le piano une fois, cette commande reproduit
-le premier :
+Le rendu est déterministe : un deuxième rendu donne les mêmes octets. Le travail piano de l’intégration continue
+a rendu chaque exemplaire en entier sous Linux, et les deux SHA-256 sont ceux de la publication : les mêmes sous
+Windows et sous Linux. Après avoir récupéré le piano une fois, cette commande reproduit le premier :
 
 ```bash
 cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece battle-hymn-glm-5.3 --voice piano

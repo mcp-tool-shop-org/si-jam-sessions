@@ -66,8 +66,8 @@ cargo run -p host --release --locked -- render battle-hymn-kimi-k3.wav --piece b
 | battle-hymn-kimi-k3.wav | 106,486,216 | `bf49d310de5e94975b277cd1e7c57134388a0232d53bb059f12e7727baeba017` |
 
 - **Clean renders:** no note was late or dropped, and nothing clipped.
-- **Reproducible:** a second render on the same machine gives identical bytes. A render on another platform
-  has not been compared yet.
+- **Reproducible:** a second render gives identical bytes. CI's piano job rendered each exemplar whole on
+  Linux, and both SHA-256s equal the release: the same on Windows and Linux.
 - **Credited:** each WAV carries the piano's credit in its `LIST/INFO` chunk.
 
 The page plays compressed copies made with ffmpeg 7.1: MP3 at 192 kb/s and Opus at 128 kb/s. They were encoded

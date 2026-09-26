@@ -46,8 +46,7 @@
 | glm-5.3 | 5:02 | 1,720 | [116 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-glm-5.3.wav)，SHA-256 `85b2d567…2eed` |
 | kimi-k3 | 4:37 | 1,924 | [106 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-kimi-k3.wav)，SHA-256 `bf49d310…a017` |
 
-渲染是确定性的：在制作这些乐曲的 Windows 机器上，第二次渲染会产生相同的字节。
-尚未对其他平台上的渲染进行比较。在首次获取钢琴后，此命令会重现第一个乐曲：
+渲染是确定性的：再次渲染会产生相同的字节。CI 的钢琴作业在 Linux 上完整渲染了两首范例，两个 SHA-256 都与发布版一致：Windows 与 Linux 上相同。在首次获取钢琴后，此命令会重现第一个乐曲：
 
 ```bash
 cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece battle-hymn-glm-5.3 --voice piano

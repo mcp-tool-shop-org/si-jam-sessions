@@ -48,9 +48,9 @@ evidências.
 | glm-5.3 | 5:02 | 1,720 | [116 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-glm-5.3.wav), SHA-256 `85b2d567…2eed` |
 | kimi-k3 | 4:37 | 1,924 | [106 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-kimi-k3.wav), SHA-256 `bf49d310…a017` |
 
-A renderização é determinística: na máquina Windows que as criou, uma segunda renderização produz os mesmos bytes. Uma
-renderização em outra plataforma ainda não foi comparada. Após buscar o piano uma vez, este comando reproduz
-a primeira versão:
+A renderização é determinística: uma segunda renderização produz os mesmos bytes. O trabalho de piano do CI
+renderizou cada exemplar inteiro no Linux, e os dois SHA-256 são os da release: os mesmos no Windows e no Linux.
+Após buscar o piano uma vez, este comando reproduz a primeira versão:
 
 ```bash
 cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece battle-hymn-glm-5.3 --voice piano

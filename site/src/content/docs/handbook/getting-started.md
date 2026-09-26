@@ -62,8 +62,8 @@ cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece b
 ```
 
 The WAV is 48 kHz, stereo, 32-bit float. It carries the piano's credit in its `LIST/INFO` chunk. Rendering is
-deterministic: a second render on the same machine gives the same bytes. The release's hashes were measured on
-Windows, and you can check yours against the [release](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/tag/v0.1.0).
+deterministic: a second render gives the same bytes. The release's hashes were measured on Windows, and CI's
+piano job on Linux printed the same two. Check a render against the [release](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/tag/v0.1.0).
 
 ### Play along
 
