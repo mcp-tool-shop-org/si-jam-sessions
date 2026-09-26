@@ -31,15 +31,25 @@
 //! - **Restriction phrases** (AI use, all rights reserved, no redistribution,
 //!   non-commercial, no derivatives, share-alike) are looked for in the words of every
 //!   licence text the predicate reads, so separators do not matter (`CC BY NC` reads as
-//!   `cc-by-nc`). A phrase must be whole words, except a few stems that also find their
-//!   inflections (`noncommercially`, `neural nets`); no stem refuses plain text. One found
-//!   anywhere refuses by its class. The rule is documented in `licence.rs`.
+//!   `cc-by-nc`). One found anywhere refuses by its class. The standard-phrase classes
+//!   match the names their restrictions are known by, and no stem of theirs refuses plain
+//!   text. The AI class fails closed on its topic: a text that names AI, training, models,
+//!   mining, datasets, generative or neural systems is refused, whatever else it says. The
+//!   rules are documented in `licence.rs`.
 //! - **A statement** read from a file must equal the page's licence exactly.
 //! - **A LilyPond copyright markup**, which is prose, must hold the page's licence as a
 //!   whole phrase and affirm it: no negating, limiting, lapsing or hedging word and no
 //!   question mark. The word list is closed and documented in `licence.rs`.
 //! - **An evidence quote** must hold the page licence or the terms verbatim and as whole
 //!   words, and a quote that holds either text must not negate it by the same rule.
+//!
+//! # Known limits
+//!
+//! - **Automated-access terms** (scraping, crawling) are not a refusal class in version
+//!   2. No phrase names them and no receipt restriction records them. A text that forbids
+//!   them with a negating word ("no scraping") is refused by the negation rule, not by a
+//!   class of its own; one without ("scraping is prohibited") names nothing the predicate
+//!   refuses.
 
 #![no_std]
 
@@ -101,10 +111,10 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 /// Version 2 differs from version 1:
 /// - It refuses more. An own engraving's files may state no licence. A copyright markup
 ///   or an evidence quote that holds the licence but negates it does not affirm it, and
-///   an evidence quote must hold its text as whole words. AI wording refuses in every
-///   licence text read, the other classes find more wording than version 1's lists, and
-///   every restriction phrase is looked for in the page and terms quotes and in MIDI text
-///   events.
+///   an evidence quote must hold its text as whole words. The AI class refuses any licence
+///   text read that names its topic, the other classes find more wording than version 1's
+///   lists, and every restriction phrase is looked for in the page and terms quotes and in
+///   MIDI text events.
 /// - It names some refusals differently. An in-file statement that holds a restriction
 ///   phrase is refused by that restriction, AI wording is named before any other
 ///   restriction, and the SMF track-count checks refuse by their own names.
@@ -113,7 +123,8 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 ///   A phrase must be whole words, except a few stems that find their inflections
 ///   (`noncommercially`, `neural networks`). So a phrase that starts inside a word
 ///   (`no derivatives` in `piano derivatives`), or runs on into a plain word
-///   (`no-derivation`, `cc-by-sarah`), no longer refuses.
+///   (`no-derivation`, `cc-by-sarah`), no longer refuses. The AI class fails closed on its
+///   topic, so plain text that names it is refused ("ear training", "model trains").
 ///
 /// Version 2's pushed refinements, one line each. Under every one of them the Entertainer
 /// receipt's digest is unchanged (`e23ba2e9…`), and the Entertainer is admitted as public

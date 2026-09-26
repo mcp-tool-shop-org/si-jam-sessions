@@ -1127,14 +1127,15 @@ fn spaced_cc_forms_and_wider_ai_wording_are_refused_by_their_class() {
 }
 
 /// No stem refuses plain text: a markup that runs a restriction phrase on into an ordinary
-/// word still agrees with the page licence. At `f4038cc`, each of these was refused.
+/// word, or holds a word that only contains an AI topic word, still agrees with the page
+/// licence. At `f4038cc`, the first two were refused.
 #[test]
 fn plain_text_in_a_markup_is_admitted() {
     let markups = [
-        "Placed in the public domain. Dedicated to model trains and their builders.",
         "Placed in the public domain for deep learners of the piano",
-        "Placed in the public domain; a notation language modelled on LilyPond",
         "Placed in the public domain; prepared for the CC by Sarah",
+        "Placed in the public domain by a trainee",
+        "Placed in the public domain; a modern edition, modest in size",
     ];
     let mut wrong = Vec::new();
     for markup in markups {
@@ -1153,6 +1154,39 @@ fn plain_text_in_a_markup_is_admitted() {
         wrong.len(),
         markups.len()
     );
+}
+
+/// The AI class fails closed on its topic, wherever a licence text is read: a text that
+/// names training, models, mining or generative systems is refused as AI-restricted,
+/// whatever else it says.
+#[test]
+fn a_licence_text_that_names_the_ai_topic_is_refused() {
+    let ai: Result<Tier, Refusal> = Err(Refusal::Licence(LicenceRefusal::AiRestricted));
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture| {
+        let got = f.admit().map(|a| a.tier);
+        if got != ai {
+            wrong.push(format!("{place}: {got:?}"));
+        }
+    };
+    // A copyright markup.
+    let mut f = Fixture::new();
+    f.ly_header(
+        "  license = \"Public Domain\"\n  copyright = \\markup { \"Placed in the public domain, for the purpose of training any model\" }\n",
+    );
+    check("markup", f);
+    // The terms quote, around a clean terms text.
+    let mut f = Fixture::new();
+    f.evidence_mut("terms").quotes = vec![named(
+        "Dedicated to the public domain. Text mining is welcome.",
+    )];
+    check("terms quote", f);
+    // A text event in the MIDI file.
+    let mut f = Fixture::new();
+    f.mid = smf_with(&[(0x01, b"Generative arrangement")], 1);
+    f.refresh();
+    check("smf text event", f);
+    assert!(wrong.is_empty(), "{} of 3 wrong: {wrong:#?}", wrong.len());
 }
 
 #[test]

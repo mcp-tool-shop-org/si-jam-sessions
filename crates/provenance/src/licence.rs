@@ -13,13 +13,22 @@
 //! [`restriction_in`] is applied to every other licence text the predicate reads: the
 //! evidence quotes that hold the page licence and the terms, and each licence statement a
 //! file makes about itself. A phrase found in any of them refuses the score by its class,
-//! even when the page licence is on the admitted list. AI wording is the first class
-//! looked for. Phrases are matched on a text's words, so separators do not matter
-//! (`CC BY NC` reads as `cc-by-nc`). A phrase must be whole words, except a few stems
-//! that match from the start of a word and so find their inflections: `noncommercial`
-//! refuses `noncommercially`, and `neural net` refuses `neural nets`. A phrase is a stem
-//! only where no plain word runs on from it, so no stem refuses plain text. The rule is on
-//! [`REFUSAL_PHRASES`].
+//! even when the page licence is on the admitted list. Phrases are matched on a text's
+//! words, so separators do not matter (`CC BY NC` reads as `cc-by-nc`).
+//!
+//! **Two policies.**
+//! - **The standard-phrase classes** match the names their restrictions are known by:
+//!   all rights reserved, no redistribution, non-commercial, no derivatives and
+//!   share-alike. Those names are standard (`CC BY-NC`, `NoDerivatives`), so the match is
+//!   precise, and no stem of theirs refuses plain text.
+//! - **The AI class, looked for first, fails closed on its topic.** AI restrictions are
+//!   free prose with no standard wording, so no phrase list keeps up with them. A plain
+//!   licence text has no reason to name AI, training, models, mining, datasets, generative
+//!   or neural systems, and a refusal only sends the score to a person. So a text that
+//!   names the topic is refused, whatever else it says. "No stem refuses plain text" does
+//!   not hold for this class: "ear training" is refused by design.
+//!
+//! The rule is on [`REFUSAL_PHRASES`].
 //!
 //! **A text must affirm, not merely mention.** Where a text may hold the licence alongside
 //! other text (a copyright markup, an evidence quote), it counts only if [`negates`] finds
@@ -87,51 +96,72 @@ struct Phrases {
 }
 
 /// The phrases that name a refusal, in precedence order: the first class with a phrase in
-/// the text is the reason given. The rule, closed:
+/// the text is the reason given.
+///
+/// The two policies (see the module documentation):
+/// - The standard-phrase classes list the names their restrictions are known by.
+/// - The AI class lists its topic: AI's short tokens, and every form of train, model,
+///   mining, dataset, generative, neural and deep learning. So it refuses any text that
+///   names the topic, including plain text such as "ear training" and "model trains".
+///
+/// The matching rule, closed, for both:
 /// - **Words.** A text is read as its words (see [`as_words`]): every run of characters
 ///   other than ASCII letters and digits is one separator. So `cc-by-nc`, `cc by nc` and
 ///   `CC_BY_NC` read alike, and every phrase here is written in that form (`a.i.` is
 ///   `a i`).
-/// - **Whole words by default.** A phrase must match whole words. AI wording's short
-///   tokens need this most: they sit inside common words (`ai` in `domain`) or start them
-///   (`aim`, `air`, `tdma`).
+/// - **Whole words by default.** A phrase must match whole words. The AI class's words need
+///   this: they sit inside or start plain words (`ai` in `domain` and `aim`, `train` in
+///   `trainee`, `model` in `remodel` and `modern`, `neural` in `neuralgia`).
 /// - **Stems where no plain word runs on from them.** A stem matches from the start of a
 ///   word and may end inside one, so it finds its inflections: `noncommercial` finds
-///   `noncommercially`, and `neural net` finds `neural nets` and `neural networks`. A
+///   `noncommercially`, and `artificially intelligen` finds `artificially intelligent`. A
 ///   phrase is a stem only if every word that runs on from it is still the restriction it
-///   names. Otherwise its forms are listed as whole words: `model train` would refuse
-///   `model trains`, and `cc by sa` would refuse `cc by sarah`.
+///   names. Otherwise its forms are listed as whole words: `cc by sa` as a stem would
+///   refuse `cc by sarah`.
 /// - **Never from inside a word.** A phrase that starts inside a word matches nothing:
 ///   `piano derivatives` holds `no deriv` only inside `piano`.
 const REFUSAL_PHRASES: &[Phrases] = &[
     Phrases {
         class: LicenceRefusal::AiRestricted,
         whole: &[
+            // Short tokens.
             "ai",
             "a i",
             "genai",
             "tdm",
             "llm",
             "llms",
+            // The topic, in its forms.
+            "train",
+            "trains",
+            "trained",
+            "training",
+            "model",
+            "models",
+            "modelled",
+            "modeled",
+            "modelling",
+            "modeling",
+            "mining",
+            "dataset",
+            "datasets",
+            "data set",
+            "data sets",
+            "generative",
+            "neural",
             "deep learning",
-            "data mining",
+            // Data-mining forms that the words above do not cover.
             "data mine",
             "data mined",
             "data miner",
             "data miners",
-            "language model",
-            "language models",
-            "language modelling",
-            "language modeling",
-            "model training",
-            "training data",
-            "training dataset",
-            "training datasets",
-            "training model",
-            "training models",
-            "to train",
         ],
-        stems: &["artificial intelligen", "machine learn", "neural net"],
+        stems: &[
+            "artificial intelligen",
+            "artificially intelligen",
+            "machine learn",
+            "neural net",
+        ],
     },
     Phrases {
         class: LicenceRefusal::AllRightsReserved,
@@ -474,7 +504,6 @@ mod tests {
             "said the typesetter",
             "raised in st. louis",
             "attribution",
-            "trained ear",
             "commercially printed",
             "piano derivatives",
             "casino commercials",
@@ -537,12 +566,14 @@ mod tests {
         );
     }
 
-    /// AI wording's short tokens keep whole-word matching. They sit inside common words
-    /// (`ai` in `domain`, `maintainer` and `said`) and start others (`aim`, `air`, `aisle`,
-    /// `tdma`), and none of those is AI wording.
+    /// The AI class's words are whole words, and these only contain or resemble them: `ai`
+    /// sits inside `domain`, `maintainer` and `said` and starts `aim`, `air` and `aisle`;
+    /// `train`, `model`, `neural` and `generative` sit inside or start `trainee`,
+    /// `remodel`, `modern`, `neuralgia` and `generation`. None of them names the topic.
     #[test]
     fn domain_does_not_trip_the_ai_class() {
         for text in [
+            "Public Domain",
             "domain",
             "public domain",
             "placed in the public domain by the typesetter",
@@ -554,8 +585,14 @@ mod tests {
             "aid",
             "aisle",
             "tdma",
-            "trained",
-            "training",
+            "llama",
+            "trainee",
+            "modern",
+            "modest",
+            "remodel",
+            "mine",
+            "generation",
+            "neuralgia",
         ] {
             assert_eq!(restriction_in(text), None, "{text}");
         }
@@ -637,22 +674,20 @@ mod tests {
         );
     }
 
-    /// No stem refuses plain text. Each text runs a restriction phrase on into an ordinary
-    /// word, and none of them is a restriction. At `f4038cc`, stems such as `model train`,
-    /// `deep learn` and `cc by sa` refused them.
+    /// No stem of the standard-phrase classes refuses plain text, and the AI class's words
+    /// are whole words, so a longer word is plain (`trainees`). Each text runs a phrase on
+    /// into an ordinary word, and none of them is a restriction. At `f4038cc`, stems such
+    /// as `deep learn` and `cc by sa` refused them. The AI class does refuse plain text that
+    /// names its topic: see `ai_topic_fails_closed`.
     #[test]
     fn plain_text_that_runs_a_phrase_on_is_not_refused() {
         let plain = [
             "public domain",
             "domain",
-            "dedicated to model trains and their builders",
             "written for trainees",
             "written to trainees",
             "for deep learners of the piano",
             "a data minefield",
-            "a notation language modelled on lilypond",
-            "piano training modelled on czerny",
-            "the training database",
             "prepared for the cc by sarah",
             "no commercially published edition exists",
             "no derivation from the autograph",
@@ -669,6 +704,83 @@ mod tests {
             refused.len(),
             plain.len()
         );
+    }
+
+    /// The AI class fails closed on its topic: a text that names AI, training, models,
+    /// mining, datasets, generative or neural systems is refused as AI-restricted, whatever
+    /// else it says. AI restrictions are free prose with no standard wording, a plain
+    /// licence text has no reason to name the topic, and a refusal only sends the score to
+    /// a person.
+    #[test]
+    fn ai_topic_fails_closed() {
+        let cases = [
+            // Wording a closed phrase list missed.
+            "text mining",
+            "train models",
+            "artificially intelligent",
+            "for the purpose of training any model",
+            "not for generative use",
+            "no use in language models or datasets",
+            // Plain text that names the topic, refused by design.
+            "trained ear",
+            "ear training",
+            "model trains",
+            "to train young pianists",
+            "deep learning of the repertoire",
+            "a neural pathway",
+            // Formerly asserted admitted by the plain-text tests.
+            "trained",
+            "training",
+            "dedicated to model trains and their builders",
+            "a notation language modelled on lilypond",
+            "piano training modelled on czerny",
+            "the training database",
+            // Every topic word and form.
+            "train",
+            "trains",
+            "model",
+            "models",
+            "modeled",
+            "modeling",
+            "modelling",
+            "mining",
+            "dataset",
+            "datasets",
+            "data set",
+            "data sets",
+            "generative",
+            "neural",
+            "artificial intelligence",
+            "machine learning",
+            "neural network",
+        ];
+        let wrong: Vec<String> = cases
+            .iter()
+            .filter(|text| restriction_in(text) != Some(LicenceRefusal::AiRestricted))
+            .map(|text| alloc::format!("{text:?} gives {:?}", restriction_in(text)))
+            .collect();
+        assert!(
+            wrong.is_empty(),
+            "{} of {} wrong: {wrong:#?}",
+            wrong.len(),
+            cases.len()
+        );
+    }
+
+    /// Known limit: automated-access terms (scraping, crawling) are not a refusal class in
+    /// version 2. No phrase names them; only a negating word in the same text refuses it,
+    /// by the negation rule.
+    #[test]
+    fn automated_access_terms_are_not_a_class_in_version_2() {
+        for text in [
+            "scraping is prohibited",
+            "crawling and scraping are forbidden",
+        ] {
+            assert_eq!(restriction_in(text), None, "{text}");
+            assert!(!negates(text), "{text}");
+        }
+        assert_eq!(restriction_in("no scraping"), None);
+        assert!(negates("no scraping"));
     }
 
     #[test]
