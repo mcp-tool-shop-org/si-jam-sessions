@@ -186,14 +186,14 @@ A tick alone is not enough, because the tempo map decides when a syllable sounds
 
 ## Standards compliance
 
-Scored 0–3 against the studio's six workflow standards. Nothing is built yet, so no standard is above 1. Each line names the slice that raises it to 2.
+Scored 0–3 against the studio's six workflow standards. Slice 1 raised two of them to 2; each line still at 1 names the slice that raises it to 2.
 
 | Standard | Score | Evidence now | Raised to 2 by |
 |---|---|---|---|
-| PIN_PER_STEP | 1 | Toolchain, lockfile, digest host, PPQ, rate, *Q*, *H* and the gate are named as pins in this document | Slice 1: the CI workflow pins them and a changed pin moves the golden |
+| PIN_PER_STEP | 2 | The snapshot header carries the law version, PPQ, rate, *Q*, *H*, the gate, and the licence predicate's version and cut-off years, so a changed pin moves the golden hash; CI proves it by setting *H* to 101 and watching `write-golden --check` fail. The golden file records every input's SHA-256, the seed and the PRNG. CI pins the toolchain, the lockfile (`--locked`), every action by commit SHA, node by exact version and the SpiderMonkey and JavaScriptCore shells by version | Slice 1 (the golden hash) |
 | ANDON_AUTHORITY | 1 | The publish halts are specified | The slice that first publishes: the execution gate runs in CI before any publish, with a test proving it goes red |
 | NAMED_COMPENSATORS | 1 | The table below names every irreversible call | Each publish workflow carries its undo step when it is written |
-| DECOMPOSE_BY_SECRETS | 1 | The law takes bytes and returns status and hash; tokens stay in publish steps | Slice 1: a test asserts the wasm module imports nothing |
+| DECOMPOSE_BY_SECRETS | 2 | The law takes bytes and returns status and hash; `crates/law/tests/wasm_artifact.rs` asserts the wasm module imports nothing, and CI asserts it again with node's parser, so each engine hands the law bytes and reads bytes back; tokens stay in publish steps | Slice 1 (the law core) |
 | UNCERTAINTY_GATED_HUMANS | 1 | Refusals do not publish; edition years are confirmed by a person before a retry | The ingest slice: a named human clearance path for scholarly editions inside their term |
 | EXTERNAL_VERIFIER | 1 | Checkers are hand-authored predicates, never the proposer; the consult was cross-family | The first proposal class gated in code, reviewed by a different model family |
 
