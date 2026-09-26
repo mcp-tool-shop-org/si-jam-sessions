@@ -135,6 +135,9 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 ///   (`CC BY ND`), and AI wording beyond its short tokens matched as stems.
 /// - `6780f16`: a phrase is a stem only where no plain word runs on from it; the other
 ///   phrases are whole words, with their needed forms listed.
+/// - `dede20b`: the AI class fails closed on its topic. A text that names AI, training,
+///   models, mining, datasets, generative or neural systems is refused, plain text
+///   included.
 pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {
