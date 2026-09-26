@@ -1,0 +1,35 @@
+[package]
+name = "host"
+version = "0.1.0"
+description = "The native host of si-jam-sessions: plays committed frames through oscillator voices and a click, and takes a live take."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# A native binary. It drives the law through the same extern "C" exports the
+# wasm has, and it is never part of the law's wasm (CI builds only `-p law` for
+# wasm32-unknown-unknown).
+[dependencies]
+law = { path = "../law" }
+# The committed score's inputs and the constructed take, exactly as the golden
+# builds them.
+golden = { path = "../golden" }
+# WASAPI shared mode on Windows (PHASE-0's native-host pin); ALSA on Linux,
+# where CI builds and tests the host without a device.
+cpal = { version = "=0.18.2", default-features = false }
+# The single-producer single-consumer rings into and out of the audio callback.
+rtrb = "=0.4.0"
+
+# WinMM MIDI input and the console keyboard, through the same windows crate
+# cpal links on Windows (MIT OR Apache-2.0).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Media",
+    "Win32_Media_Audio",
+    "Win32_Media_Multimedia",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+] }

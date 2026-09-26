@@ -1,0 +1,158 @@
+//! MIDI input through WinMM: the primary live input on Windows.
+//!
+//! It makes the calls midir 0.11.0's WinMM backend makes (`midiInGetNumDevs`,
+//! `midiInGetDevCapsW`, `midiInOpen` with a callback, `midiInStart`, and
+//! `midiInStop`, `midiInReset` and `midiInClose` to finish), through the
+//! `windows` crate that cpal already links on Windows. midir itself is not a
+//! dependency: through its Android-only dependencies (jni 0.21.1 and
+//! jni-min-helper 0.3.4) midir 0.11.0 brings libloading 0.7.4 into the
+//! lockfile, which is ISC, outside the licence allowlist; the last midir
+//! without them, 0.10.4, links an older alsa-sys than cpal 0.18.2 and cannot
+//! share a lockfile with it.
+//!
+//! WinMM stamps each message in milliseconds since `midiInStart`, and the host
+//! reads it in microseconds, as midir does (KB recipe 1536). The callback does
+//! no more than it must: it reads the stream clock for the message's arrival,
+//! starts or releases the monitor voice, and hands the press to the law thread,
+//! through two `rtrb` rings. It allocates nothing and takes no lock.
+
+use std::sync::Arc;
+
+use cpal::traits::StreamTrait;
+use rtrb::Producer;
+use windows::Win32::Media::Audio::{
+    CALLBACK_FUNCTION, HMIDIIN, MIDIINCAPSW, midiInClose, midiInGetDevCapsW, midiInGetNumDevs,
+    midiInOpen, midiInReset, midiInStart, midiInStop,
+};
+use windows::Win32::Media::{MM_MIM_DATA, MMSYSERR_NOERROR};
+
+use crate::device::nanos;
+use crate::event::Monitor;
+use crate::live::{Press, Stamp, midi_press};
+
+/// The MIDI input ports, by WinMM index, with their names.
+pub fn ports() -> Vec<String> {
+    // SAFETY: no arguments; it only counts devices.
+    let count = unsafe { midiInGetNumDevs() };
+    (0..count)
+        .map(|index| {
+            let mut caps = MIDIINCAPSW::default();
+            let size = u32::try_from(size_of::<MIDIINCAPSW>()).unwrap_or(0);
+            // SAFETY: `caps` is a writable MIDIINCAPSW of exactly `size` bytes.
+            let status = unsafe { midiInGetDevCapsW(index as usize, &mut caps, size) };
+            if status != MMSYSERR_NOERROR {
+                return format!("(port {index}: its name did not read, error {status})");
+            }
+            // Copied out of the packed struct before it is read.
+            let name: [u16; 32] = caps.szPname;
+            let end = name.iter().position(|&c| c == 0).unwrap_or(name.len());
+            String::from_utf16_lossy(name.get(..end).unwrap_or(&[]))
+        })
+        .collect()
+}
+
+/// Where a message goes: the monitor voice, the law thread, and the stream
+/// clock that stamps its arrival.
+pub struct Sink {
+    pub monitor: Producer<Monitor>,
+    pub input: Producer<Press>,
+    pub stream: Arc<cpal::Stream>,
+}
+
+/// An open MIDI input. Dropping it stops and closes the port.
+pub struct MidiIn {
+    handle: HMIDIIN,
+    sink: *mut Sink,
+}
+
+impl MidiIn {
+    /// Opens WinMM input port `port` and starts it; from then on each note-on
+    /// and note-off goes to `sink`.
+    pub fn open(port: u32, sink: Sink) -> Result<MidiIn, String> {
+        let sink = Box::into_raw(Box::new(sink));
+        let mut handle = HMIDIIN(std::ptr::null_mut());
+        let callback = on_message as unsafe extern "system" fn(HMIDIIN, u32, usize, usize, usize);
+        // SAFETY: `handle` is writable; the callback has MidiInProc's
+        // signature; `sink` stays valid until `Drop` closes the port.
+        let status = unsafe {
+            midiInOpen(
+                &mut handle,
+                port,
+                Some(callback as usize),
+                Some(sink as usize),
+                CALLBACK_FUNCTION,
+            )
+        };
+        if status != MMSYSERR_NOERROR {
+            // SAFETY: WinMM refused the port, so nothing else holds `sink`.
+            drop(unsafe { Box::from_raw(sink) });
+            return Err(format!(
+                "MIDI port {port} did not open (WinMM error {status})"
+            ));
+        }
+        // SAFETY: `handle` was just opened.
+        let status = unsafe { midiInStart(handle) };
+        if status != MMSYSERR_NOERROR {
+            // SAFETY: the port is open and not started, so closing it ends
+            // every callback before `sink` is freed.
+            unsafe {
+                midiInClose(handle);
+                drop(Box::from_raw(sink));
+            }
+            return Err(format!(
+                "MIDI port {port} did not start (WinMM error {status})"
+            ));
+        }
+        Ok(MidiIn { handle, sink })
+    }
+}
+
+impl Drop for MidiIn {
+    fn drop(&mut self) {
+        // SAFETY: the port is open; after midiInClose returns WinMM calls the
+        // callback no more, so `sink` is freed once, with nothing using it.
+        unsafe {
+            midiInStop(self.handle);
+            midiInReset(self.handle);
+            midiInClose(self.handle);
+            drop(Box::from_raw(self.sink));
+        }
+    }
+}
+
+/// WinMM's MidiInProc. `instance` is the port's [`Sink`]; `param1` holds a
+/// short message (status, then two data bytes) and `param2` its time in
+/// milliseconds since `midiInStart`.
+unsafe extern "system" fn on_message(
+    _handle: HMIDIIN,
+    message: u32,
+    instance: usize,
+    param1: usize,
+    param2: usize,
+) {
+    if message != MM_MIM_DATA || instance == 0 {
+        return;
+    }
+    // SAFETY: `instance` is the Sink the port was opened with. WinMM calls
+    // this for one port serially, and never after midiInClose returns, so this
+    // is the only reference to it while the call runs.
+    let sink = unsafe { &mut *(instance as *mut Sink) };
+    let arrived = nanos(sink.stream.now());
+    let Some((down, pitch, velocity)) = midi_press(param1 as u32) else {
+        return;
+    };
+    let _ = sink.monitor.push(if down {
+        Monitor::On { pitch, velocity }
+    } else {
+        Monitor::Off { pitch }
+    });
+    let _ = sink.input.push(Press {
+        down,
+        pitch,
+        velocity,
+        stamp: Stamp::Midi {
+            micros: (param2 as u64).saturating_mul(1_000),
+            arrived,
+        },
+    });
+}

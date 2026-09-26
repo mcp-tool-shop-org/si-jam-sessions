@@ -1,0 +1,293 @@
+//! The same pipeline without a device.
+//!
+//! `render` runs the scheduler and the synth in turn, block by block, exactly
+//! as the law thread and the audio callback run beside each other with a
+//! device: the scheduler steps the law to the frame the synth renders next and
+//! fills the ring, and the synth renders the block from the ring. Nothing here
+//! is timed, so the result is the same on every run.
+
+use std::io::{self, Write};
+
+use rtrb::RingBuffer;
+
+use crate::RING_EVENTS;
+use crate::bridge::{Law, Refused};
+use crate::event::Event;
+use crate::schedule::Scheduler;
+use crate::synth::{Counts, RATE, Synth};
+
+/// Every event the scheduler moves through the ring for frames `0..end`, in
+/// the order the callback would take them.
+pub fn events(law: &mut Law, end: u64) -> Result<Vec<Event>, Refused> {
+    let (mut producer, mut consumer) = RingBuffer::new(RING_EVENTS);
+    let mut scheduler = Scheduler::new(0);
+    let mut out = Vec::new();
+    let mut frame = 0u64;
+    while frame < end {
+        scheduler.pump(law, frame, &mut producer)?;
+        let block_end = frame.saturating_add(480).min(end);
+        while let Ok(event) = consumer.peek() {
+            if event.onset() >= block_end {
+                break;
+            }
+            if let Ok(event) = consumer.pop() {
+                out.push(event);
+            }
+        }
+        frame = block_end;
+    }
+    Ok(out)
+}
+
+/// The mono mix of frames `0..end`, rendered `block` frames at a time, and
+/// what the synth counted.
+pub fn render(law: &mut Law, end: u64, block: usize) -> Result<(Vec<f32>, Counts), Refused> {
+    let (mut producer, mut consumer) = RingBuffer::new(RING_EVENTS);
+    let mut scheduler = Scheduler::new(0);
+    let mut synth = Synth::new(0);
+    let mut out = vec![0.0f32; usize::try_from(end).unwrap_or(0)];
+    for chunk in out.chunks_mut(block.max(1)) {
+        scheduler.pump(law, synth.frame(), &mut producer)?;
+        synth.render(chunk, 1, &mut consumer, None);
+    }
+    Ok((out, synth.counts()))
+}
+
+/// Writes `samples` as a mono 32-bit float WAV at 48 kHz: the rendered
+/// buffer itself, so sample `n` of the file is law sample `n`.
+pub fn write_wav(out: &mut impl Write, samples: &[f32]) -> io::Result<()> {
+    let data = u32::try_from(samples.len() * 4)
+        .map_err(|_| io::Error::other("the render is longer than a WAV can hold"))?;
+    let riff = data
+        .checked_add(4 + 26 + 12 + 8)
+        .ok_or_else(|| io::Error::other("the render is longer than a WAV can hold"))?;
+    out.write_all(b"RIFF")?;
+    out.write_all(&riff.to_le_bytes())?;
+    out.write_all(b"WAVE")?;
+    // fmt: 18 bytes, IEEE float, mono, 48 kHz, 4 bytes a frame, 32 bits.
+    out.write_all(b"fmt ")?;
+    out.write_all(&18u32.to_le_bytes())?;
+    out.write_all(&3u16.to_le_bytes())?;
+    out.write_all(&1u16.to_le_bytes())?;
+    out.write_all(&RATE.to_le_bytes())?;
+    out.write_all(&(RATE * 4).to_le_bytes())?;
+    out.write_all(&4u16.to_le_bytes())?;
+    out.write_all(&32u16.to_le_bytes())?;
+    out.write_all(&0u16.to_le_bytes())?;
+    // fact: the frame count, which a float WAV carries.
+    out.write_all(b"fact")?;
+    out.write_all(&4u32.to_le_bytes())?;
+    out.write_all(&(data / 4).to_le_bytes())?;
+    out.write_all(b"data")?;
+    out.write_all(&data.to_le_bytes())?;
+    for s in samples {
+        out.write_all(&s.to_le_bytes())?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_wav_header_is_a_float_wav_at_48_khz() {
+        let mut bytes = Vec::new();
+        write_wav(&mut bytes, &[0.5, -0.25, 0.0]).unwrap();
+        assert_eq!(bytes.len(), 58 + 12);
+        assert_eq!(&bytes[0..4], b"RIFF");
+        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), 70 - 8);
+        assert_eq!(&bytes[8..16], b"WAVEfmt ");
+        assert_eq!(u16::from_le_bytes([bytes[20], bytes[21]]), 3, "IEEE float");
+        assert_eq!(u16::from_le_bytes([bytes[22], bytes[23]]), 1, "mono");
+        assert_eq!(
+            u32::from_le_bytes(bytes[24..28].try_into().unwrap()),
+            48_000
+        );
+        assert_eq!(&bytes[38..42], b"fact");
+        assert_eq!(u32::from_le_bytes(bytes[46..50].try_into().unwrap()), 3);
+        assert_eq!(&bytes[50..54], b"data");
+        assert_eq!(u32::from_le_bytes(bytes[54..58].try_into().unwrap()), 12);
+        assert_eq!(f32::from_le_bytes(bytes[58..62].try_into().unwrap()), 0.5);
+        assert_eq!(f32::from_le_bytes(bytes[62..66].try_into().unwrap()), -0.25);
+    }
+}
+
+/// The offline proof that the render puts each committed event on its
+/// `onset_sample`, exactly, in the mix a person hears.
+///
+/// The mix is a sum of voices, so where one event starts is read by
+/// difference: the same frames are rendered twice, once with every event and
+/// once with that event left out. Nothing differs before the event's onset,
+/// because every other event is the same; the mix differs on the onset sample
+/// itself, because every voice's first sample is not zero (`synth.rs`). The
+/// first index where the two renders differ is where the event landed.
+///
+/// PHASE-0's constructed take moves five notes of *The Entertainer*: three
+/// late by 1,440, 2,160 and 2,880 samples, one early by 2,160, and one at the
+/// wrong pitch. Each is found in the rendered mix at its onset, against its
+/// score note and the beat before it.
+#[cfg(test)]
+mod proof {
+    use super::*;
+    use crate::event::Voice;
+    use crate::score::{Piece, root};
+    use crate::synth::Synth;
+    use golden::take::Perturbation;
+    use rtrb::RingBuffer;
+
+    /// Renders frames `start..end` of `events` in blocks of `block` frames, as
+    /// the callback does, from a synth that starts at `start`.
+    fn mix(events: &[Event], start: u64, end: u64, block: usize) -> Vec<f32> {
+        let due: Vec<Event> = events
+            .iter()
+            .copied()
+            .filter(|e| e.onset() >= start && e.onset() < end)
+            .collect();
+        let (mut producer, mut consumer) = RingBuffer::new(due.len().max(1));
+        for e in due {
+            producer.push(e).unwrap();
+        }
+        let mut synth = Synth::new(start);
+        let mut out = vec![0.0f32; usize::try_from(end - start).unwrap()];
+        for chunk in out.chunks_mut(block) {
+            synth.render(chunk, 1, &mut consumer, None);
+        }
+        assert_eq!(synth.counts().late, 0);
+        assert_eq!(synth.counts().dropped, 0);
+        out
+    }
+
+    /// Where `event` lands in the mix of `events` over `start..end`: the first
+    /// frame at which leaving it out changes the mix.
+    fn landing(events: &[Event], event: Event, start: u64, end: u64) -> u64 {
+        let with = mix(events, start, end, 441);
+        let without: Vec<Event> = events.iter().copied().filter(|e| *e != event).collect();
+        assert_eq!(
+            without.len() + 1,
+            events.len(),
+            "{event:?} is in the events once"
+        );
+        let without = mix(&without, start, end, 441);
+        let first = with
+            .iter()
+            .zip(&without)
+            .position(|(a, b)| a != b)
+            .expect("leaving the event out changes the mix");
+        start + first as u64
+    }
+
+    fn note(events: &[Event], voice: Voice, onset: u64, pitch: u8) -> Event {
+        *events
+            .iter()
+            .find(|e| {
+                matches!(e, Event::Note { voice: v, onset: o, pitch: p, .. }
+                    if *v == voice && *o == onset && *p == pitch)
+            })
+            .unwrap_or_else(|| panic!("no {voice:?} note at {onset} with pitch {pitch}"))
+    }
+
+    #[test]
+    fn each_perturbed_note_lands_on_its_sample_against_its_score_note_and_beat() {
+        let piece = Piece::entertainer(&root()).unwrap();
+        let mut law = Law::acquire();
+        law.ingest(&piece.container).unwrap();
+        law.admit_take(&piece.take).unwrap();
+        let events = events(&mut law, piece.end + 48_000).unwrap();
+
+        let mut checked = 0;
+        for drawn in piece.drawn {
+            let score = piece.score.note(drawn.note).unwrap();
+            let s = score.onset_sample;
+            let t = drawn.perturbation.onset(s).unwrap();
+            let played = drawn.perturbation.pitch(score.pitch);
+            let score_note = note(&events, Voice::Score, s, score.pitch);
+            let take_note = note(&events, Voice::Take, t, played);
+            let beat = *events
+                .iter()
+                .rev()
+                .find(|e| matches!(e, Event::Beat { .. }) && e.onset() <= s.min(t))
+                .unwrap();
+
+            let start = beat.onset() - 2_400;
+            let end = s.max(t) + 4_800;
+            let at_score = landing(&events, score_note, start, end);
+            let at_take = landing(&events, take_note, start, end);
+            let at_beat = landing(&events, beat, start, end);
+
+            assert_eq!(at_score, s, "{:?}: the score note", drawn.perturbation);
+            assert_eq!(at_take, t, "{:?}: the take note", drawn.perturbation);
+            assert_eq!(at_beat, beat.onset(), "{:?}: the beat", drawn.perturbation);
+            let delta = i64::try_from(at_take).unwrap() - i64::try_from(at_score).unwrap();
+            assert_eq!(delta, drawn.perturbation.delta_samples());
+            let expected = match drawn.perturbation {
+                Perturbation::Late30 => 1_440,
+                Perturbation::Late45 => 2_160,
+                Perturbation::Late60 => 2_880,
+                Perturbation::Early45 => -2_160,
+                Perturbation::WrongPitch => 0,
+            };
+            assert_eq!(delta, expected);
+            eprintln!(
+                "{:>11}: beat at {}, score note {} at {} (pitch {}), take note at {} (pitch {}): \
+                 {:+} samples",
+                drawn.perturbation.label(),
+                at_beat,
+                drawn.note.0,
+                at_score,
+                score.pitch,
+                at_take,
+                played,
+                delta
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 5);
+    }
+
+    /// The whole piece through the interleaved pipeline, as `render` writes
+    /// it: every note and beat is started once, none late and none dropped,
+    /// and the mix is the mix of the events rendered in one go.
+    #[test]
+    fn the_whole_piece_renders_every_event_once_on_time() {
+        let piece = Piece::entertainer(&root()).unwrap();
+        let end = piece.end + 48_000;
+        let mut law = Law::acquire();
+        law.ingest(&piece.container).unwrap();
+        law.admit_take(&piece.take).unwrap();
+        let (rendered, counts) = render(&mut law, end, 480).unwrap();
+        law.ingest(&piece.container).unwrap();
+        law.admit_take(&piece.take).unwrap();
+        let events = events(&mut law, end).unwrap();
+        let beats = events
+            .iter()
+            .filter(|e| matches!(e, Event::Beat { .. }))
+            .count() as u64;
+        assert_eq!(
+            counts,
+            Counts {
+                notes: 2 * 2_621,
+                beats,
+                late: 0,
+                dropped: 0,
+                monitored: 0,
+            }
+        );
+        // In the same blocks, the same samples, bit for bit.
+        assert!(rendered == mix(&events, 0, end, 480), "the mixes differ");
+        // In other blocks, a voice can take another slot, so the float sum
+        // runs in another order: the samples agree to rounding.
+        let other = mix(&events, 0, end, 1_000);
+        let worst = rendered
+            .iter()
+            .zip(&other)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        assert!(worst < 1e-5, "{worst}");
+        // Nothing reaches the clamp: the voices' levels leave headroom.
+        assert!(
+            rendered.iter().all(|s| s.is_finite() && s.abs() < 1.0),
+            "a sample clipped"
+        );
+    }
+}
