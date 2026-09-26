@@ -739,10 +739,11 @@ fn jam(o: &Options) -> Result<(), String> {
     verdicts(&mut law, &passed)
 }
 
-/// Prints the live take's verdicts: what the law took and refused, and its
-/// rows. In a live session the law gives an unplayed score note its row only
-/// once the performance has passed it, so the rows cover the score as far as
-/// the jam reached, and no further.
+/// Prints the live take's verdicts: what the law took and refused, the rows
+/// for the notes played, and how many score notes the jam passed unplayed. In
+/// a live session the law gives an unplayed score note its never-played row
+/// only once the performance has passed it, so those rows reach as far as the
+/// jam did, and no further.
 fn verdicts(law: &mut Law, passed: &[Passed]) -> Result<(), String> {
     let record = law.record().map_err(refused)?;
     let (ons, offs): (Vec<&Passed>, Vec<&Passed>) = passed.iter().partition(|p| p.down);
@@ -773,20 +774,24 @@ fn verdicts(law: &mut Law, passed: &[Passed]) -> Result<(), String> {
             );
         }
     }
-    let rows: Vec<&str> = record.rows.lines().collect();
-    let count = |word: &str| rows.iter().filter(|r| r.ends_with(word)).count();
-    println!("The law's rows, in score order, as far as the jam reached:");
-    for row in &rows {
+    let (never, played): (Vec<&str>, Vec<&str>) = record
+        .rows
+        .lines()
+        .partition(|r| r.ends_with(": never played"));
+    let count = |word: &str| played.iter().filter(|r| r.ends_with(word)).count();
+    println!("The law's rows for the notes you played, in score order:");
+    for row in &played {
         println!("  {row}");
     }
     println!(
-        "match {}, early {}, late {}, wrong pitch {}, addition {}, never played {}",
+        "match {}, early {}, late {}, wrong pitch {}, addition {}; the jam passed {} more score \
+         notes that no note played, and the law's row for each says never played",
         count(": match"),
         count(": early"),
         count(": late"),
         count(": wrong pitch"),
         count(": addition"),
-        count(": never played")
+        never.len()
     );
     Ok(())
 }
