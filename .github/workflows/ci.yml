@@ -303,7 +303,9 @@ jobs:
           esac
           npm install -g jsvu@3.0.5
           jsvu --os=linux64 "$shell"
-          sha256sum "$HOME"/.jsvu/engines/*/*
+          # The installed binary and its libraries, for the record. Files only:
+          # JavaScriptCore installs its libraries in a directory of their own.
+          find "$HOME/.jsvu/engines" -type f -print0 | sort -z | xargs -0 sha256sum
 
       - name: Choose the engine's command
         env:
