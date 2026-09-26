@@ -179,6 +179,9 @@ pub struct Golden {
     /// Every row, one per verdict, joined by line feeds.
     pub rows: String,
     pub snapshot_bytes: usize,
+    /// The law's snapshot itself, which `write-golden --snapshot` writes out
+    /// so its bytes can be examined outside the harness.
+    pub snapshot: Vec<u8>,
     /// The SHA-256 of the law's snapshot: the golden hash.
     pub golden: [u8; 32],
 }
@@ -312,6 +315,7 @@ pub fn compute(inputs: &Inputs, seed: u64, edit: TakeEdit) -> Result<Golden, Err
         counts: Counts::of(&verdicts),
         rows,
         snapshot_bytes: snapshot.len(),
+        snapshot,
         golden,
     })
 }
@@ -780,6 +784,22 @@ mod tests {
             assert!(row.ends_with(": match"), "{row}");
         }
         assert_eq!(rows, 2621);
+    }
+
+    /// The snapshot `write-golden --snapshot` writes out is the one the golden
+    /// hashes, and its header holds the law version at byte 12 and the
+    /// predicate version at byte 36, little-endian.
+    #[test]
+    fn the_snapshot_is_what_the_golden_hashes() {
+        let g = golden();
+        assert_eq!(sha256(&g.snapshot), g.golden);
+        assert_eq!(g.snapshot.len(), g.snapshot_bytes);
+        assert_eq!(&g.snapshot[..8], b"SIJAMLAW");
+        assert_eq!(g.snapshot[12..16], law::LAW_VERSION.to_le_bytes());
+        assert_eq!(
+            g.snapshot[36..40],
+            provenance::PREDICATE_VERSION.to_le_bytes()
+        );
     }
 
     #[test]

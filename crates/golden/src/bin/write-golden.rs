@@ -5,6 +5,9 @@
 //!                                                    and golden/entertainer.rows
 //! cargo run -p golden --bin write-golden -- --check  write nothing; exit 1 when
 //!                                                    regenerating would change either
+//! ... [--check] --snapshot <path>                    also write the law's snapshot,
+//!                                                    the bytes the golden hashes, to
+//!                                                    <path>, outside the golden files
 //! ```
 //!
 //! Exit status: 0 when the files were written, or when `--check` finds them
@@ -13,20 +16,31 @@
 //! law's C ABI and Rust API disagreeing).
 
 use std::fs;
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use golden::run::{self, GOLDEN_FILE, Inputs, ROWS_FILE, hex};
 use golden::take::{SEED, TakeEdit};
 
-fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let check = match args.as_slice() {
-        [] => false,
-        [flag] if flag == "--check" => true,
-        _ => {
-            eprintln!("usage: write-golden [--check]");
-            return ExitCode::from(2);
+/// `--check`, and where `--snapshot` writes the snapshot, if anywhere.
+fn arguments() -> Option<(bool, Option<PathBuf>)> {
+    let mut check = false;
+    let mut snapshot = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--check" if !check => check = true,
+            "--snapshot" if snapshot.is_none() => snapshot = Some(PathBuf::from(args.next()?)),
+            _ => return None,
         }
+    }
+    Some((check, snapshot))
+}
+
+fn main() -> ExitCode {
+    let Some((check, snapshot)) = arguments() else {
+        eprintln!("usage: write-golden [--check] [--snapshot <path>]");
+        return ExitCode::from(2);
     };
     let root = golden::repo_root();
     let golden = match Inputs::read(&root).and_then(|i| run::compute(&i, SEED, TakeEdit::None)) {
@@ -36,6 +50,19 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+
+    if let Some(path) = snapshot {
+        if let Err(e) = fs::write(&path, &golden.snapshot) {
+            eprintln!("write-golden: {}: {e}", path.display());
+            return ExitCode::from(2);
+        }
+        println!(
+            "write-golden: wrote the snapshot ({} bytes, sha256 {}) to {}",
+            golden.snapshot.len(),
+            hex(&run::sha256(&golden.snapshot)),
+            path.display()
+        );
+    }
 
     if check {
         let differences = run::check(&root, &golden);
