@@ -12,7 +12,7 @@
   <a href="https://mcp-tool-shop-org.github.io/si-jam-sessions/"><img src="https://img.shields.io/badge/Landing_Page-live-blue" alt="Landing Page"></a>
 </p>
 
-# si-jam-सत्र
+# si-jam-sessions
 
 **एक संगीत इंजन जहाँ एक AI की बजाने की क्षमता को सटीक रूप से आंका जा सकता है, इसे सटीक रूप से फिर से बजाया जा सकता है, और इसे पूरी तरह से नैतिक रूप से प्रशिक्षित किया जा सकता है।**
 
@@ -118,4 +118,4 @@ cargo run -p host --release -- jam --midi 0   # play along; each note is graded 
 
 ---
 
-एमसीपी टूल शॉप द्वारा निर्मित।
+<a href="https://mcp-tool-shop.github.io/">MCP Tool Shop</a> द्वारा निर्मित।

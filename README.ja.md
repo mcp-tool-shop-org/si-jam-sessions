@@ -110,9 +110,9 @@ cargo run -p host --release -- jam --midi 0   # play along; each note is graded 
 
 - **コード:** MIT（[`LICENSE`](LICENSE)を参照）。
 - **2つの「バトル・ヒムン」のアレンジ:** CC0 1.0。
-- **ピアノのサンプル:** CC BY 3.0（アレクサンダー・ホルム）。[`fetch-piano`]がダウンロードし、リポジトリにはコミットされません。
+- **ピアノのサンプル:** CC BY 3.0（アレクサンダー・ホルム）。`fetch-piano`がダウンロードし、リポジトリにはコミットされません。
 - **データセット:** それぞれが独自のカードに独自のライセンスを記載しています。
 
 ---
 
-MCP Tool Shopによって作成されました。
+<a href="https://mcp-tool-shop.github.io/">MCP Tool Shop</a>によって作成されました。
