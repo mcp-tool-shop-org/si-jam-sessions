@@ -77,28 +77,36 @@ pub use time::{TempoMap, rescale_tick};
 /// The law version. Every snapshot carries it; any change to what the law
 /// computes or hashes bumps it.
 ///
+/// A version number is frozen when it reaches main. Before that it may be
+/// refined, but one number never names two different goldens, and every
+/// pushed refinement is recorded here.
+///
 /// - 1: integer time, the take, grading and the snapshot (slice 1's law core).
 /// - 2: the ingest verb. The receipt, the licence predicate and the SMF reader
 ///   became part of the law, and the snapshot records the receipt it admitted
 ///   and carries the predicate's version and cut-off years in its header. It
-///   ran licence predicate version 1 and never reached `main`; its golden hash
-///   was `f12b07b0…`.
+///   ran licence predicate version 1 and named the golden `f12b07b0…` on a
+///   pushed head; it did not reach `main`.
 /// - 3: the same law under licence predicate version 2 (see
 ///   `provenance::PREDICATE_VERSION`: negated licence text does not affirm,
 ///   AI wording is matched as whole words, other restriction phrases from the
-///   start of a word). The SMF reader's two track-count refusals have codes
-///   of their own.
+///   start of a word). Version 2 named golden `f12b07b0…` on a pushed head, so
+///   the law with predicate version 2 needed a new number; it names golden
+///   `145c7af9…`. The SMF reader's two track-count refusals have codes of
+///   their own.
 ///
-/// The predicate's rules are the law's. Its version and its date cut-offs are
-/// pinned below against this version: moving any of them fails the build here
-/// until this version moves with them, in the same commit.
+/// The predicate's rules are the law's, and its version and date cut-offs are
+/// pinned below. Moving any of them fails the build there until the pin is
+/// updated, and by rule the law version with it.
 pub const LAW_VERSION: u32 = 3;
 
 // The licence predicate this law version admits scores under. provenance's
 // cut-offs move every January (`RULES_YEAR`), and a moved cut-off can change
-// which scores are admitted, so each move is a law-version bump: change these
-// expectations and LAW_VERSION together. The snapshot header carries the same
-// values, so a changed one also moves every hash.
+// which scores are admitted. These asserts pin values only: a moved cut-off
+// fails the build here until its pin is updated, and by rule LAW_VERSION moves
+// with it, in the same commit. The compiler cannot hold the second half; the
+// rule above and the golden, which carries both numbers, do. The snapshot
+// header carries the same values, so a changed one also moves every hash.
 const _: () = {
     assert!(LAW_VERSION == 3);
     assert!(provenance::PREDICATE_VERSION == 2);
