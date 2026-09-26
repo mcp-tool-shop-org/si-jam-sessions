@@ -29,16 +29,27 @@
 //! normalise refuses.
 //!
 //! - **Restriction phrases** (AI use, all rights reserved, no redistribution,
-//!   non-commercial, no derivatives, share-alike) are looked for in every licence text the
-//!   predicate reads. AI wording must be whole words; the other classes match from the
-//!   start of a word, so a stem finds its inflections (`noncommercially`). One found
-//!   anywhere refuses by its class. The rule is documented in `licence.rs`.
+//!   non-commercial, no derivatives, share-alike) are looked for in the words of every
+//!   licence text the predicate reads, so separators do not matter (`CC BY NC` reads as
+//!   `cc-by-nc`). One found anywhere refuses by its class. The standard-phrase classes
+//!   match the names their restrictions are known by, and no stem of theirs refuses plain
+//!   text. The AI class fails closed on its topic: a text that names AI, training, models,
+//!   mining, datasets, generative or neural systems is refused, whatever else it says. The
+//!   rules are documented in `licence.rs`.
 //! - **A statement** read from a file must equal the page's licence exactly.
 //! - **A LilyPond copyright markup**, which is prose, must hold the page's licence as a
 //!   whole phrase and affirm it: no negating, limiting, lapsing or hedging word and no
 //!   question mark. The word list is closed and documented in `licence.rs`.
 //! - **An evidence quote** must hold the page licence or the terms verbatim and as whole
 //!   words, and a quote that holds either text must not negate it by the same rule.
+//!
+//! # Known limits
+//!
+//! - **Automated-access terms** (scraping, crawling) are not a refusal class in version
+//!   2. No phrase names them and no receipt restriction records them. A text that forbids
+//!   them with a negating word ("no scraping") is refused by the negation rule, not by a
+//!   class of its own; one without ("scraping is prohibited") names nothing the predicate
+//!   refuses.
 
 #![no_std]
 
@@ -94,24 +105,39 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 /// version. Any change to what is admitted or refused, or to the refusal a file is given,
 /// bumps it.
 ///
+/// A version number is frozen when it reaches main.
+/// Before that it may be refined, but one number never names two different goldens, and every pushed refinement is recorded here.
+///
 /// Version 2 differs from version 1:
 /// - It refuses more. An own engraving's files may state no licence. A copyright markup
 ///   or an evidence quote that holds the licence but negates it does not affirm it, and
-///   an evidence quote must hold its text as whole words. AI wording refuses in every
-///   licence text read, the non-commercial, no-redistribution and no-derivatives phrases
-///   find more wording, and every restriction phrase is looked for in the page and terms
-///   quotes and in MIDI text events.
+///   an evidence quote must hold its text as whole words. The AI class refuses any licence
+///   text read that names its topic, the other classes find more wording than version 1's
+///   lists, and every restriction phrase is looked for in the page and terms quotes and in
+///   MIDI text events.
 /// - It names some refusals differently. An in-file statement that holds a restriction
 ///   phrase is refused by that restriction, AI wording is named before any other
 ///   restriction, and the SMF track-count checks refuse by their own names.
-/// - It matches AI wording as whole words, and every other restriction phrase from the
-///   start of a word, where version 1 matched anywhere. So a stem still finds its
-///   inflections (`noncommercially`), but a phrase that starts inside a word, as
-///   `no derivatives` does in `piano derivatives`, no longer refuses.
+/// - It matches restriction phrases on a text's words, so separators do not matter
+///   (`CC BY NC`, `cc-by-nc`), where version 1 matched substrings of the text as written.
+///   A phrase must be whole words, except a few stems that find their inflections
+///   (`noncommercially`, `neural networks`). So a phrase that starts inside a word
+///   (`no derivatives` in `piano derivatives`), or runs on into a plain word
+///   (`no-derivation`, `cc-by-sarah`), no longer refuses. The AI class fails closed on its
+///   topic, so plain text that names it is refused ("ear training", "model trains").
 ///
-/// The matching rule was settled before version 2 shipped. Version 2 was first pushed with
-/// whole-word matching for every class, which let inflections through, and was corrected
-/// before any branch but its own held it.
+/// Version 2's pushed refinements, one line each. Under every one of them the Entertainer
+/// receipt's digest is unchanged (`e23ba2e9…`), and the Entertainer is admitted as public
+/// domain. A commit that only edits this record refines nothing.
+/// - `fead502`: whole-word matching.
+/// - `390336b`: stems matched from the start of a word.
+/// - `f4038cc`: phrases matched on a text's words, so separators do not matter
+///   (`CC BY ND`), and AI wording beyond its short tokens matched as stems.
+/// - `6780f16`: a phrase is a stem only where no plain word runs on from it; the other
+///   phrases are whole words, with their needed forms listed.
+/// - `dede20b`: the AI class fails closed on its topic. A text that names AI, training,
+///   models, mining, datasets, generative or neural systems is refused, plain text
+///   included.
 pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {

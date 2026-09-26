@@ -1003,9 +1003,8 @@ fn ai_restrictions_are_refused_wherever_they_are_read() {
 }
 
 /// The whole-word regression found at `fead502`: a markup whose only restriction word was
-/// inflected agreed with the page licence, and was admitted. Every class but AI wording
-/// now matches from the start of a word, so each of these is refused by its class,
-/// wherever it is read.
+/// inflected agreed with the page licence, and was admitted. A restriction's inflections
+/// are now refused by its class, wherever they are read.
 #[test]
 fn an_inflected_restriction_is_refused_by_its_class() {
     use LicenceRefusal::*;
@@ -1055,7 +1054,7 @@ fn an_inflected_restriction_is_refused_by_its_class() {
     );
 }
 
-/// Word-start matching must not reach the admitted texts: a plain "Public Domain" in the
+/// The matching rule must not reach the admitted texts: a plain "Public Domain" in the
 /// licence string and in the markup, and the real Entertainer, whose digest is unchanged.
 #[test]
 fn plain_public_domain_and_the_entertainer_are_still_admitted() {
@@ -1068,6 +1067,126 @@ fn plain_public_domain_and_the_entertainer_are_still_admitted() {
     let admitted = admit(&receipt, &real_supplied()).expect("the Entertainer is admitted");
     assert_eq!(admitted.tier, Tier::PublicDomain);
     assert_eq!(hex(&admitted.receipt_digest), REAL_DIGEST);
+}
+
+/// The second external review, at `390336b`: CC forms written with spaces, and AI wording
+/// beyond the listed forms, passed the phrase scan. A markup that held them was admitted.
+/// Each is now refused by its class, wherever it is read.
+#[test]
+fn spaced_cc_forms_and_wider_ai_wording_are_refused_by_their_class() {
+    use LicenceRefusal::*;
+    let markups = [
+        ("Placed in the public domain (CC BY ND)", NoDerivatives),
+        ("Placed in the public domain (CC BY NC)", NonCommercial),
+        ("Placed in the public domain (CC BY SA)", ShareAlike),
+        ("Placed in the public domain (CC BY NC ND)", NonCommercial),
+        ("Placed in the public domain (CC BY NC SA)", NonCommercial),
+        ("Placed in the public domain; no neural nets", AiRestricted),
+        (
+            "Placed in the public domain, not for training models",
+            AiRestricted,
+        ),
+        (
+            "Placed in the public domain; neural networks excluded",
+            AiRestricted,
+        ),
+    ];
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture, class: LicenceRefusal| {
+        let got = f.admit().map(|a| a.tier);
+        if got != Err(Refusal::Licence(class)) {
+            wrong.push(format!("{place}: {got:?}, not {class:?}"));
+        }
+    };
+    for (markup, class) in markups {
+        let mut f = Fixture::new();
+        f.ly_header(&format!(
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"{markup}\" }}\n"
+        ));
+        check(markup, f, class);
+    }
+    // A licence string in the file.
+    let mut f = Fixture::new();
+    f.ly_header("  license = \"Public Domain (CC BY NC)\"\n");
+    check("licence string", f, NonCommercial);
+    // The terms quote, around a clean terms text.
+    let mut f = Fixture::new();
+    f.evidence_mut("terms").quotes = vec![named("Dedicated to the public domain. CC BY SA.")];
+    check("terms quote", f, ShareAlike);
+    // A text event in the MIDI file.
+    let mut f = Fixture::new();
+    f.mid = smf_with(&[(0x01, b"Free to use, no neural nets")], 1);
+    f.refresh();
+    check("smf text event", f, AiRestricted);
+    let total = markups.len() + 3;
+    assert!(
+        wrong.is_empty(),
+        "{} of {total} wrong: {wrong:#?}",
+        wrong.len()
+    );
+}
+
+/// No stem refuses plain text: a markup that runs a restriction phrase on into an ordinary
+/// word, or holds a word that only contains an AI topic word, still agrees with the page
+/// licence. At `f4038cc`, the first two were refused.
+#[test]
+fn plain_text_in_a_markup_is_admitted() {
+    let markups = [
+        "Placed in the public domain for deep learners of the piano",
+        "Placed in the public domain; prepared for the CC by Sarah",
+        "Placed in the public domain by a trainee",
+        "Placed in the public domain; a modern edition, modest in size",
+    ];
+    let mut wrong = Vec::new();
+    for markup in markups {
+        let mut f = Fixture::new();
+        f.ly_header(&format!(
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"{markup}\" }}\n"
+        ));
+        let got = f.admit().map(|a| a.tier);
+        if got != Ok(Tier::PublicDomain) {
+            wrong.push(format!("{markup}: {got:?}"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{} of {} wrong: {wrong:#?}",
+        wrong.len(),
+        markups.len()
+    );
+}
+
+/// The AI class fails closed on its topic, wherever a licence text is read: a text that
+/// names training, models, mining or generative systems is refused as AI-restricted,
+/// whatever else it says.
+#[test]
+fn a_licence_text_that_names_the_ai_topic_is_refused() {
+    let ai: Result<Tier, Refusal> = Err(Refusal::Licence(LicenceRefusal::AiRestricted));
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture| {
+        let got = f.admit().map(|a| a.tier);
+        if got != ai {
+            wrong.push(format!("{place}: {got:?}"));
+        }
+    };
+    // A copyright markup.
+    let mut f = Fixture::new();
+    f.ly_header(
+        "  license = \"Public Domain\"\n  copyright = \\markup { \"Placed in the public domain, for the purpose of training any model\" }\n",
+    );
+    check("markup", f);
+    // The terms quote, around a clean terms text.
+    let mut f = Fixture::new();
+    f.evidence_mut("terms").quotes = vec![named(
+        "Dedicated to the public domain. Text mining is welcome.",
+    )];
+    check("terms quote", f);
+    // A text event in the MIDI file.
+    let mut f = Fixture::new();
+    f.mid = smf_with(&[(0x01, b"Generative arrangement")], 1);
+    f.refresh();
+    check("smf text event", f);
+    assert!(wrong.is_empty(), "{} of 3 wrong: {wrong:#?}", wrong.len());
 }
 
 #[test]
