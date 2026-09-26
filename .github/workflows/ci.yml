@@ -8,12 +8,17 @@
 # - wasm: builds the law's wasm once, reproducibly (--locked, the workspace
 #   and the cargo home remapped, no build path left in the bytes), prints its
 #   SHA-256, and writes the engine scripts that embed exactly those bytes.
-# - golden (v8, spidermonkey, javascriptcore): each engine runs the same
-#   script, prints the hash it computed, and must match the committed golden
-#   file; the negative control, one take onset one sample late, must fail.
+# - golden (v8, spidermonkey, javascriptcore): each engine is installed, then
+#   checked against its committed manifest (.github/engines/: every file's
+#   SHA-256, every link's target) before it runs anything, and a wrong pin is
+#   shown to be refused. It then runs the same script, which prints what it
+#   computed; the hash, the law version and the snapshot's length must match
+#   the golden file, and the SHA-256 of the wasm it compiled must match the
+#   artifact. The negative control, one take onset one sample late, must fail.
 #
 # Every action is pinned by commit SHA; the toolchain is pinned once, by
-# rust-toolchain.toml; node and the two engine shells are pinned by version.
+# rust-toolchain.toml; node and the two engine shells are pinned by version and
+# by the SHA-256 of every file they run.
 #
 # Push is limited to main so a branch with an open pull request runs once, on
 # the pull_request event; workflow_dispatch runs any branch by hand.
@@ -21,12 +26,15 @@
 # Standards compliance (the studio's six workflow standards, scored 0-3):
 # - PIN_PER_STEP 2: actions by commit SHA; the toolchain by rust-toolchain.toml;
 #   dependencies by Cargo.lock under --locked; cargo-deny by version, checked
-#   against install-action's recorded sha256; node 24.21.0; jsvu 3.0.5 with
-#   SpiderMonkey 156.0.1 and JavaScriptCore 319571. The law's pins sit in the
-#   snapshot header, and the golden job proves a changed pin moves the golden.
+#   against install-action's recorded sha256; node 24.21.0, SpiderMonkey
+#   156.0.1 and JavaScriptCore 319571 (from jsvu 3.0.5) by version and by the
+#   manifests in .github/engines/, which verify.sh checks before an engine
+#   runs. The law's pins sit in the snapshot header, and the golden job proves
+#   a changed pin moves the golden.
 # - ANDON_AUTHORITY 2: every step is a gate and the first failure stops the
-#   job; the engines run only the bytes the wasm job printed, and each check
-#   has a negative control that must fail.
+#   job; an engine whose files differ from its manifest never runs; the
+#   engines run only the bytes the wasm job printed; and each check has a
+#   negative control that must fail, the pin check included.
 # - NAMED_COMPENSATORS: this workflow makes no irreversible call. It publishes,
 #   tags and pushes nothing (an artifact expires in 14 days), so there is
 #   nothing to undo.
@@ -38,7 +46,8 @@
 #   never does.
 # - EXTERNAL_VERIFIER 2: no model grades anything. The import section is
 #   checked by two parsers, and the golden hash by five executions, two native
-#   architectures and three JavaScript engines, each against the committed file.
+#   architectures and three JavaScript engines, each against the committed
+#   file; an engine's word is checked against the artifact's own digest.
 name: CI
 
 permissions:
@@ -56,6 +65,7 @@ on:
       - scores/**
       - golden/**
       - .github/workflows/**
+      - .github/engines/**
   pull_request:
     paths:
       - Cargo.toml
@@ -66,6 +76,7 @@ on:
       - scores/**
       - golden/**
       - .github/workflows/**
+      - .github/engines/**
   workflow_dispatch:
 
 concurrency:
@@ -254,6 +265,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Each engine runs only from files whose SHA-256 is committed in
+  # .github/engines/, and CI compares what it prints with sources it does not
+  # control: the golden file, and the artifact's own digest.
   engines:
     name: golden (${{ matrix.engine }})
     needs: wasm
@@ -263,11 +277,100 @@ jobs:
       fail-fast: false
       matrix:
         engine: [v8, spidermonkey, javascriptcore]
+    env:
+      ENGINE_NAME: ${{ matrix.engine }}
     steps:
-      # The golden file, to compare against.
+      # The engine is installed first, before the repository or the artifact is
+      # on the runner: jsvu runs the shell it installs once, as its own smoke
+      # test, and nothing of the golden's is on disk yet when that happens.
+      - name: Install node (V8)
+        if: matrix.engine == 'v8'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+
+      - name: Install the engine shell
+        if: matrix.engine != 'v8'
+        run: |
+          set -euo pipefail
+          case "$ENGINE_NAME" in
+            spidermonkey) shell=spidermonkey@156.0.1 ;;
+            javascriptcore) shell=javascriptcore@319571 ;;
+          esac
+          npm install -g jsvu@3.0.5
+          jsvu --os=linux64 "$shell"
+
+      # verify.sh, the engine manifests and the golden file.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # The installed engine must be exactly its committed manifest (every
+      # file's SHA-256, every link's target, every directory) before it runs
+      # anything of ours. Any difference stops the job here.
+      - name: Verify the engine against its pins
+        run: |
+          set -euo pipefail
+          case "$ENGINE_NAME" in
+            v8)
+              engine="$(realpath "$(command -v node)")"
+              pins=.github/engines/node-24.21.0.txt ;;
+            spidermonkey)
+              engine="$HOME/.jsvu/engines/spidermonkey-156.0.1"
+              pins=.github/engines/spidermonkey-156.0.1.txt ;;
+            javascriptcore)
+              engine="$HOME/.jsvu/engines/javascriptcore-319571"
+              pins=.github/engines/javascriptcore-319571.txt ;;
+          esac
+          bash .github/engines/verify.sh "$engine" "$pins"
+          echo "ENGINE_PATH=$engine" >> "$GITHUB_ENV"
+          echo "ENGINE_PINS=$pins" >> "$GITHUB_ENV"
+
+      # The pin check can fail: each wrong manifest below must be refused with
+      # exit 1, against the engine that just passed.
+      - name: A wrong pin fails the verification
+        run: |
+          set -euo pipefail
+          must_refuse() {
+            set +e
+            bash .github/engines/verify.sh "$ENGINE_PATH" "$2" > refused.txt 2>&1
+            local status=$?
+            set -e
+            if [ "$status" -ne 1 ]; then
+              cat refused.txt
+              echo "::error::$1: verify.sh exited $status, not 1"
+              exit 1
+            fi
+            echo "refused as it must: $1"
+          }
+          grep -v '^#' "$ENGINE_PINS" > pins.txt
+          awk '{ if (!done && $1 == "file") { c = substr($2, 1, 1); $2 = (c == "0" ? "1" : "0") substr($2, 2); done = 1 } print }' pins.txt > wrong-hash.txt
+          must_refuse "one file's SHA-256 changed by one hex digit" wrong-hash.txt
+          sed '$d' pins.txt > missing-entry.txt
+          must_refuse "an installed entry left out" missing-entry.txt
+          { cat pins.txt; echo "file 0000000000000000000000000000000000000000000000000000000000000000 not-installed"; } > extra-entry.txt
+          must_refuse "an entry that is not installed" extra-entry.txt
+
+      # The engine as jsvu's wrapper would start it, but from pinned files only:
+      # the wrapper in ~/.jsvu/bin is not pinned, so it is never run.
+      - name: Choose the engine's command
+        run: |
+          set -euo pipefail
+          launcher="$RUNNER_TEMP/engine"
+          case "$ENGINE_NAME" in
+            v8)
+              printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$ENGINE_PATH" > "$launcher"
+              echo "node $("$ENGINE_PATH" --version), V8 $("$ENGINE_PATH" -p process.versions.v8)" ;;
+            spidermonkey)
+              printf '#!/usr/bin/env bash\nLD_LIBRARY_PATH="%s" exec "%s/spidermonkey-156.0.1" "$@"\n' \
+                "$ENGINE_PATH" "$ENGINE_PATH" > "$launcher" ;;
+            javascriptcore)
+              printf '#!/usr/bin/env bash\nLD_LIBRARY_PATH="%s/lib" exec "%s/lib/ld-linux-x86-64.so.2" "%s/javascriptcore-319571" "$@"\n' \
+                "$ENGINE_PATH" "$ENGINE_PATH" "$ENGINE_PATH" > "$launcher" ;;
+          esac
+          chmod +x "$launcher"
+          cat "$launcher"
+          echo "ENGINE=$launcher" >> "$GITHUB_ENV"
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -285,69 +388,51 @@ jobs:
           echo "$CHECK_SHA256  dist/golden.js" | sha256sum --check
           echo "$CONTROL_SHA256  dist/golden-negative.js" | sha256sum --check
 
-      - name: Install node (V8)
-        if: matrix.engine == 'v8'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-
-      - name: Install the engine shell
-        if: matrix.engine != 'v8'
-        env:
-          ENGINE_NAME: ${{ matrix.engine }}
-        run: |
-          set -euo pipefail
-          case "$ENGINE_NAME" in
-            spidermonkey) shell=spidermonkey@156.0.1 ;;
-            javascriptcore) shell=javascriptcore@319571 ;;
-          esac
-          npm install -g jsvu@3.0.5
-          jsvu --os=linux64 "$shell"
-          # The installed binary and its libraries, for the record. Files only:
-          # JavaScriptCore installs its libraries in a directory of their own.
-          find "$HOME/.jsvu/engines" -type f -print0 | sort -z | xargs -0 sha256sum
-
-      - name: Choose the engine's command
-        env:
-          ENGINE_NAME: ${{ matrix.engine }}
-        run: |
-          set -euo pipefail
-          case "$ENGINE_NAME" in
-            v8) engine="$(command -v node)"; echo "node $(node --version), V8 $(node -p process.versions.v8)" ;;
-            spidermonkey) engine="$HOME/.jsvu/bin/spidermonkey-156.0.1" ;;
-            javascriptcore) engine="$HOME/.jsvu/bin/javascriptcore-319571" ;;
-          esac
-          echo "ENGINE=$engine" >> "$GITHUB_ENV"
-          echo "ENGINE_NAME=$ENGINE_NAME" >> "$GITHUB_ENV"
-
+      # Four values the engine prints, each against a source it cannot see:
+      # the hash, the law version and the snapshot's length against the golden
+      # file; the SHA-256 of the wasm it compiled against the artifact itself.
       - name: The engine computes the golden hash
         run: |
           set -euo pipefail
-          golden=$(sed -n 's/^golden \([0-9a-f]\{64\}\)$/\1/p' golden/entertainer.golden)
-          test -n "$golden"
+          value() { sed -n "s/^$1 \\(.*\\)\$/\\1/p" "$2"; }
+          same() {
+            if [ -z "$3" ]; then
+              echo "::error::$1: nothing to compare against"
+              exit 1
+            fi
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1: the engine printed [$2], and it must be [$3]"
+              exit 1
+            fi
+            echo "$1: $3"
+          }
           "$ENGINE" dist/golden.js | tee run.txt
-          computed=$(sed -n 's/^computed \([0-9a-f]\{64\}\)$/\1/p' run.txt)
-          echo "$ENGINE_NAME computed $computed; golden/entertainer.golden has $golden"
-          test "$computed" = "$golden"
+          same "the golden hash" "$(value computed run.txt)" "$(value golden golden/entertainer.golden)"
+          same "the wasm it compiled" "$(value wasm-sha256 run.txt)" "$(sha256sum dist/law.wasm | cut -c1-64)"
+          same "the law version" "$(value law-version run.txt)" "$(value law-version golden/entertainer.golden)"
+          same "the snapshot's length" "$(value snapshot-bytes run.txt)" "$(value snapshot golden/entertainer.golden)"
           grep -qx 'golden check passed' run.txt
 
       # A take with one onset one sample late must fail, with a hash that is
-      # not the golden: the check above can go red.
+      # not the golden, from the same wasm: the check above can go red.
       - name: The negative control fails
         run: |
           set -euo pipefail
-          golden=$(sed -n 's/^golden \([0-9a-f]\{64\}\)$/\1/p' golden/entertainer.golden)
+          value() { sed -n "s/^$1 \\(.*\\)\$/\\1/p" "$2"; }
+          golden="$(value golden golden/entertainer.golden)"
           set +e
           "$ENGINE" dist/golden-negative.js > control.txt 2>&1
           status=$?
           set -e
           cat control.txt
-          computed=$(sed -n 's/^computed \([0-9a-f]\{64\}\)$/\1/p' control.txt)
+          computed="$(value computed control.txt)"
           if [ "$status" -eq 0 ]; then
             echo "::error::the negative control exited 0"
             exit 1
           fi
+          test -n "$golden"
           test -n "$computed"
           test "$computed" != "$golden"
+          test "$(value wasm-sha256 control.txt)" = "$(sha256sum dist/law.wasm | cut -c1-64)"
           grep -q 'golden mismatch' control.txt
           echo "the negative control failed as it must: status $status, computed $computed"

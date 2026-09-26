@@ -30,7 +30,8 @@
 //!   in the snapshot's header, so changing one moves the golden hash (the
 //!   mutation proofs change H and one take sample and watch `--check` fail).
 //!   CI pins the toolchain, the lockfile (`--locked`), every action by commit
-//!   SHA, node by exact version and the two engine shells by version.
+//!   SHA, and node and the two engine shells by version and by the SHA-256 of
+//!   every file they run (`.github/engines/`), checked before they run.
 //! - **ANDON_AUTHORITY 2.** `--check` and every engine run stop on the first
 //!   difference and name it; the native run also stops when the C ABI and the
 //!   Rust API disagree or when stepping moves the hash. Negative controls in
@@ -46,8 +47,10 @@
 //!   every change to the golden files in a pull request.
 //! - **EXTERNAL_VERIFIER 2.** No model grades anything: five independent
 //!   executions (two native architectures, three JavaScript engines) must
-//!   agree with the committed file, and the golden hash is recomputed from the
-//!   snapshot with a SHA-256 the law does not supply.
+//!   agree with the committed file. An engine's output is checked against
+//!   sources it cannot see: the golden file, and the artifact's own SHA-256,
+//!   which the engine must reproduce from the bytes it compiled. The code is
+//!   reviewed by a different model family.
 
 use std::fmt;
 use std::path::{Path, PathBuf};

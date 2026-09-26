@@ -1,0 +1,4 @@
+# node 24.21.0 for linux-x64, as actions/setup-node v7.0.0 installs it: the one
+# binary the V8 job runs (/opt/hostedtoolcache/node/24.21.0/x64/bin/node).
+# Measured in CI run 36222063475. Checked by verify.sh before the binary runs.
+file 7fde7b8afa198da66257f42ee2001d874c7355631e6d1579a5fb5ef1f246df4c node
