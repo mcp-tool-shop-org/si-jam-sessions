@@ -1,0 +1,42 @@
+# The golden hash of si-jam-sessions slice 1: The Entertainer, graded by the law
+# against the constructed take. Written only by `cargo run -p golden --bin write-golden`;
+# `write-golden --check` exits non-zero when regenerating would change this file or
+# golden/entertainer.rows. The golden hash is the SHA-256 of the law's snapshot.
+golden-format 1
+law-version 3
+snapshot-format 2
+predicate-version 2
+rules-year 2026
+us-last-public-domain-publication-year 1930
+eu-last-public-domain-death-year 1955
+last-out-of-term-edition-year 2000
+ppq 3360
+sample-rate 48000
+quantum-samples 48
+horizon-quanta 100
+gate-samples 1920
+input scores/entertainer/receipt.json 7016 8846e5a38caceb0b9f9e76080ef5b5815a7b2a5deecf18280e8ad3f33cc18ad8
+input scores/entertainer/entertainer.ly 11100 3a07fcf4f47b6000ced3e6579ef74bebb3c15af82d542a3aa42271f797544f7d
+input scores/entertainer/entertainer.mid 22084 33e4e81ee64ffb2edf90d1c6a1ddee7276507296bfb915c2bb775231a467f066
+container 40261 6f3e8d5907a3655243ba4a365df51f2e7006254e77ce3602060c4bd04ef44552
+receipt-digest e23ba2e9a9c16704564485089f31899c316dd7b398ba10bd7628bef5605f282c
+tier public-domain
+score-notes 2621
+prng splitmix64
+seed 0x73692d6a616d2d31
+drawn late-30ms note 2233 onset 10239995 played 10241435 delta +1440 verdict match
+drawn late-45ms note 2522 onset 11679995 played 11682155 delta +2160 verdict late
+drawn late-60ms note 1777 onset 7839996 played 7842876 delta +2880 verdict late
+drawn early-45ms note 1131 onset 4789998 played 4787838 delta -2160 verdict early
+drawn wrong-pitch note 1218 pitch 54 played 55 verdict wrong pitch
+row late-30ms note 2233: onset +1440 samples (+30.0 ms) vs gate ±1920, pitch 65 vs 65: match
+row late-45ms note 2522: onset +2160 samples (+45.0 ms) vs gate ±1920, pitch 67 vs 67: late
+row late-60ms note 1777: onset +2880 samples (+60.0 ms) vs gate ±1920, pitch 72 vs 72: late
+row early-45ms note 1131: onset -2160 samples (-45.0 ms) vs gate ±1920, pitch 78 vs 78: early
+row wrong-pitch note 1218: onset +0 samples (+0.0 ms) vs gate ±1920, pitch 55 vs 54: wrong pitch
+take 39327 36aa3d45a6022225ff3486856a6bbe34f829bc9e2b1d66eee58647735bef4698 notes 2621
+steps 252917
+verdicts match 2617 early 1 late 2 wrong-pitch 1 addition 0 never-played 0
+rows 198106 114b64a92830a2bc1169ae3fe4226fcc41421a3851a55ad7004a604fd8f24b77
+snapshot 413207
+golden 145c7af9f964a47f2e21566dd253ff5de6cc5cd65c6f2cbf5f04afe745c03b40
