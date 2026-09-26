@@ -12,9 +12,12 @@
 //! cargo run -p host --release -- notices
 //! ```
 //!
-//! Exit status: 0 when the command finished, 1 when it stopped on an error (a
-//! refused law call, a device error, a bad argument), with the reason printed.
+//! Exit status: 0 when the command finished; 1 when the command line was wrong,
+//! with a hint that `host help` lists the commands; 2 when the command stopped on
+//! an error while it ran (a refused law call, a device or file error, a device
+//! name that matches nothing), with the reason printed.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -65,35 +68,91 @@ take: The Entertainer's constructed take in play and render, and your live take 
 X is an index from `host devices` or part of a name.
 --voice is the score's voice: the piano when fetch-piano has put its samples in the per-user cache
 (or in the DIR --samples names), the oscillator otherwise. The take, your live notes and the click
-are oscillators either way. The piano prints its credit whenever it plays.";
+are oscillators either way. The piano prints its credit whenever it plays.
+Exit status: 0 on success, 1 for a wrong command line, 2 when a command fails while it runs,
+a device name that matches nothing included.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let result = match args.split_first() {
-        Some((command, rest)) => match command.as_str() {
-            "devices" => options(rest, Accepts::NONE, 0).and_then(|_| devices()),
-            "play" => options(rest, Accepts::PLAY, 0).and_then(|o| play(&o)),
-            "render" => options(rest, Accepts::RENDER, 1).and_then(|o| render(&o)),
-            "jam" => options(rest, Accepts::JAM, 0).and_then(|o| jam(&o)),
-            "notes" => options(rest, Accepts::NOTES, 1).and_then(|o| write_notes(&o)),
-            "jitter" => options(rest, Accepts::OUTPUT, 0).and_then(|o| jitter(&o)),
-            "fetch-piano" => options(rest, Accepts::FETCH, 0).and_then(|o| fetch_piano(&o)),
-            "preview" => options(rest, Accepts::SAMPLES, 2).and_then(|o| preview(&o)),
-            "notices" => options(rest, Accepts::NONE, 0).map(|_| print!("{}", host::notices::TEXT)),
-            "help" | "--help" | "-h" => {
-                println!("{USAGE}");
-                Ok(())
-            }
-            other => Err(format!("no command \"{other}\"\n{USAGE}")),
-        },
-        None => Err(String::from(USAGE)),
-    };
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("host: {e}");
-            ExitCode::from(1)
+    ExitCode::from(status(&args))
+}
+
+/// Runs the command line and returns the process's exit status, writing a
+/// failure's report to standard error. A report that cannot be written is
+/// dropped, never a panic: the status still says what happened.
+fn status(args: &[String]) -> u8 {
+    match dispatch(args) {
+        Ok(()) => 0,
+        Err(f) => {
+            let _ = writeln!(std::io::stderr(), "{}", f.report());
+            f.status()
         }
+    }
+}
+
+/// Why a command did not succeed. A wrong command line is told apart from a
+/// command that failed while it ran, so a script can tell a typo from a missing
+/// device or file.
+#[derive(Debug)]
+enum Failure {
+    /// The command line was wrong: an unknown command, a missing or extra
+    /// argument, an option the command does not take, a value not allowed.
+    Usage(String),
+    /// The command line was right, and the command failed while it ran.
+    Runtime(String),
+}
+
+impl Failure {
+    /// The process's exit status.
+    fn status(&self) -> u8 {
+        match self {
+            Failure::Usage(_) => 1,
+            Failure::Runtime(_) => 2,
+        }
+    }
+
+    /// What is printed on standard error: the message, and for a usage error
+    /// where the commands are listed.
+    fn report(&self) -> String {
+        match self {
+            Failure::Usage(m) => {
+                format!("host: {m}\nhint: `host help` lists every command and its options")
+            }
+            Failure::Runtime(m) => format!("host: {m}"),
+        }
+    }
+}
+
+/// Runs the command `args` name. The options are checked first, and a fault
+/// there is a usage error; a fault in the command itself is a runtime error.
+fn dispatch(args: &[String]) -> Result<(), Failure> {
+    fn run<T>(
+        parsed: Result<T, String>,
+        command: impl FnOnce(T) -> Result<(), String>,
+    ) -> Result<(), Failure> {
+        command(parsed.map_err(Failure::Usage)?).map_err(Failure::Runtime)
+    }
+    let Some((command, rest)) = args.split_first() else {
+        return Err(Failure::Usage(format!("no command given\n{USAGE}")));
+    };
+    match command.as_str() {
+        "devices" => run(options(rest, Accepts::NONE, 0), |_| devices()),
+        "play" => run(options(rest, Accepts::PLAY, 0), |o| play(&o)),
+        "render" => run(options(rest, Accepts::RENDER, 1), |o| render(&o)),
+        "jam" => run(options(rest, Accepts::JAM, 0), |o| jam(&o)),
+        "notes" => run(options(rest, Accepts::NOTES, 1), |o| write_notes(&o)),
+        "jitter" => run(options(rest, Accepts::OUTPUT, 0), |o| jitter(&o)),
+        "fetch-piano" => run(options(rest, Accepts::FETCH, 0), |o| fetch_piano(&o)),
+        "preview" => run(options(rest, Accepts::SAMPLES, 2), |o| preview(&o)),
+        "notices" => run(options(rest, Accepts::NONE, 0), |_| {
+            print!("{}", host::notices::TEXT);
+            Ok(())
+        }),
+        "help" | "--help" | "-h" => run(options(rest, Accepts::NONE, 0), |_| {
+            let _ = writeln!(std::io::stdout(), "{USAGE}");
+            Ok(())
+        }),
+        other => Err(Failure::Usage(format!("no command \"{other}\""))),
     }
 }
 
@@ -1121,7 +1180,7 @@ fn stopped_input(stopped_on: Option<String>, closed: Result<(), String>) -> Opti
 
 /// Stops the input, and reports what it said on the way: WinMM's invalid
 /// messages and what full rings dropped. Returns the input's failure, if it
-/// stopped on one: then the jam exits 1.
+/// stopped on one: then the jam exits 2.
 fn finish_input(started: Started, dropped: &Dropped) -> Option<String> {
     let failure = match started {
         #[cfg(windows)]
@@ -1414,6 +1473,79 @@ fn console_jitter(_playing: &Playing) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn run(args: &[&str]) -> Result<(), Failure> {
+        dispatch(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn main_exits_with_what_dispatch_decided() {
+        let s = |args: &[&str]| status(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>());
+        assert_eq!(s(&["help"]), 0);
+        assert_eq!(s(&["frobnicate"]), 1);
+        assert_eq!(s(&["preview", "no-such-draft.mid", "never-written.wav"]), 2);
+    }
+
+    #[test]
+    fn help_takes_no_argument() {
+        for args in [
+            &["help", "nonsense"][..],
+            &["--help", "play"][..],
+            &["-h", "x"][..],
+        ] {
+            let f = run(args).expect_err("help with an argument is a wrong command line");
+            assert_eq!(f.status(), 1, "{args:?}");
+        }
+    }
+
+    #[test]
+    fn help_succeeds_and_states_the_exit_status() {
+        assert!(run(&["help"]).is_ok());
+        assert!(USAGE.contains("Exit status: 0 on success, 1 for a wrong command line"));
+    }
+
+    #[test]
+    fn a_wrong_command_line_exits_1_and_says_where_the_commands_are() {
+        for args in [
+            &["frobnicate"][..],
+            &[][..],
+            &["notes", "never-written.json", "--piece", ""][..],
+            &[
+                "notes",
+                "never-written.json",
+                "--piece",
+                "../scores/entertainer",
+            ][..],
+            &[
+                "notes",
+                "never-written.json",
+                "--piece",
+                "Battle-Hymn-GLM-5.3",
+            ][..],
+            &["render"][..],
+        ] {
+            let f = run(args).expect_err("a wrong command line fails");
+            assert_eq!(f.status(), 1, "{args:?}");
+            assert!(matches!(f, Failure::Usage(_)), "{args:?}");
+            assert!(
+                f.report()
+                    .contains("\nhint: `host help` lists every command and its options"),
+                "{args:?}: {}",
+                f.report()
+            );
+        }
+    }
+
+    #[test]
+    fn a_command_that_fails_while_running_exits_2_with_no_hint() {
+        // The command line is right; the file it names does not exist.
+        let f = run(&["preview", "no-such-draft.mid", "never-written.wav"])
+            .expect_err("a missing file fails");
+        assert_eq!(f.status(), 2);
+        assert!(matches!(f, Failure::Runtime(_)));
+        assert!(f.report().starts_with("host: "), "{}", f.report());
+        assert!(!f.report().contains("hint:"), "{}", f.report());
+    }
 
     /// Issue #7's third finding. A MIDI port that will not close when the
     /// jam is over does not fail the jam: the music finished, and the close

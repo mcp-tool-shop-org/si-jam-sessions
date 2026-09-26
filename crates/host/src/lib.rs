@@ -103,7 +103,7 @@ pub mod winmm;
 /// A command's result once its report is printed. A report that could not be
 /// printed is the result; otherwise the error that stopped the command, a
 /// device error or a refused law call, if there was one: a command that
-/// stopped on an error exits 1 even when it printed its report.
+/// stopped on an error exits 2 even when it printed its report.
 pub fn outcome(report: Result<(), String>, stopped: Option<String>) -> Result<(), String> {
     report?;
     match stopped {

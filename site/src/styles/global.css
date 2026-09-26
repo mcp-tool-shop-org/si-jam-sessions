@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import "@mcptoolshop/site-theme/styles/theme.css";
+@source "../../node_modules/@mcptoolshop/site-theme";
+
+/* The theme's code cards are grid items without min-width: 0, so a long command widens the page on a
+   phone instead of scrolling inside its card. Fixed here until the theme fixes it. */
+.grid > .rounded-2xl { min-width: 0; }
