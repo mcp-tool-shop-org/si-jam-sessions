@@ -95,6 +95,9 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 /// version. Any change to what is admitted or refused, or to the refusal a file is given,
 /// bumps it.
 ///
+/// A version number is frozen when it reaches main.
+/// Before that it may be refined, but one number never names two different goldens, and every pushed refinement is recorded here.
+///
 /// Version 2 differs from version 1:
 /// - It refuses more. An own engraving's files may state no licence. A copyright markup
 ///   or an evidence quote that holds the licence but negates it does not affirm it, and
@@ -112,10 +115,15 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 ///   (`no derivatives` in `piano derivatives`), or runs on into a plain word
 ///   (`no-derivation`, `cc-by-sarah`), no longer refuses.
 ///
-/// The matching rule was settled in four steps before version 2 shipped: whole words for
-/// every class; then stems for every class but AI wording; then a text's words, with AI
-/// wording's longer phrases as stems too; and then stems only where no plain word runs on
-/// from them.
+/// Version 2's pushed refinements, one line each. Under every one of them the Entertainer
+/// receipt's digest is unchanged (`e23ba2e9…`), and the Entertainer is admitted as public
+/// domain. A commit that only edits this record refines nothing.
+/// - `fead502`: whole-word matching.
+/// - `390336b`: stems matched from the start of a word.
+/// - `f4038cc`: phrases matched on a text's words, so separators do not matter
+///   (`CC BY ND`), and AI wording beyond its short tokens matched as stems.
+/// - `6780f16`: a phrase is a stem only where no plain word runs on from it; the other
+///   phrases are whole words, with their needed forms listed.
 pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {
