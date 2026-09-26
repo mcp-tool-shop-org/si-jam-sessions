@@ -370,6 +370,12 @@ impl Synth {
         *slot = tone;
     }
 
+    /// A monitor message from outside a render: the law thread's note-offs,
+    /// through the callback's second ring.
+    pub(crate) fn hear(&mut self, heard: Monitor) {
+        self.monitor(heard);
+    }
+
     fn monitor(&mut self, heard: Monitor) {
         match heard {
             Monitor::On { pitch, velocity } => {

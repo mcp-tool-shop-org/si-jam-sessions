@@ -22,10 +22,63 @@
 //! the key to the law: the input's own path, and the law thread's loop, which
 //! takes presses before it steps the law.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use law::{LIVE_ALLOWANCE_SAMPLES, QUANTUM_SAMPLES};
 
 use crate::anchor::{AudioClock, MidiClock};
 use crate::bridge::{Law, Refused};
+
+/// Messages an input could not hand on because a ring was full: presses for
+/// the law thread, and monitor messages for the audio callback. A full ring
+/// drops the message rather than wait, and these count it.
+#[derive(Default)]
+pub struct Dropped {
+    pub presses: AtomicU64,
+    pub monitor: AtomicU64,
+}
+
+impl Dropped {
+    /// The two counts, presses first.
+    pub fn counts(&self) -> (u64, u64) {
+        (
+            self.presses.load(Ordering::Relaxed),
+            self.monitor.load(Ordering::Relaxed),
+        )
+    }
+}
+
+/// The keys held down, as the presses the law thread takes show them, whether
+/// or not the law took each one: what the monitor is sounding.
+pub struct Keys {
+    down: [bool; 128],
+}
+
+impl Default for Keys {
+    fn default() -> Self {
+        Keys { down: [false; 128] }
+    }
+}
+
+impl Keys {
+    /// A key went down or came up.
+    pub fn press(&mut self, press: &Press) {
+        if let Some(slot) = self.down.get_mut(usize::from(press.pitch)) {
+            *slot = press.down;
+        }
+    }
+
+    /// Takes every key held down, lowest first, and forgets them.
+    pub fn release_all(&mut self) -> Vec<u8> {
+        let mut out = Vec::new();
+        for (pitch, slot) in (0u8..).zip(self.down.iter_mut()) {
+            if std::mem::take(slot) {
+                out.push(pitch);
+            }
+        }
+        out
+    }
+}
 
 /// When a press was received.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -607,6 +660,29 @@ mod tests {
                 "note 1: onset 2000 samples, pitch 60, no take note cites it: never played",
             ]
         );
+    }
+
+    /// The keys held down follow the presses, and releasing them all names
+    /// each held key once, lowest first.
+    #[test]
+    fn the_keys_held_follow_the_presses() {
+        let press = |down, pitch| Press {
+            down,
+            pitch,
+            velocity: 90,
+            stamp: Stamp::Stream { nanos: 0 },
+        };
+        let mut keys = Keys::default();
+        for p in [
+            press(true, 64),
+            press(true, 60),
+            press(true, 67),
+            press(false, 64),
+        ] {
+            keys.press(&p);
+        }
+        assert_eq!(keys.release_all(), [60, 67]);
+        assert!(keys.release_all().is_empty());
     }
 
     /// The delivery summary: the median and largest lag of the note-ons, and

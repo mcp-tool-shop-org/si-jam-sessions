@@ -67,6 +67,8 @@ pub struct Shared {
     /// cpal predicts.
     pub latency_nanos: AtomicU64,
     pub callbacks: AtomicU64,
+    /// The largest callback that rendered law time, in frames: the pre-roll's
+    /// silent callbacks are not counted.
     pub largest_buffer: AtomicU64,
     pub notes: AtomicU64,
     pub beats: AtomicU64,
@@ -80,6 +82,9 @@ pub struct Callback {
     synth: Box<Synth>,
     events: Consumer<Event>,
     monitor: Option<Consumer<Monitor>>,
+    /// Monitor messages from the law thread: note-offs for keys whose input
+    /// went away while they were held.
+    hush: Option<Consumer<Monitor>>,
     readings: Producer<Reading>,
     shared: Arc<Shared>,
     mute: bool,
@@ -104,6 +109,7 @@ impl Callback {
             synth,
             events,
             monitor,
+            hush: None,
             readings,
             shared,
             mute,
@@ -111,6 +117,14 @@ impl Callback {
             silent: 0,
             cap: PREROLL_CAP_FRAMES,
         }
+    }
+
+    /// The same, taking monitor messages from the law thread too, through a
+    /// second ring made before the stream (the input's ring has one producer,
+    /// the input).
+    pub fn with_hush(mut self, hush: Consumer<Monitor>) -> Callback {
+        self.hush = Some(hush);
+        self
     }
 
     /// The same, with the pre-roll capped at `cap` frames of silence; 0 turns
@@ -133,7 +147,6 @@ impl Callback {
         if s.callbacks.fetch_add(1, Ordering::Relaxed) == 0 {
             s.first_buffer.store(frames, Ordering::Relaxed);
         }
-        s.largest_buffer.fetch_max(frames, Ordering::Relaxed);
 
         if !self.started {
             let end = self.synth.frame().saturating_add(frames);
@@ -148,6 +161,15 @@ impl Callback {
             }
         }
 
+        // Only a callback that renders law time sets the lookahead a jam steps
+        // the law with: the pre-roll's one-off first fill would hold the
+        // playhead that far ahead of the ear for the rest of the jam.
+        s.largest_buffer.fetch_max(frames, Ordering::Relaxed);
+        if let Some(hush) = self.hush.as_mut() {
+            while let Ok(heard) = hush.pop() {
+                self.synth.hear(heard);
+            }
+        }
         let _ = self.readings.push(Reading {
             sample: self.synth.frame(),
             nanos: playback,
@@ -363,5 +385,156 @@ mod tests {
         assert_eq!(shared.preroll_frames.load(Ordering::Relaxed), 48_000);
         assert!(shared.started.load(Ordering::Relaxed));
         assert!(shared.late.load(Ordering::Relaxed) > 0);
+    }
+
+    /// A key held through the monitor sounds until a note-off; one from the
+    /// law thread, through the second ring, releases it too, as `jam` sends
+    /// when a MIDI input goes away with keys held.
+    #[test]
+    fn a_note_off_from_the_law_thread_releases_a_held_voice() {
+        let (_events_in, events_out) = RingBuffer::<Event>::new(1);
+        let (mut heard, monitor) = RingBuffer::new(4);
+        let (mut hush_in, hush) = RingBuffer::new(4);
+        let (readings_in, _readings) = RingBuffer::new(64);
+        let shared = Arc::new(Shared::default());
+        shared.covered.store(u64::MAX, Ordering::Release);
+        let mut callback = Callback::new(
+            Synth::new(0),
+            events_out,
+            Some(monitor),
+            readings_in,
+            Arc::clone(&shared),
+            false,
+        )
+        .with_hush(hush);
+        heard
+            .push(Monitor::On {
+                pitch: 64,
+                velocity: 90,
+            })
+            .unwrap();
+        let mut block = vec![0.0f32; 480];
+        callback.run(&mut block, 1, 0, None);
+        assert!(block.iter().any(|s| *s != 0.0));
+        callback.run(&mut block, 1, 0, None);
+        assert!(block.iter().any(|s| *s != 0.0), "held");
+        hush_in.push(Monitor::Off { pitch: 64 }).unwrap();
+        for _ in 0..4 {
+            callback.run(&mut block, 1, 0, None);
+        }
+        assert!(
+            block.iter().all(|s| *s == 0.0),
+            "released: its 30 ms release is over"
+        );
+    }
+
+    /// A jam, as `jam` runs it, on a device with a 6,000-frame buffer: its
+    /// first callback asks for the whole buffer, more than the ring covers, so
+    /// the pre-roll renders it as silence; then it asks for 480 frames every
+    /// 10 ms, and each is heard 146.8 ms later (the 5,520 frames still in the
+    /// buffer, then 31.8 ms of output). After each callback the law thread
+    /// takes the keys pressed so far, then steps the law on the heard clock,
+    /// with the lookahead of two of the largest callbacks that rendered law
+    /// time. Keys pressed exactly when score notes are heard grade as matches:
+    /// the one-off first fill must not hold the playhead ahead of the ear.
+    #[test]
+    fn a_first_fill_past_the_cover_does_not_hold_the_playhead_ahead() {
+        use crate::anchor::Reading;
+        use crate::live::{Clocks, Held, Press, Stamp, close_through, pass};
+
+        const NS: u64 = 1_000_000_000;
+        let latency: u64 = 5_520 + 1_526;
+        let mut law = Law::acquire();
+        law.load_score(&dense()).unwrap();
+        let (mut events, events_out) = RingBuffer::new(crate::RING_EVENTS);
+        let (readings_in, mut readings) = RingBuffer::new(4_096);
+        let shared = Arc::new(Shared::default());
+        let mut scheduler = Scheduler::new(0);
+        let pumped = scheduler.pump(&mut law, 1, &mut events).unwrap();
+        shared.covered.store(pumped.covered, Ordering::Release);
+        let mut callback = Callback::new(
+            Synth::new(0),
+            events_out,
+            None,
+            readings_in,
+            Arc::clone(&shared),
+            true,
+        );
+        // Law sample `sample` is heard at this stream instant.
+        let start = NS;
+        let heard_at = |sample: u64| start + (sample + latency) * NS / 48_000;
+        // Every tenth score note of the first second, pressed as it is heard,
+        // released 4,000 samples later.
+        let mut keys: Vec<(u64, bool, u8)> = Vec::new();
+        for i in (10..100u64).step_by(10) {
+            let pitch = 48 + (i % 36) as u8;
+            keys.push((heard_at(i * 480), true, pitch));
+            keys.push((heard_at(i * 480 + 4_000), false, pitch));
+        }
+        keys.sort();
+
+        let mut clocks = Clocks::default();
+        let mut held = Held::default();
+        let mut log = Vec::new();
+        let mut next = 0;
+        // The first fill, before law time.
+        let mut buffer = vec![0.0f32; 6_000];
+        callback.run(&mut buffer, 1, start - NS / 100, None);
+        assert_eq!(shared.preroll_frames.load(Ordering::Relaxed), 6_000);
+        let mut buffer = vec![0.0f32; 480];
+        let mut now = start;
+        while shared.frames.load(Ordering::Acquire) < 60_000 {
+            let frame = shared.frames.load(Ordering::Acquire);
+            callback.run(&mut buffer, 1, heard_at(frame), None);
+            now += NS / 100;
+            while let Ok(r) = readings.pop() {
+                clocks.audio.push(Reading {
+                    sample: r.sample,
+                    nanos: r.nanos,
+                });
+            }
+            while next < keys.len() && keys[next].0 <= now {
+                let (instant, down, pitch) = keys[next];
+                let press = Press {
+                    down,
+                    pitch,
+                    velocity: 100,
+                    stamp: Stamp::Stream { nanos: instant },
+                };
+                pass(&mut law, &clocks, &mut held, press, instant, &mut log);
+                next += 1;
+            }
+            let lookahead = shared
+                .largest_buffer
+                .load(Ordering::Relaxed)
+                .saturating_mul(2);
+            let frame = shared.frames.load(Ordering::Acquire);
+            let target = steps_for(frame, lookahead, clocks.audio.sample_at(now));
+            let pumped = scheduler.pump(&mut law, target, &mut events).unwrap();
+            shared.covered.store(pumped.covered, Ordering::Release);
+        }
+        assert_eq!(next, keys.len());
+        let stop = clocks.audio.sample_at(now).unwrap();
+        close_through(&mut law, stop).unwrap();
+        let record = law.record().unwrap();
+        let played: Vec<&str> = record
+            .rows
+            .lines()
+            .filter(|r| !r.ends_with("never played"))
+            .collect();
+        assert_eq!(played.len(), 9, "{played:#?}");
+        for row in &played {
+            assert!(row.ends_with(": match"), "{row}");
+        }
+        // Handed over well inside the allowance.
+        let lags: Vec<i64> = log
+            .iter()
+            .filter(|p| p.down)
+            .filter_map(|p| p.lag)
+            .collect();
+        assert!(lags.iter().all(|&lag| lag < 4_800), "{lags:?}");
+        assert_eq!(shared.largest_buffer.load(Ordering::Relaxed), 480);
+        assert_eq!(shared.first_buffer.load(Ordering::Relaxed), 6_000);
+        assert_eq!(shared.late.load(Ordering::Relaxed), 0);
     }
 }

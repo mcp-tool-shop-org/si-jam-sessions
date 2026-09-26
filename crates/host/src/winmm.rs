@@ -42,7 +42,7 @@ use windows::Win32::Media::{MM_MIM_DATA, MM_MIM_ERROR, MMSYSERR_NOERROR};
 
 use crate::device::nanos;
 use crate::event::Monitor;
-use crate::live::{Press, Stamp, midi_press};
+use crate::live::{Dropped, Press, Stamp, midi_press};
 
 /// How many MIDI input ports WinMM lists now.
 pub fn port_count() -> u32 {
@@ -78,6 +78,7 @@ pub struct Sink {
     pub input: Producer<Press>,
     pub stream: Arc<cpal::Stream>,
     pub errors: Arc<AtomicU64>,
+    pub dropped: Arc<Dropped>,
 }
 
 /// An open MIDI input. [`MidiIn::close`] stops and closes the port; dropping
@@ -116,12 +117,22 @@ impl MidiIn {
         // SAFETY: `handle` was just opened.
         let status = unsafe { midiInStart(handle) };
         if status != MMSYSERR_NOERROR {
-            // SAFETY: the port is open and not started, so closing it ends
-            // every callback before `sink` is freed.
-            unsafe {
-                midiInClose(handle);
-                drop(Box::from_raw(sink));
+            // SAFETY: the port is open and not started; it is closed once,
+            // here.
+            let closed = unsafe { midiInClose(handle) };
+            if closed != MMSYSERR_NOERROR {
+                // WinMM kept the port, and may still call the callback: the
+                // context is left allocated, as MidiIn::close leaves it.
+                return Err(format!(
+                    "MIDI port {port} did not start (WinMM error {status}) and did not close \
+                     (WinMM error {closed}); its callback's context is left allocated, since \
+                     WinMM may still call it"
+                ));
             }
+            // SAFETY: midiInClose returned with success, so WinMM calls the
+            // callback no more, and `sink` is freed once, with nothing using
+            // it.
+            drop(unsafe { Box::from_raw(sink) });
             return Err(format!(
                 "MIDI port {port} did not start (WinMM error {status})"
             ));
@@ -200,16 +211,25 @@ unsafe extern "system" fn on_message(
     // is the only reference to it while the call runs.
     let sink = unsafe { &mut *(instance as *mut Sink) };
     let arrived = nanos(sink.stream.now());
-    deliver(&mut sink.monitor, &mut sink.input, arrived, param1, param2);
+    deliver(
+        &mut sink.monitor,
+        &mut sink.input,
+        &sink.dropped,
+        arrived,
+        param1,
+        param2,
+    );
 }
 
 /// The callback's work once it has read the clock: a note-on or note-off,
 /// arrived at stream instant `arrived`, goes to the monitor and to the law
 /// thread with its WinMM time; any other message is dropped. It only pushes
-/// into rings, which never allocate or block (`alloc_free` counts it).
+/// into rings, which never allocate or block, and counts a message a full
+/// ring could not take (`alloc_free` counts its allocations: none).
 pub(crate) fn deliver(
     monitor: &mut Producer<Monitor>,
     input: &mut Producer<Press>,
+    dropped: &Dropped,
     arrived: u64,
     param1: usize,
     param2: usize,
@@ -217,12 +237,15 @@ pub(crate) fn deliver(
     let Some((down, pitch, velocity)) = midi_press(param1 as u32) else {
         return;
     };
-    let _ = monitor.push(if down {
+    let heard = monitor.push(if down {
         Monitor::On { pitch, velocity }
     } else {
         Monitor::Off { pitch }
     });
-    let _ = input.push(Press {
+    if heard.is_err() {
+        dropped.monitor.fetch_add(1, Ordering::Relaxed);
+    }
+    let passed = input.push(Press {
         down,
         pitch,
         velocity,
@@ -231,4 +254,7 @@ pub(crate) fn deliver(
             arrived,
         },
     });
+    if passed.is_err() {
+        dropped.presses.fetch_add(1, Ordering::Relaxed);
+    }
 }

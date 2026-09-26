@@ -103,6 +103,7 @@ mod tests {
             producer.push(*e).unwrap();
         }
         let (mut live, monitor) = RingBuffer::new(8);
+        let (mut hush_in, hush) = RingBuffer::new(8);
         let (readings, _readings_out) = RingBuffer::new(8_192);
         let shared = Arc::new(Shared::default());
         // The cover at the start, law samples 0..4,848.
@@ -114,7 +115,8 @@ mod tests {
             readings,
             Arc::clone(&shared),
             false,
-        );
+        )
+        .with_hush(hush);
         let mut out = vec![0.0f32; 2 * 8_192];
         let sizes = [480usize, 441, 1, 1_024, 4_096, 97, 512, 2_000];
 
@@ -131,6 +133,16 @@ mod tests {
                 }
                 if i == 400 {
                     let _ = live.push(Monitor::Off { pitch: 60 });
+                }
+                if i == 500 {
+                    let _ = live.push(Monitor::On {
+                        pitch: 62,
+                        velocity: 80,
+                    });
+                }
+                // The law thread's note-off, through the second ring.
+                if i == 600 {
+                    let _ = hush_in.push(Monitor::Off { pitch: 62 });
                 }
                 let frames = sizes[i % sizes.len()];
                 let buffer = &mut out[..2 * frames];
@@ -152,7 +164,7 @@ mod tests {
                 count(&shared.dropped),
                 count(&shared.monitored)
             ),
-            (0, 0, 1)
+            (0, 0, 2)
         );
         assert!(out.iter().any(|s| *s != 0.0));
     }
@@ -164,19 +176,23 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn the_midi_callback_allocates_nothing() {
-        use crate::live::{Press, Stamp};
+        use crate::live::{Dropped, Press, Stamp};
         let (mut monitor, mut heard) = RingBuffer::new(256);
         let (mut input, mut presses) = RingBuffer::new(512);
+        let dropped = Dropped::default();
         let ((), allocations) = counted(|| {
             for i in 0..1_000usize {
                 let status = if i % 2 == 0 { 0x90 } else { 0x80 };
                 let message = status | (60 << 8) | (100 << 16);
-                crate::winmm::deliver(&mut monitor, &mut input, 7_000, message, i);
-                crate::winmm::deliver(&mut monitor, &mut input, 7_000, 0xF8, i);
+                crate::winmm::deliver(&mut monitor, &mut input, &dropped, 7_000, message, i);
+                crate::winmm::deliver(&mut monitor, &mut input, &dropped, 7_000, 0xF8, i);
             }
         });
         assert_eq!(allocations, 0);
         assert_eq!((heard.slots(), presses.slots()), (256, 512));
+        // The rings were full for the rest: every note message past them is
+        // counted, and a clock tick is not a note message.
+        assert_eq!(dropped.counts(), (1_000 - 512, 1_000 - 256));
         assert_eq!(
             heard.pop(),
             Ok(Monitor::On {

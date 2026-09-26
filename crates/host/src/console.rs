@@ -23,7 +23,7 @@ use windows::Win32::System::Threading::WaitForSingleObject;
 
 use crate::device::nanos;
 use crate::event::Monitor;
-use crate::live::{Press, Stamp};
+use crate::live::{Dropped, Press, Stamp};
 
 /// The layout, for the person at the keyboard.
 pub const LAYOUT: &str = "Z S X D C V G B H N J M , play C4 to C5; Q 2 W 3 E R 5 T 6 Y 7 U I \
@@ -53,6 +53,16 @@ impl ConsoleInput {
     }
 }
 
+/// Opens the console's input buffer with `open`. When it cannot, `stop` is
+/// raised, so a keyboard jam, whose only stop is Esc, ends at once and reports
+/// why, instead of playing to the score's end with no input.
+fn open_or_stop(
+    stop: &AtomicBool,
+    open: impl FnOnce() -> Result<ConsoleInput, String>,
+) -> Result<ConsoleInput, String> {
+    open().inspect_err(|_| stop.store(true, Ordering::SeqCst))
+}
+
 /// The pitch a key plays, by its Windows virtual-key code.
 pub fn pitch_of(key: u16) -> Option<u8> {
     const LOWER: [u8; 12] = *b"ZSXDCVGBHNJM";
@@ -72,14 +82,17 @@ pub fn pitch_of(key: u16) -> Option<u8> {
 }
 
 /// Reads the console's keys until Esc or `stop`, starting and releasing the
-/// monitor voice and passing each press to the law thread.
+/// monitor voice and passing each press to the law thread, and counting what
+/// a full ring could not take. A console input that does not open raises
+/// `stop` at once.
 pub fn read(
     stop: &AtomicBool,
     stream: &cpal::Stream,
     mut monitor: Producer<Monitor>,
     mut input: Producer<Press>,
+    dropped: &Dropped,
 ) -> Result<(), String> {
-    let input_buffer = ConsoleInput::open()?;
+    let input_buffer = open_or_stop(stop, ConsoleInput::open)?;
     let handle = input_buffer.handle();
     let mut held = [false; 256];
     let mut records = [INPUT_RECORD::default(); 32];
@@ -115,7 +128,7 @@ pub fn read(
                 continue;
             }
             *was = down;
-            let _ = monitor.push(if down {
+            let heard = monitor.push(if down {
                 Monitor::On {
                     pitch,
                     velocity: 100,
@@ -123,12 +136,18 @@ pub fn read(
             } else {
                 Monitor::Off { pitch }
             });
-            let _ = input.push(Press {
+            if heard.is_err() {
+                dropped.monitor.fetch_add(1, Ordering::Relaxed);
+            }
+            let passed = input.push(Press {
                 down,
                 pitch,
                 velocity: 100,
                 stamp: Stamp::Stream { nanos: arrived },
             });
+            if passed.is_err() {
+                dropped.presses.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
     Ok(())
@@ -218,6 +237,15 @@ pub fn measure(stream: &cpal::Stream, count: usize) -> Result<Vec<u64>, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A console input that does not open stops the jam and says why.
+    #[test]
+    fn an_input_that_cannot_open_stops_the_jam() {
+        let stop = AtomicBool::new(false);
+        let opened = open_or_stop(&stop, || Err(String::from("no console")));
+        assert_eq!(opened.err().as_deref(), Some("no console"));
+        assert!(stop.load(Ordering::SeqCst));
+    }
 
     #[test]
     fn the_letter_rows_are_two_octaves() {

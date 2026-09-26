@@ -25,7 +25,9 @@ use host::bridge::{Law, Refused};
 use host::callback::{Callback, Shared};
 use host::device::{self, Output, Playing};
 use host::event::{Event, Monitor};
-use host::live::{Clocks, Held, Passed, Press, close_through, delivery, pass, release_all};
+use host::live::{
+    Clocks, Dropped, Held, Keys, Passed, Press, close_through, delivery, pass, release_all,
+};
 use host::schedule::{Scheduler, steps_for};
 use host::score::{Piece, clock, root};
 use host::synth::Synth;
@@ -266,7 +268,7 @@ struct Session {
 fn open(
     output: &Output,
     law: &mut Law,
-    monitor: Option<Consumer<Monitor>>,
+    monitor: Option<(Consumer<Monitor>, Consumer<Monitor>)>,
     mute: bool,
 ) -> Result<Session, String> {
     // Every ring is made before the stream: rtrb allocates only in
@@ -282,14 +284,25 @@ fn open(
         .pump(law, steps_for(0, 0, None), &mut events)
         .map_err(refused)?;
     shared.covered.store(pumped.covered, Ordering::Release);
-    let callback = Callback::new(
-        Synth::new(0),
-        events_out,
-        monitor,
-        readings_in,
-        Arc::clone(&shared),
-        mute,
-    );
+    let callback = match monitor {
+        None => Callback::new(
+            Synth::new(0),
+            events_out,
+            None,
+            readings_in,
+            Arc::clone(&shared),
+            mute,
+        ),
+        Some((monitor, hush)) => Callback::new(
+            Synth::new(0),
+            events_out,
+            Some(monitor),
+            readings_in,
+            Arc::clone(&shared),
+            mute,
+        )
+        .with_hush(hush),
+    };
     let playing = device::start(output, callback, shared)?;
     Ok(Session {
         playing,
@@ -456,8 +469,8 @@ fn counted(session: &Session) -> String {
     let s = &session.playing.shared;
     format!(
         "{} notes and {} beats started, {} live notes heard back, {} late, {} dropped; the \
-         first callback asked for {} frames, the largest for {}, and {} frames of silence came \
-         before law sample 0",
+         first callback asked for {} frames, the largest that rendered law time for {}, and {} \
+         frames of silence came before law sample 0",
         s.notes.load(Ordering::Relaxed),
         s.beats.load(Ordering::Relaxed),
         s.monitored.load(Ordering::Relaxed),
@@ -599,18 +612,20 @@ struct Midi {
 #[cfg(windows)]
 impl Midi {
     /// Says once if WinMM lists fewer MIDI input ports than when the jam
-    /// began.
-    fn watch(&mut self) {
+    /// began, and returns true then.
+    fn watch(&mut self) -> bool {
         let now = host::winmm::port_count();
         if !self.told && now < self.ports {
             self.told = true;
             println!(
                 "  WinMM now lists {now} MIDI input ports, {} when the jam began. If the \
                  keyboard was unplugged, its notes stopped arriving; WinMM does not say so \
-                 otherwise.",
+                 otherwise. The keys held now are released in the monitor.",
                 self.ports
             );
+            return true;
         }
+        false
     }
 }
 
@@ -631,6 +646,7 @@ fn start_input(
     stop: &Arc<AtomicBool>,
     monitor: Producer<Monitor>,
     presses: Producer<Press>,
+    dropped: Arc<Dropped>,
 ) -> Result<Started, String> {
     match input {
         Input::Midi(port, name) => {
@@ -640,6 +656,7 @@ fn start_input(
                 input: presses,
                 stream: Arc::clone(&session.playing.stream),
                 errors: Arc::clone(&errors),
+                dropped,
             };
             let ports = host::winmm::port_count();
             let midi = host::winmm::MidiIn::open(port, sink)?;
@@ -655,7 +672,9 @@ fn start_input(
         Input::Keyboard => {
             let stream = Arc::clone(&session.playing.stream);
             let flag = Arc::clone(stop);
-            let keys = thread::spawn(move || host::console::read(&flag, &stream, monitor, presses));
+            let keys = thread::spawn(move || {
+                host::console::read(&flag, &stream, monitor, presses, &dropped)
+            });
             println!(
                 "Live input: the computer keyboard (no MIDI input port was chosen or found). {}",
                 host::console::LAYOUT
@@ -672,6 +691,7 @@ fn start_input(
     stop: &Arc<AtomicBool>,
     _monitor: Producer<Monitor>,
     _presses: Producer<Press>,
+    _dropped: Arc<Dropped>,
 ) -> Result<Started, String> {
     println!(
         "Live input: none; live input is built for Windows. Playing the score and the click. \
@@ -681,40 +701,52 @@ fn start_input(
     Ok(Started::None)
 }
 
-/// Watches the input while the jam runs.
-fn watch_input(started: &mut Started) {
+/// Watches the input while the jam runs: true when a MIDI input may have
+/// gone away (WinMM lists fewer ports than when the jam began).
+fn watch_input(started: &mut Started) -> bool {
     match started {
         #[cfg(windows)]
         Started::Midi(midi) => midi.watch(),
         #[cfg(windows)]
-        Started::Keyboard(_) => {}
+        Started::Keyboard(_) => false,
         #[cfg(not(windows))]
-        Started::None => {}
+        Started::None => false,
     }
 }
 
-/// Stops the input, and reports what WinMM said on the way.
-fn finish_input(started: Started) {
-    match started {
+/// Stops the input, and reports what it said on the way: WinMM's invalid
+/// messages and what full rings dropped. Returns the input's failure, if it
+/// stopped on one: then the jam exits 1.
+fn finish_input(started: Started, dropped: &Dropped) -> Option<String> {
+    let failure = match started {
         #[cfg(windows)]
         Started::Midi(midi) => {
             let errors = midi.errors.load(Ordering::Relaxed);
             if errors > 0 {
                 println!("WinMM reported {errors} invalid MIDI messages (MIM_ERROR).");
             }
-            if let Err(e) = midi.port.close() {
-                eprintln!("host: {e}");
-            }
+            midi.port.close().err()
         }
         #[cfg(windows)]
         Started::Keyboard(keys) => match keys.join() {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => eprintln!("host: the keyboard stopped: {e}"),
-            Err(_) => eprintln!("host: the keyboard reader stopped"),
+            Ok(Ok(())) => None,
+            Ok(Err(e)) => Some(format!("the keyboard stopped: {e}")),
+            Err(_) => Some(String::from("the keyboard reader stopped")),
         },
         #[cfg(not(windows))]
-        Started::None => {}
+        Started::None => None,
+    };
+    let (presses, monitor) = dropped.counts();
+    if presses > 0 || monitor > 0 {
+        println!(
+            "The input dropped {presses} presses and {monitor} monitor messages: a ring was \
+             full."
+        );
     }
+    if let Some(e) = &failure {
+        eprintln!("host: {e}");
+    }
+    failure
 }
 
 /// Moves the readings into the audio clock and passes every press to the
@@ -724,6 +756,7 @@ fn take_presses(
     presses: &mut Consumer<Press>,
     clocks: &mut Clocks,
     held: &mut Held,
+    keys: &mut Keys,
     law: &mut Law,
     passed: &mut Vec<Passed>,
 ) {
@@ -731,6 +764,7 @@ fn take_presses(
         clocks.audio.push(reading);
     }
     while let Ok(press) = presses.pop() {
+        keys.press(&press);
         let Some(instant) = clocks.instant(press.stamp) else {
             continue;
         };
@@ -745,11 +779,20 @@ fn jam(o: &Options) -> Result<(), String> {
     let mut law = Law::acquire();
     law.ingest(&piece.container).map_err(refused)?;
     let (monitor_in, monitor_out) = RingBuffer::<Monitor>::new(256);
+    let (mut hush_in, hush_out) = RingBuffer::<Monitor>::new(256);
     let (presses_in, mut presses) = RingBuffer::<Press>::new(4_096);
-    let mut session = open(&output, &mut law, Some(monitor_out), o.mute)?;
+    let mut session = open(&output, &mut law, Some((monitor_out, hush_out)), o.mute)?;
     describe(&output, &session);
     let stop = stop_flag(&session);
-    let mut started = start_input(input, &session, &stop, monitor_in, presses_in)?;
+    let dropped = Arc::new(Dropped::default());
+    let mut started = start_input(
+        input,
+        &session,
+        &stop,
+        monitor_in,
+        presses_in,
+        Arc::clone(&dropped),
+    )?;
     println!(
         "Play along with the score (the pure voice) and the click; your notes sound in the \
          reedy voice. The score ends at {}.",
@@ -758,6 +801,7 @@ fn jam(o: &Options) -> Result<(), String> {
 
     let mut clocks = Clocks::default();
     let mut held = Held::default();
+    let mut keys = Keys::default();
     let mut passed: Vec<Passed> = Vec::new();
     let end = piece.end + 48_000;
     let mut failed = None;
@@ -769,7 +813,13 @@ fn jam(o: &Options) -> Result<(), String> {
         startup.watch(&session);
         if watched.elapsed() >= Duration::from_millis(500) {
             watched = std::time::Instant::now();
-            watch_input(&mut started);
+            if watch_input(&mut started) {
+                // A key held on an input that went away gets no note-off:
+                // release its monitor voice from here.
+                for pitch in keys.release_all() {
+                    let _ = hush_in.push(Monitor::Off { pitch });
+                }
+            }
         }
         let frame = session.playing.shared.frames.load(Ordering::Acquire);
         if frame >= end {
@@ -782,6 +832,7 @@ fn jam(o: &Options) -> Result<(), String> {
             &mut presses,
             &mut clocks,
             &mut held,
+            &mut keys,
             &mut law,
             &mut passed,
         );
@@ -795,13 +846,14 @@ fn jam(o: &Options) -> Result<(), String> {
         thread::sleep(Duration::from_millis(1));
     }
     stop.store(true, Ordering::SeqCst);
-    finish_input(started);
+    let input_failed = finish_input(started, &dropped);
     // Presses still queued pass now, and notes still held end now.
     take_presses(
         &mut session,
         &mut presses,
         &mut clocks,
         &mut held,
+        &mut keys,
         &mut law,
         &mut passed,
     );
@@ -814,7 +866,7 @@ fn jam(o: &Options) -> Result<(), String> {
     let closed = close_through(&mut law, stopped_at).map_err(refused);
     println!("{}", counted(&session));
     let report = closed.and_then(|()| verdicts(&mut law, &passed));
-    host::outcome(report, device_error(&session).or(failed))
+    host::outcome(report, device_error(&session).or(failed).or(input_failed))
 }
 
 /// Prints the live take's verdicts: what the law took and refused, how the
