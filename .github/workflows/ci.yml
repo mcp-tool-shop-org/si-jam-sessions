@@ -1,7 +1,9 @@
 # The Rust gate and the golden hash.
 #
 # - rust: format, lints, tests, the wasm law, licences, and the law's empty
-#   import section.
+#   import section. The tests include the native host's (crates/host), which
+#   need no audio device: its render, scheduling and clock maths are pure, and
+#   cpal is built and linked against ALSA but never opens a device.
 # - golden (x86_64, arm64): write-golden --check, natively on both
 #   architectures; the x86_64 leg also proves the check fails on a changed pin
 #   and on a take changed by one sample.
@@ -25,7 +27,9 @@
 #
 # Standards compliance (the studio's six workflow standards, scored 0-3):
 # - PIN_PER_STEP 2: actions by commit SHA; the toolchain by rust-toolchain.toml;
-#   dependencies by Cargo.lock under --locked; cargo-deny by version, checked
+#   dependencies by Cargo.lock under --locked (libasound2-dev comes from the
+#   runner's Ubuntu archive, by name; the host links it and never opens a
+#   device with it); cargo-deny by version, checked
 #   against install-action's recorded sha256; node 24.21.0, SpiderMonkey
 #   156.0.1 and JavaScriptCore 319571 (from jsvu 3.0.5) by version and by the
 #   manifests in .github/engines/, which verify.sh checks before an engine
@@ -102,6 +106,15 @@ jobs:
 
       - name: Format
         run: cargo fmt --all -- --check
+
+      # cpal builds its ALSA backend on Linux, which links libasound through
+      # alsa-sys and pkg-config. The host is built and tested here, never run:
+      # there is no audio device on the runner.
+      - name: Install ALSA's headers for the host
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libasound2-dev
+          pkg-config --modversion alsa
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
