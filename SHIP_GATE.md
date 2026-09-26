@@ -60,10 +60,10 @@ module. Nothing is published to a package registry. The 0.1.0 release carries th
 
 ## E. Identity (soft gate — does not block ship)
 
-- [ ] `[all]` Logo in README header
-- [ ] `[all]` Translations (polyglot-mcp, 8 languages)
-- [ ] `[org]` Landing page (@mcptoolshop/site-theme)
-- [ ] `[all]` GitHub repo metadata: description, homepage, topics
+- [x] `[all]` Logo in README header (2026-09-26: the brand logo answers 200 and is 29,485 bytes, the same file as `site/src/assets/logo.png`)
+- [x] `[all]` Translations (polyglot-mcp, 8 languages) (2026-09-26: English and seven translations; the Hindi title and footer, and the Japanese footer, corrected)
+- [x] `[org]` Landing page (@mcptoolshop/site-theme) (2026-09-26: `site/` builds; the live page follows the Pages deploy after `v0.1.0` is published)
+- [x] `[all]` GitHub repo metadata: description, homepage, topics (2026-09-26: the description is set; the homepage and the topics `piano`, `lilypond`, `threejs`, `provenance`, `public-domain` follow the finish steps. Pages is already enabled)
 
 ---
 
