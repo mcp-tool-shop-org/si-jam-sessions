@@ -790,14 +790,10 @@ fn the_receipt_must_record_what_each_file_states() {
 
 #[test]
 fn an_in_file_licence_that_differs_from_the_page_is_refused() {
+    // A statement that names a refusal class is refused by that class's name.
     let mut f = Fixture::new();
     f.ly_header("  license = \"Creative Commons Attribution-ShareAlike 4.0\"\n");
-    assert_eq!(
-        f.refused(),
-        Refusal::InFileLicenceMismatch {
-            name: named(LY_NAME)
-        }
-    );
+    assert_eq!(f.refused(), Refusal::Licence(LicenceRefusal::ShareAlike));
     // A second statement in the same file must agree too.
     let mut f = Fixture::new();
     f.ly_header("  license = \"Public Domain\"\n  copyright = \"Copyright 1990 A. Person\"\n");
@@ -813,9 +809,7 @@ fn an_in_file_licence_that_differs_from_the_page_is_refused() {
     f.refresh();
     assert_eq!(
         f.refused(),
-        Refusal::InFileLicenceMismatch {
-            name: named(MID_NAME)
-        }
+        Refusal::Licence(LicenceRefusal::AllRightsReserved)
     );
     let mut f = Fixture::new();
     f.mid = smf_with(&[(0x01, b"(c) 1998 A Sequencer")], 1);
@@ -862,14 +856,46 @@ fn a_copyright_markup_must_contain_the_page_licence_and_no_restriction() {
     );
     assert!(f.admit().is_ok());
 
+    // A markup without the licence phrase does not agree.
+    let mut f = Fixture::new();
+    f.ly_header("  license = \"Public Domain\"\n  copyright = \\markup { \"Engraved 2016\" }\n");
+    assert_eq!(
+        f.refused(),
+        Refusal::InFileLicenceMismatch {
+            name: named(LY_NAME)
+        }
+    );
+
+    // A markup that names a restriction is refused by the restriction's name.
+    let mut f = Fixture::new();
+    f.ly_header(
+        "  license = \"Public Domain\"\n  copyright = \\markup { \"public domain in the US; all rights reserved elsewhere\" }\n",
+    );
+    assert_eq!(
+        f.refused(),
+        Refusal::Licence(LicenceRefusal::AllRightsReserved)
+    );
+}
+
+/// Finding 1 of the external review: a markup that holds the phrase but denies it.
+#[test]
+fn a_copyright_markup_that_negates_the_licence_is_refused() {
     for markup in [
-        "\"Engraved 2016\"",
-        "\"public domain in the US; all rights reserved elsewhere\"",
-        "\"not publicdomain\"",
+        "not in the public domain",
+        "This work is not public domain",
+        "no longer public domain",
+        "never placed in the public domain",
+        "it isn't public domain",
+        "it isn\u{2019}t public domain",
+        "public domain, except the fingering",
+        "public domain in the US only",
+        "possibly public domain",
+        "public domain?",
+        "non-public domain",
     ] {
         let mut f = Fixture::new();
         f.ly_header(&format!(
-            "  license = \"Public Domain\"\n  copyright = \\markup {{ {markup} }}\n"
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"{markup}\" }}\n"
         ));
         assert_eq!(
             f.refused(),
@@ -879,6 +905,101 @@ fn a_copyright_markup_must_contain_the_page_licence_and_no_restriction() {
             "{markup}"
         );
     }
+}
+
+/// Finding 2 of the external review: evidence that holds the text but denies it.
+#[test]
+fn an_evidence_quote_that_negates_the_licence_does_not_support_it() {
+    for quote in [
+        "This is not Public Domain",
+        "Copyright: Public Domain (no longer)",
+        "Public Domain? Unclear.",
+        "Copyright: Public Domain, except in the EU",
+    ] {
+        let mut f = Fixture::new();
+        f.evidence_mut("page").quotes = vec![named(quote)];
+        assert_eq!(
+            f.refused(),
+            Refusal::QuoteNegated {
+                what: "page licence"
+            },
+            "{quote}"
+        );
+    }
+    // One negating quote beside an affirming one: the evidence contradicts itself.
+    let mut f = Fixture::new();
+    f.evidence_mut("page").quotes = vec![
+        named("Copyright: Public Domain"),
+        named("This is not Public Domain"),
+    ];
+    assert_eq!(
+        f.refused(),
+        Refusal::QuoteNegated {
+            what: "page licence"
+        }
+    );
+    // The terms quote likewise.
+    let mut f = Fixture::new();
+    f.evidence_mut("terms").quotes = vec![named("Never Dedicated to the public domain.")];
+    f.third().terms.text = named("Dedicated to the public domain.");
+    assert_eq!(f.refused(), Refusal::QuoteNegated { what: "terms" });
+    // Holding the text inside a longer word is not holding it.
+    let mut f = Fixture::new();
+    f.evidence_mut("page").quotes = vec![named("Copyright: Public Domains")];
+    assert_eq!(
+        f.refused(),
+        Refusal::QuoteNotInEvidence {
+            what: "page licence"
+        }
+    );
+}
+
+/// Finding 3 of the external review: an AI restriction is named wherever it is read.
+#[test]
+fn ai_restrictions_are_refused_wherever_they_are_read() {
+    let ai = Refusal::Licence(LicenceRefusal::AiRestricted);
+
+    // The page licence itself.
+    let mut f = Fixture::new();
+    f.page_licence("No AI training");
+    assert_eq!(f.refused(), ai, "page licence");
+
+    // The terms text.
+    let mut f = Fixture::new();
+    let terms = "Dedicated to the public domain. Not for use in machine learning.";
+    f.third().terms.text = named(terms);
+    f.evidence_mut("terms").quotes = vec![named(terms)];
+    assert_eq!(f.refused(), ai, "terms text");
+
+    // The terms quote around a clean terms text.
+    let mut f = Fixture::new();
+    f.evidence_mut("terms").quotes = vec![named(
+        "Dedicated to the public domain. Text and data mining is reserved.",
+    )];
+    assert_eq!(f.refused(), ai, "terms quote");
+
+    // The page quote around a clean licence.
+    let mut f = Fixture::new();
+    f.evidence_mut("page").quotes = vec![named("Copyright: Public Domain (TDM reserved)")];
+    assert_eq!(f.refused(), ai, "page quote");
+
+    // A copyright markup.
+    let mut f = Fixture::new();
+    f.ly_header(
+        "  license = \"Public Domain\"\n  copyright = \\markup { \"Placed in the public domain; no AI training\" }\n",
+    );
+    assert_eq!(f.refused(), ai, "markup");
+
+    // A licence string in the file.
+    let mut f = Fixture::new();
+    f.ly_header("  license = \"Public Domain, not for artificial intelligence\"\n");
+    assert_eq!(f.refused(), ai, "licence string");
+
+    // A text event in the MIDI file, which is the file the law ingests.
+    let mut f = Fixture::new();
+    f.mid = smf_with(&[(0x01, b"Not for AI training")], 1);
+    f.refresh();
+    assert_eq!(f.refused(), ai, "smf text event");
 }
 
 #[test]

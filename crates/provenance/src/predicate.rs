@@ -98,6 +98,11 @@ pub enum Refusal {
     QuoteNotInEvidence {
         what: &'static str,
     },
+    /// An evidence quote that holds the licence or terms text also negates, limits or
+    /// conditions it (see `licence::negates`), so the evidence does not affirm it.
+    QuoteNegated {
+        what: &'static str,
+    },
     /// The licence or the terms refuse the score; see [`LicenceRefusal`].
     Licence(LicenceRefusal),
     MissingCreditLedgerId,
@@ -153,14 +158,18 @@ pub enum Refusal {
 ///    SHA-256 equal to the receipt;
 /// 2. the composition: authors, death years, first-publication year and their evidence
 ///    present; public domain in the US and in the EU by this law version's cut-offs;
-/// 3. the arrangement: a named typesetter and an admitted licence with its quotes found
-///    in their evidence, no restriction in the terms, and the credit-ledger id present
-///    exactly when the tier needs one; or an engraving by this project;
+/// 3. the arrangement: a named typesetter; the page licence and the terms each held, as
+///    whole words, by a quote of their evidence; no restriction declared in the terms and
+///    no restriction phrase in those quotes; no quote holding either text that also
+///    negates it; an admitted licence; and the credit-ledger id present exactly when the
+///    tier needs one. Or an engraving by this project;
 /// 4. the source edition: publisher, year and evidence present, the year not before first
 ///    publication, and the edition shown to be out of any scholarly-edition term;
 /// 5. the in-file licence: every file read again, and its statements equal to the
-///    receipt's record of them. For a third-party typesetting, each statement agrees with
-///    the host page's licence and at least one file states it outright. For this
+///    receipt's record of them. For a third-party typesetting, a statement that names a
+///    restriction is refused by that restriction's name; every other statement must agree
+///    with the host page's licence (equal to it, or for a markup, holding it as a whole
+///    phrase without negating it); and at least one file must state it outright. For this
 ///    project's own engraving, which has no host page, no file may state a licence.
 pub fn admit(receipt: &Receipt, supplied: &[Supplied<'_>]) -> Result<Admitted, Refusal> {
     receipt.check_structure().map_err(Refusal::Receipt)?;
@@ -257,21 +266,37 @@ fn check_arrangement(receipt: &Receipt) -> Result<Tier, Refusal> {
     if third.typesetter.trim().is_empty() {
         return Err(Refusal::MissingTypesetter);
     }
-    quoted(
+    let Some(page) = licence::normalise(&third.page_licence.text) else {
+        return Err(Refusal::Licence(LicenceRefusal::Unknown));
+    };
+    let page_quotes = quoted(
         receipt,
         &third.page_licence.evidence,
         &third.page_licence.text,
         "page licence",
     )?;
-    quoted(receipt, &third.terms.evidence, &third.terms.text, "terms")?;
+    let terms_quotes = quoted(receipt, &third.terms.evidence, &third.terms.text, "terms")?;
     // Restrictions are sorted by tag, so the first one is also the lowest tag: the reason
     // named does not depend on the order the receipt's author found them in.
     if let Some(&first) = third.terms.restrictions.first() {
         return Err(Refusal::Licence(first.into()));
     }
-    let Some(page) = licence::normalise(&third.page_licence.text) else {
-        return Err(Refusal::Licence(LicenceRefusal::Unknown));
-    };
+    // A restriction phrase in a quote that holds the licence or the terms refuses by name,
+    // whatever the page licence says.
+    for quote in page_quotes.iter().chain(&terms_quotes) {
+        if let Some(class) = licence::restriction_in(quote) {
+            return Err(Refusal::Licence(class));
+        }
+    }
+    // Evidence that holds the text but denies it does not affirm it.
+    if page_quotes.iter().any(|q| licence::negates(q)) {
+        return Err(Refusal::QuoteNegated {
+            what: "page licence",
+        });
+    }
+    if terms_quotes.iter().any(|q| licence::negates(q)) {
+        return Err(Refusal::QuoteNegated { what: "terms" });
+    }
     match licence::admitted_class(&page) {
         None => Err(Refusal::Licence(licence::refusal_for(&page))),
         Some(AdmittedClass::PublicDomain) => match &third.credit_ledger_id {
@@ -350,13 +375,21 @@ fn check_in_file(receipt: &Receipt, third: &ThirdParty, files: &Files<'_>) -> Re
     for f in &receipt.files {
         let found = recorded_statements(f, files)?;
         for st in &found {
-            let agrees = match licence::normalise(&st.text) {
-                None => false,
-                Some(text) if st.field == StatementField::LilypondCopyrightMarkup => {
-                    licence::contains_phrase(&text, &page)
-                        && licence::restriction_in(&text).is_none()
-                }
-                Some(text) => text == page,
+            let Some(text) = licence::normalise(&st.text) else {
+                return Err(Refusal::InFileLicenceMismatch {
+                    name: f.name.clone(),
+                });
+            };
+            // A file that names a restriction is refused by that restriction's name.
+            if let Some(class) = licence::restriction_in(&text) {
+                return Err(Refusal::Licence(class));
+            }
+            // A statement equals the page licence; a markup, which is prose, must hold the
+            // licence as a whole phrase and affirm it.
+            let agrees = if st.field == StatementField::LilypondCopyrightMarkup {
+                licence::contains_phrase(&text, &page) && !licence::negates(&text)
+            } else {
+                text == page
             };
             if !agrees {
                 return Err(Refusal::InFileLicenceMismatch {
@@ -383,20 +416,32 @@ fn evidenced(receipt: &Receipt, ids: &[String], what: &'static str) -> Result<()
     Ok(())
 }
 
-/// The evidence is recorded and one of its quotes contains the text.
+/// The normalised quotes of the evidence that hold the text: verbatim, and as whole words
+/// once both are normalised. At least one is required. A quote that does not normalise
+/// never holds anything.
 fn quoted(
     receipt: &Receipt,
     evidence: &str,
     text: &str,
     what: &'static str,
-) -> Result<(), Refusal> {
+) -> Result<Vec<String>, Refusal> {
     let Some(e) = receipt.evidence(evidence) else {
         return Err(Refusal::Unevidenced { what });
     };
-    if text.trim().is_empty() || !e.quotes.iter().any(|q| q.contains(text)) {
+    let Some(phrase) = licence::normalise(text) else {
+        return Err(Refusal::QuoteNotInEvidence { what });
+    };
+    let holding: Vec<String> = e
+        .quotes
+        .iter()
+        .filter(|q| q.contains(text))
+        .filter_map(|q| licence::normalise(q))
+        .filter(|q| licence::contains_phrase(q, &phrase))
+        .collect();
+    if holding.is_empty() {
         return Err(Refusal::QuoteNotInEvidence { what });
     }
-    Ok(())
+    Ok(holding)
 }
 
 pub(crate) fn sha256(bytes: &[u8]) -> [u8; 32] {

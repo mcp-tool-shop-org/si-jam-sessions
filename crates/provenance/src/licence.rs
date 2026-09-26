@@ -8,8 +8,20 @@
 //! phrases in [`restriction_in`] only choose which reason the refusal names. A text that
 //! matches none of them is refused as [`LicenceRefusal::Unknown`]. So an incomplete phrase
 //! list can mislabel a refusal but can never admit anything.
+//!
+//! **Restriction phrases are read everywhere.** Beyond naming a refused page licence,
+//! [`restriction_in`] is applied to every other licence text the predicate reads: the
+//! evidence quotes that hold the page licence and the terms, and each licence statement a
+//! file makes about itself. A phrase found in any of them refuses the score by its class,
+//! even when the page licence is on the admitted list. AI wording is the first class
+//! looked for.
+//!
+//! **A text must affirm, not merely mention.** Where a text may hold the licence alongside
+//! other text (a copyright markup, an evidence quote), it counts only if [`negates`] finds
+//! no negating, limiting, lapsing or hedging word and no question mark.
 
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use crate::receipt::Restriction;
 
@@ -60,8 +72,37 @@ const ADMITTED: &[(&str, AdmittedClass)] = &[
 ];
 
 /// Phrases that name a refusal, in precedence order: the first class with a phrase in the
-/// text is the reason given. Matching is on normalised text.
+/// text is the reason given. Each phrase must occur as whole words (see
+/// [`contains_phrase`]) in normalised text, so `ai` does not match inside `maintainer`.
 const REFUSAL_PHRASES: &[(LicenceRefusal, &[&str])] = &[
+    (
+        LicenceRefusal::AiRestricted,
+        &[
+            "ai",
+            "a.i.",
+            "genai",
+            "artificial intelligence",
+            "machine learning",
+            "machine-learning",
+            "deep learning",
+            "neural network",
+            "neural networks",
+            "text and data mining",
+            "text & data mining",
+            "text-and-data mining",
+            "data mining",
+            "tdm",
+            "llm",
+            "llms",
+            "language model",
+            "language models",
+            "large language model",
+            "large language models",
+            "model training",
+            "training data",
+            "to train",
+        ],
+    ),
     (LicenceRefusal::AllRightsReserved, &["all rights reserved"]),
     (
         LicenceRefusal::NoRedistribution,
@@ -69,19 +110,30 @@ const REFUSAL_PHRASES: &[(LicenceRefusal, &[&str])] = &[
             "no redistribution",
             "not for redistribution",
             "may not be redistributed",
+            "do not redistribute",
             "personal use only",
         ],
     ),
     (
         LicenceRefusal::NonCommercial,
-        &["noncommercial", "non-commercial", "cc by-nc", "cc-by-nc"],
+        &[
+            "noncommercial",
+            "non-commercial",
+            "non commercial",
+            "not for commercial",
+            "no commercial",
+            "cc by-nc",
+            "cc-by-nc",
+        ],
     ),
     (
         LicenceRefusal::NoDerivatives,
         &[
-            "noderiv",
-            "no-deriv",
+            "noderivs",
+            "noderivatives",
             "no derivatives",
+            "no-derivatives",
+            "no derivative works",
             "cc by-nd",
             "cc-by-nd",
         ],
@@ -96,6 +148,44 @@ const REFUSAL_PHRASES: &[(LicenceRefusal, &[&str])] = &[
             "cc-by-sa",
         ],
     ),
+];
+
+/// Words that negate, limit, lapse or hedge what a text says, matched as whole words.
+/// The list is broad on purpose: a text that trips it is refused, never admitted.
+const NEGATING_WORDS: &[&str] = &[
+    // Negation.
+    "not",
+    "no",
+    "never",
+    "non",
+    "nor",
+    "neither",
+    "none",
+    "nothing",
+    "cannot",
+    "without",
+    // Exception and limitation.
+    "except",
+    "excepting",
+    "excluding",
+    "unless",
+    "until",
+    "only",
+    "but",
+    // Lapse.
+    "formerly",
+    "previously",
+    "expired",
+    "revoked",
+    "withdrawn",
+    // Hedging.
+    "maybe",
+    "perhaps",
+    "possibly",
+    "probably",
+    "presumably",
+    "disputed",
+    "unconfirmed",
 ];
 
 /// The minimal normalisation used for every licence comparison:
@@ -140,8 +230,45 @@ pub fn admitted_class(normalised: &str) -> Option<AdmittedClass> {
 pub fn restriction_in(normalised: &str) -> Option<LicenceRefusal> {
     REFUSAL_PHRASES
         .iter()
-        .find(|(_, phrases)| phrases.iter().any(|p| normalised.contains(p)))
+        .find(|(_, phrases)| phrases.iter().any(|p| contains_phrase(normalised, p)))
         .map(|&(class, _)| class)
+}
+
+/// True if a normalised text negates, limits, lapses, hedges or questions what it says.
+///
+/// The rule, closed and documented: the text holds a question mark; or one of
+/// [`NEGATING_WORDS`] as a whole word; or a contraction ending in *n't*, seen as a lone
+/// `t` after a word ending in `n` (`isn't`, `can't`, `don't`, with either apostrophe).
+/// Words are the runs of alphanumeric characters, so `non-public` holds the word `non`.
+///
+/// It applies where a text may hold the licence alongside other text: a copyright markup
+/// must affirm the page licence, and an evidence quote that holds a licence or terms text
+/// must not deny it. Over-refusal is the intended failure mode.
+pub fn negates(normalised: &str) -> bool {
+    if normalised.contains('?') {
+        return true;
+    }
+    let words: Vec<&str> = normalised
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    words.iter().enumerate().any(|(i, w)| {
+        NEGATING_WORDS.contains(w) || (*w == "t" && i > 0 && words[i - 1].ends_with('n'))
+    })
+}
+
+/// Lower-cases ASCII and collapses runs of ASCII whitespace to one space, trimming the
+/// ends. Unlike [`normalise`] it never fails: it is for looking for phrases in text that
+/// may hold control characters, never for comparing licences.
+pub fn fold(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for word in text.split_ascii_whitespace() {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(&word.to_ascii_lowercase());
+    }
+    out
 }
 
 /// The reason a normalised licence text that is not admitted is refused.
@@ -247,6 +374,106 @@ mod tests {
         assert_eq!(refusal_for("creative commons attribution 3.0"), Unknown);
         assert_eq!(refusal_for("cc0"), Unknown);
         assert_eq!(refusal_for("something else"), Unknown);
+    }
+
+    #[test]
+    fn ai_wording_is_named_first() {
+        use LicenceRefusal::*;
+        for text in [
+            "no ai training",
+            "not for a.i. use",
+            "no genai",
+            "not for artificial intelligence",
+            "may not be used for machine learning",
+            "no machine-learning",
+            "deep learning prohibited",
+            "not to be fed to a neural network",
+            "text and data mining reserved",
+            "text & data mining reserved",
+            "tdm reserved",
+            "no data mining",
+            "not for llms",
+            "no large language model may read this",
+            "not for model training",
+            "not to be used as training data",
+            "not to train anything",
+            // AI wording outranks every other class.
+            "cc-by-nc-sa-4.0; no ai training",
+            "all rights reserved, including tdm",
+        ] {
+            assert_eq!(refusal_for(text), AiRestricted, "{text}");
+        }
+    }
+
+    #[test]
+    fn restriction_phrases_match_whole_words_only() {
+        // `ai` inside a word, and restriction words inside longer words, match nothing.
+        for text in [
+            "maintained by chris sawer",
+            "said the typesetter",
+            "raised in st. louis",
+            "attribution",
+            "trained ear",
+            "commercially printed",
+        ] {
+            assert_eq!(restriction_in(text), None, "{text}");
+        }
+        // The named forms still match at hyphens and punctuation.
+        assert_eq!(
+            restriction_in("attribution-noderivs 3.0"),
+            Some(LicenceRefusal::NoDerivatives)
+        );
+        assert_eq!(
+            restriction_in("cc-by-sa-4.0"),
+            Some(LicenceRefusal::ShareAlike)
+        );
+    }
+
+    #[test]
+    fn negation_is_a_closed_word_rule() {
+        for text in [
+            "not in the public domain",
+            "no longer public domain",
+            "never placed in the public domain",
+            "non-public domain",
+            "public domain, except the fingering",
+            "public domain in the us only",
+            "public domain but not the edition",
+            "formerly public domain",
+            "possibly public domain",
+            "public domain?",
+            "it isn't public domain",
+            "it isn\u{2019}t public domain",
+            "we can't say",
+            "it ain't so",
+        ] {
+            assert!(negates(text), "{text}");
+        }
+        for text in [
+            // The Entertainer's own markup text, normalised.
+            "mutopia project typeset using lilypond by placed in the public domain by the \
+             typesetter free to distribute, modify, and perform",
+            "copyright: public domain",
+            "the contributor of this music has dedicated their contribution into the public \
+             domain.",
+            // Words that only contain a negating word are not negating words.
+            "nothingness",
+            "notation is public domain",
+            "know",
+            "button",
+            "a t by itself",
+        ] {
+            assert!(!negates(text), "{text}");
+        }
+    }
+
+    #[test]
+    fn fold_never_fails() {
+        assert_eq!(
+            fold("  Not For\tAI\u{0}  Training "),
+            "not for ai\u{0} training"
+        );
+        assert_eq!(fold(""), "");
     }
 
     #[test]

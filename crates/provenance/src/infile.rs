@@ -16,8 +16,9 @@
 //!
 //! **SMF.** Every copyright meta event (`FF 02`) is a [`StatementField::SmfCopyright`].
 //! Every other text meta event (text, track name, instrument, lyric, marker, cue point,
-//! program, device) whose text mentions copyright or a licence (see [`smf_marker`]) is a
-//! [`StatementField::SmfText`], so a notice written into the wrong event is still read.
+//! program, device) whose text mentions copyright or a licence, or names a restriction
+//! such as a ban on AI use (see [`smf_marker`]), is a [`StatementField::SmfText`], so a
+//! notice written into the wrong event is still read.
 //! Only a plain SMF is read: the bytes open with one `MThd` chunk of length 6, and every
 //! later chunk is an `MTrk`. midly would unwrap a RIFF (RMID) file and skip unknown chunks
 //! unread, even with `strict`, and either could hold a licence notice this reader never
@@ -34,6 +35,7 @@ use alloc::vec::Vec;
 
 use midly::{MetaMessage, Smf, TrackEventKind};
 
+use crate::licence;
 use crate::receipt::{Media, Statement, StatementField};
 
 /// Why a file's licence statements could not be read.
@@ -131,9 +133,11 @@ fn plain_smf(bytes: &[u8]) -> Result<u16, Unreadable> {
     Ok(division)
 }
 
-/// True if SMF text bytes mention copyright or a licence: one of `copyright`, `(c)`,
-/// `licen`, `public domain`, `creative commons`, `rights reserved` (ASCII, any case), or
-/// a copyright sign (U+00A9 in UTF-8, or byte `A9` in text that is not UTF-8).
+/// True if SMF text bytes are a licence statement. They mention copyright or a licence:
+/// one of `copyright`, `(c)`, `licen`, `public domain`, `creative commons`,
+/// `rights reserved` (ASCII, any case), or a copyright sign (U+00A9 in UTF-8, or byte
+/// `A9` in text that is not UTF-8). Or they hold a restriction phrase as whole words
+/// (`licence::restriction_in`), which is how a ban on AI use in a text event is read.
 pub fn smf_marker(raw: &[u8]) -> bool {
     const MARKERS: &[&[u8]] = &[
         b"copyright",
@@ -151,7 +155,9 @@ pub fn smf_marker(raw: &[u8]) -> bool {
         Ok(text) => text.contains('\u{a9}'),
         Err(_) => raw.contains(&0xA9),
     };
-    ascii_hit || sign
+    let restriction =
+        licence::restriction_in(&licence::fold(&String::from_utf8_lossy(raw))).is_some();
+    ascii_hit || sign || restriction
 }
 
 fn lilypond(bytes: &[u8]) -> Result<Vec<Statement>, Unreadable> {
@@ -613,6 +619,24 @@ mod tests {
         assert!(smf_marker("\u{a9} 2001".as_bytes()));
         assert!(smf_marker(b"\xa9 2001"));
         assert!(!smf_marker("Café".as_bytes()));
+        // A restriction phrase makes a text event a statement, AI wording included.
+        assert!(smf_marker(b"Not for AI training"));
+        assert!(smf_marker(b"NO   TDM"));
+        assert!(smf_marker(b"Text and data mining reserved"));
+        assert!(smf_marker(b"For personal use only"));
+        // `ai` inside a word is not AI wording; the Entertainer's own events are not
+        // statements.
+        for text in [
+            &b"Main theme"[..],
+            b"Raised fourth",
+            b"The Entertainer",
+            b"creator: ",
+            b"GNU LilyPond 2.19.32          ",
+            b"up:",
+            b"down:",
+        ] {
+            assert!(!smf_marker(text), "{text:?}");
+        }
         let latin1 = smf_with_meta(&[(0x02, b"\xa9 2001")]);
         assert_eq!(
             statements(Media::Smf, &latin1),

@@ -25,10 +25,18 @@
 //! # Normalisation
 //!
 //! Licence texts are compared after [`normalise`]: ends trimmed, inner ASCII whitespace
-//! runs collapsed to one space, ASCII lower-cased, nothing else. A statement read from a
-//! file must then equal the page's licence exactly; a LilyPond copyright *markup*, which
-//! is prose, must instead contain the page's licence as a whole phrase and no restriction
-//! phrase. A text that does not normalise refuses.
+//! runs collapsed to one space, ASCII lower-cased, nothing else. A text that does not
+//! normalise refuses.
+//!
+//! - **Restriction phrases** (AI use, all rights reserved, no redistribution,
+//!   non-commercial, no derivatives, share-alike) are looked for, as whole words, in every
+//!   licence text the predicate reads. One found anywhere refuses by its class.
+//! - **A statement** read from a file must equal the page's licence exactly.
+//! - **A LilyPond copyright markup**, which is prose, must hold the page's licence as a
+//!   whole phrase and affirm it: no negating, limiting, lapsing or hedging word and no
+//!   question mark. The word list is closed and documented in `licence.rs`.
+//! - **An evidence quote** must hold the page licence or the terms verbatim and as whole
+//!   words, and a quote that holds either text must not negate it by the same rule.
 
 #![no_std]
 
