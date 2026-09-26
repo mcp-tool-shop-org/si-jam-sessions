@@ -2075,6 +2075,7 @@ const LEFT_OFF_THE_FIXTURE: &[&str] = &[
     "loc-ditson-1862-muscivilwar-200000858-004.jp2",
     "ia-prayer-meeting-tune-book-1859-title-n6.jpg",
     "ia-prayer-meeting-tune-book-1859-verso-n7.jpg",
+    // A full-resolution copy of a page the fixture carries at half resolution.
     "loc-glory-glory-1861-ditson-002.jp2",
     // The archives' catalogue records of documents the fixture cites.
     "ia-prayer-meeting-tune-book-1859-metadata.json",
