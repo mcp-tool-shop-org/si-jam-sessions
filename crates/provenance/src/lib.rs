@@ -156,6 +156,8 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 ///   included.
 /// - `67228d5`: AI product names join the AI vocabulary (chatgpt, gpt, openai, ml and
 ///   others), and a text that prohibits or limits anything no longer affirms its licence.
+/// - `d9ebfdc`: the nouns "restriction" and "restrictions" no longer negate, so the Public
+///   Domain Mark's sentence affirms; the verb forms still negate.
 pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {
