@@ -216,3 +216,23 @@ Scored 0–3 against the studio's six workflow standards. Nothing is built yet, 
 **The CC-BY tier.** You might expect the corpus to stay public-domain or self-engraved only. The lock admits CC-BY-4.0 in its own tier with a credit ledger, because Creative Commons treats a source link as training attribution and the tier widens the shelf. Share-alike, non-commercial and no-derivatives stay refused. Override by striking the tier before the first ingest.
 
 **The first score.** You might expect one of our own engravings. The lock starts from a receipted Mutopia public-domain typesetting of *The Entertainer*, because slice 1 tests the law and not the engraving pipeline. Override by naming another score with its receipt.
+
+## Decisions taken while building slice 1
+
+Each was settled by what slice 1 measured, under the Director's delegation, and can be overridden like the three above.
+
+**The quantum and the horizon.** *Q* = 48 samples (1 ms), so a lateness in quanta reads as milliseconds. It matches WinMM's 1 ms input resolution and divides both the gate (1,920 = 40 × 48) and the rate. *H* = 100 quanta (100 ms), the host's render-ahead budget. Nothing is committed before the first step.
+
+**The gate is inclusive.** A note is on time when |onset − score onset| ≤ 1,920 samples; 1,921 is late or early. The row always carries the exact sample count. Milliseconds with one decimal are exact only for multiples of 24 samples, so the displayed milliseconds round half away from zero.
+
+**Live input is a record, not a proposal.** A live note is admitted at its own sample onset on the law's clock; the commit horizon refuses late *proposals* only. You might expect the horizon to apply to every input. It cannot: a note a person plays always arrives at or behind the committed horizon, and "the live input is admitted on the law's clock and never waits for the model" already treats it as a record.
+
+**Which file carries the licence.** A receipt is admitted when every licence statement inside every receipted file agrees with the host page, and at least one file states it. You might expect every file to state its own licence. A strict per-file reading would refuse every MIDI that LilyPond renders, because those carry no licence text; for *The Entertainer* the `.ly` states "Public Domain" and the `.mid` states nothing.
+
+**Ingest refuses before it parses.** Timecode-timed, RIFF-wrapped and unknown-chunk SMFs are refused before the bytes reach `midly`. `midly` 0.5.3 panics on a timecode frame byte of 0x80 when overflow checks are on (measured), and it skips unknown chunks even under `strict`.
+
+**std reaches the law only unnamed.** The law is `#![no_std]` and links std once, as `extern crate std as _;`, for its wasm32 allocator and its trapping panic handler; a test fails the build on any named binding outside test code. A pinned wasm digest needs path remapping, because `sha2`'s panic locations embed the builder's cargo home.
+
+**CC0.** CC0 is a public-domain dedication. It will be admitted as public-domain-equivalent in the next ingest change; until then the predicate refuses it as unknown.
+
+**Still open:** whether *The Entertainer*'s `.mid` matches its `.ly` after the latter's 2016-11 formatting commit (a re-render with LilyPond 2.19.32 settles it); the human clearance path for editions still inside their term; and the licence text for the project's own engravings.
