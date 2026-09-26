@@ -1,0 +1,1004 @@
+{
+ "schema": "si-jam-research/sample-survey/1",
+ "built_by": "work/build_samples_manifest.py",
+ "libraries": [
+  {
+   "id": "vcsl-steinway-b",
+   "name": "VCSL (Versilian Community Sample Library) - Grand Piano, Steinway B ('S Model B', Joachim's Piano)",
+   "maker": "Versilian Studios LLC (Sam Gossner); added in VCSL 0.1.0c, commit e89a7f2ad8, 2018-03-23",
+   "instrument": "Steinway model B grand",
+   "licence": {
+    "name": "CC0 1.0 Universal",
+    "url": "https://github.com/sgossner/VCSL/blob/master/LICENSE",
+    "stated_at": [
+     "https://github.com/sgossner/VCSL (LICENSE, README)",
+     "https://versilian-studios.com/vcsl/",
+     "https://versilian-studios.com/vcsl-keys/"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/vcsl-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sgossner/VCSL/master/LICENSE",
+     "fetched_at": "2026-09-26T11:52:42Z",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "CC0 1.0 Universal",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/vcsl-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sgossner/VCSL/master/LICENSE",
+     "fetched_at": "2026-09-26T11:52:42Z",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "(iv) for any purpose whatsoever,\nincluding without limitation commercial, advertising or promotional\npurposes",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    },
+    {
+     "file": "samples/vcsl-README.md",
+     "url": "https://raw.githubusercontent.com/sgossner/VCSL/master/README.md",
+     "fetched_at": "2026-09-26T11:52:41Z",
+     "sha256": "6f7214a188f106c917d6503748485413c3e47cf56bce69f82beb9d16aa0894a9",
+     "text": "This collection is under a Creative Commons 0 license. Essentially it's Public Domain- you can do whatever you want with these sounds (even make commercial software), no royalties, no credit, no special terms.",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/versilian-vcsl-keys.html",
+     "url": "https://versilian-studios.com/vcsl-keys/",
+     "fetched_at": "2026-09-26T11:58:48Z",
+     "sha256": "22316cad2ea496749a08cd3372c5e00a0b2d3450cc7b29b431bc789e9e1859f6",
+     "text": "No royalties, attribution, or credit are required to use these samples, and they can be used in commercial and non-commercial works without any restrictions or limitations.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/versilian-vcsl-keys.html",
+     "url": "https://versilian-studios.com/vcsl-keys/",
+     "fetched_at": "2026-09-26T11:58:48Z",
+     "sha256": "22316cad2ea496749a08cd3372c5e00a0b2d3450cc7b29b431bc789e9e1859f6",
+     "text": "Grand Piano, “S Model B” ( Joachim’s Piano )",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/versilian-vcsl-keys.html",
+     "url": "https://versilian-studios.com/vcsl-keys/",
+     "fetched_at": "2026-09-26T11:58:48Z",
+     "sha256": "22316cad2ea496749a08cd3372c5e00a0b2d3450cc7b29b431bc789e9e1859f6",
+     "text": "Pianos “S” and “Knight” both feature sustain pedal samples, and all pianos feature releases.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/vcsl-steinwayb-NORMALIZED.txt",
+     "url": "https://raw.githubusercontent.com/sgossner/VCSL/master/Chordophones/Zithers/Grand%20Piano%2C%20Steinway%20B/NORMALIZED.txt",
+     "fetched_at": "2026-09-26T11:52:42Z",
+     "sha256": "7ae47ef3ae3496c79d32a6814de23c1ed051cf8f8996c67c88cde9a4a0943289",
+     "text": "The sustain and non-sustain articulations for this instrument have been normalized.",
+     "check": "byte-exact substring of the fetched file"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": true,
+    "deciding_clause": {
+     "file": "samples/vcsl-LICENSE.txt",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "(iv) for any purpose whatsoever,\nincluding without limitation commercial, advertising or promotional\npurposes",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    },
+    "credit_in_file_metadata": "none required",
+    "credit_on_page": "none required (optional courtesy credit)"
+   },
+   "redistribution_and_commercial": "allowed (CC0 waiver)",
+   "specs": {
+    "velocity_layers": 3,
+    "note_spacing": "whole tones; 42 notes A#0 (MIDI 22) to G#7 (MIDI 104)",
+    "sample_format": "WAV, 44.1 kHz, 24-bit, stereo (header probe of JHPiano_Sus_Close_C4_vl4_rr1.wav)",
+    "sets": "pedal up (NoSus, 126 files) and pedal down (Sus, 126 files), one 'Close' mic",
+    "release_samples": "yes: Rel, 99 files = 33 notes (A#0-D6) x 3 layers",
+    "pedal_noise": "no separate pedal-noise samples found in the listing",
+    "round_robins": 1,
+    "note": "layers are normalized; dynamics must come from a velocity curve (NORMALIZED.txt)"
+   },
+   "size": {
+    "tree": {
+     "listing": "samples/gh-tree-sgossner_VCSL.json",
+     "tree_sha": "c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e",
+     "truncated": false,
+     "path_prefix": "Chordophones/Zithers/Grand Piano, Steinway B/",
+     "audio_files": 351,
+     "audio_bytes": 1339722744,
+     "all_bytes": 1339722934,
+     "per_file_checksum": "git blob SHA-1 for every file in the listing",
+     "listing_sha256": "b765fb28551b811a751090f32865420e177e03d0aacb852f6d11ae27bf8cce89",
+     "listing_fetched_at": "2026-09-26T12:05:50Z",
+     "listing_url": "https://api.github.com/repos/sgossner/VCSL/git/trees/master?recursive=1"
+    },
+    "alt_download": {
+     "url": "https://versilian-studios.com/Distro/VCSL_Keys.zip",
+     "note": "all VCSL keyboards (3 grands, 2 uprights, 5 harpsichords), SFZ package",
+     "head": {
+      "status": 200,
+      "fetched_at": "2026-09-26T11:59:05Z",
+      "headers": {
+       "Server": "Apache/2",
+       "Last-Modified": "Wed, 11 Oct 2023 09:28:37 GMT",
+       "ETag": "\"271028eb-6076d72b82908\"",
+       "Accept-Ranges": "bytes",
+       "Content-Length": "655370475",
+       "Content-Type": "application/zip"
+      }
+     }
+    }
+   },
+   "canonical_download": "https://github.com/sgossner/VCSL (folder Chordophones/Zithers/Grand Piano, Steinway B); or VCSL_Keys.zip from versilian-studios.com",
+   "checksums_published": "git blob SHA-1 per file (GitHub tree listing); none for VCSL_Keys.zip (HEAD gives ETag only)",
+   "probe": "vcsl-steinwayb-wav",
+   "format_probe": {
+    "url": "https://raw.githubusercontent.com/sgossner/VCSL/master/Chordophones/Zithers/Grand%20Piano%2C%20Steinway%20B/Sus/JHPiano_Sus_Close_C4_vl4_rr1.wav",
+    "bytes_read": 128,
+    "content_range": "bytes 0-127/6387436",
+    "parsed": {
+     "container": "wav",
+     "format_tag": 1,
+     "channels": 2,
+     "sample_rate": 44100,
+     "bits_per_sample": 24
+    },
+    "fetched_at": "2026-09-26T11:56:05Z"
+   }
+  },
+  {
+   "id": "vcsl-kawai",
+   "name": "VCSL - Grand Piano, Kawai ('K', from VSCO 2 Pro)",
+   "maker": "Versilian Studios LLC",
+   "instrument": "Kawai grand",
+   "licence": {
+    "name": "CC0 1.0 Universal",
+    "url": "https://github.com/sgossner/VCSL/blob/master/LICENSE",
+    "stated_at": [
+     "same as vcsl-steinway-b"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/vcsl-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sgossner/VCSL/master/LICENSE",
+     "fetched_at": "2026-09-26T11:52:42Z",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "CC0 1.0 Universal",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/versilian-vcsl-keys.html",
+     "url": "https://versilian-studios.com/vcsl-keys/",
+     "fetched_at": "2026-09-26T11:58:48Z",
+     "sha256": "22316cad2ea496749a08cd3372c5e00a0b2d3450cc7b29b431bc789e9e1859f6",
+     "text": "Grand Piano, “K” (from VSCO 2 Pro )",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": true,
+    "deciding_clause": {
+     "file": "samples/vcsl-LICENSE.txt",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "(iv) for any purpose whatsoever,\nincluding without limitation commercial, advertising or promotional\npurposes",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    },
+    "credit_in_file_metadata": "none required",
+    "credit_on_page": "none required"
+   },
+   "redistribution_and_commercial": "allowed (CC0 waiver)",
+   "specs": {
+    "velocity_layers": "up to 4 (33 of 38 notes have 4)",
+    "note_spacing": "mostly minor thirds/tritone steps, 38 sustain notes",
+    "sample_format": "WAV, 44.1 kHz, 16-bit, stereo (header probe)",
+    "release_samples": "yes, 84 files (34 notes)",
+    "pedal_noise": "none found",
+    "sustain_pedal_set": "no (per the VCSL Keys page only 'S' and 'Knight' have pedal samples)"
+   },
+   "size": {
+    "tree": {
+     "listing": "samples/gh-tree-sgossner_VCSL.json",
+     "tree_sha": "c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e",
+     "truncated": false,
+     "path_prefix": "Chordophones/Zithers/Grand Piano, Kawai/",
+     "audio_files": 228,
+     "audio_bytes": 459886056,
+     "all_bytes": 459886063,
+     "per_file_checksum": "git blob SHA-1 for every file in the listing",
+     "listing_sha256": "b765fb28551b811a751090f32865420e177e03d0aacb852f6d11ae27bf8cce89",
+     "listing_fetched_at": "2026-09-26T12:05:50Z",
+     "listing_url": "https://api.github.com/repos/sgossner/VCSL/git/trees/master?recursive=1"
+    }
+   },
+   "canonical_download": "https://github.com/sgossner/VCSL (folder Chordophones/Zithers/Grand Piano, Kawai)",
+   "checksums_published": "git blob SHA-1 per file",
+   "probe": "vcsl-kawai-wav",
+   "format_probe": {
+    "url": "https://raw.githubusercontent.com/sgossner/VCSL/master/Chordophones/Zithers/Grand%20Piano%2C%20Kawai/Sustains/GPiano_sus_C4_v4_rr1_Player.wav",
+    "bytes_read": 128,
+    "content_range": "bytes 0-127/3196992",
+    "parsed": {
+     "container": "wav",
+     "format_tag": 1,
+     "channels": 2,
+     "sample_rate": 44100,
+     "bits_per_sample": 16
+    },
+    "fetched_at": "2026-09-26T11:56:06Z"
+   }
+  },
+  {
+   "id": "osiris-piano",
+   "name": "Osiris Piano (Versilian Studios and Karoryfer Samples, KVRDC 2026)",
+   "maker": "Versilian Studios (recording); Karoryfer Samples (SFZ, GUI)",
+   "instrument": "worn Yamaha C2 grand, recorded at half-stick with the soft pedal down, very low dynamics",
+   "licence": {
+    "name": "CC0 1.0 Universal",
+    "url": "https://github.com/sfzinstruments/Osiris_Piano/blob/main/LICENSE",
+    "stated_at": [
+     "LICENSE",
+     "beta_notes.txt"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/sfz-osiris-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/Osiris_Piano/main/LICENSE",
+     "fetched_at": "2026-09-26T11:51:16Z",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "CC0 1.0 Universal",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/sfz-osiris-beta_notes.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/Osiris_Piano/main/beta_notes.txt",
+     "fetched_at": "2026-09-26T11:51:17Z",
+     "sha256": "9cb97e424320c50ea4d5839d851ee0869b3eb98bac5b4485dd89991c4420dfdf",
+     "text": "CC0 license added.",
+     "check": "byte-exact substring of the fetched file"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": true,
+    "deciding_clause": {
+     "file": "samples/sfz-osiris-LICENSE.txt",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "(iv) for any purpose whatsoever,\nincluding without limitation commercial, advertising or promotional\npurposes",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    },
+    "credit_in_file_metadata": "none required",
+    "credit_on_page": "none required"
+   },
+   "redistribution_and_commercial": "allowed (CC0 waiver)",
+   "specs": {
+    "velocity_layers": 2,
+    "note_spacing": "diatonic (white keys only), 52 notes in the sustain-pedal set",
+    "sample_format": "FLAC, 48 kHz, 16-bit, stereo (header probe)",
+    "sets": "pedal up and pedal down; each also in a non-denoised variant; three mics (inside, edge, outside)",
+    "release_samples": "no separate release samples (release is an envelope)",
+    "round_robins": 0,
+    "manual": "samples/sfz-osiris-OsirisPiano_Manual.pdf (pages 2-3 describe the instrument)"
+   },
+   "size": {
+    "tree": {
+     "listing": "samples/gh-tree-sfzinstruments_Osiris_Piano.json",
+     "tree_sha": "18c6afccb60cff458edbf7c394571783e074e1e9",
+     "truncated": false,
+     "path_prefix": null,
+     "audio_files": 1242,
+     "audio_bytes": 483175513,
+     "all_bytes": 489903728,
+     "per_file_checksum": "git blob SHA-1 for every file in the listing",
+     "listing_sha256": "513e824f0da4ce5b6d8287962fa2143577a0ba519110f7b3e8b2e38dd688e131",
+     "listing_fetched_at": "2026-09-26T12:05:44Z",
+     "listing_url": "https://api.github.com/repos/sfzinstruments/Osiris_Piano/git/trees/main?recursive=1"
+    }
+   },
+   "canonical_download": "https://github.com/sfzinstruments/Osiris_Piano",
+   "checksums_published": "git blob SHA-1 per file",
+   "probe": "osiris-flac",
+   "format_probe": {
+    "url": "https://raw.githubusercontent.com/sfzinstruments/Osiris_Piano/main/UC-Sus/A/Piano_UC-Sus_MicA_A0_vl2.flac",
+    "bytes_read": 128,
+    "content_range": "bytes 0-127/355425",
+    "parsed": {
+     "container": "flac",
+     "channels": 2,
+     "sample_rate": 48000,
+     "bits_per_sample": 16,
+     "total_samples": 772848
+    },
+    "fetched_at": "2026-09-26T11:56:13Z"
+   }
+  },
+  {
+   "id": "salamander-v3",
+   "name": "Salamander Grand Piano V3 (Alexander Holm)",
+   "maker": "Alexander Holm (archive.org item uploaded 2015 by a third party; item date 2011-08-12)",
+   "instrument": "Yamaha C5",
+   "licence": {
+    "name": "CC BY 3.0 Unported",
+    "url": "http://creativecommons.org/licenses/by/3.0/",
+    "stated_at": [
+     "https://archive.org/details/SalamanderGrandPianoV3 (licenseurl + description)",
+     "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+     "https://github.com/sfzinstruments/SalamanderGrandPiano (README, LICENSE)"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/ia-SalamanderGrandPianoV3-metadata.json",
+     "url": "https://archive.org/metadata/SalamanderGrandPianoV3",
+     "fetched_at": "2026-09-26T11:53:38Z",
+     "sha256": "4b7b44b77fee513b04a3cc18644eba9cf729f44554ab0e8840ad489350ed8974",
+     "text": "\"licenseurl\":\"http://creativecommons.org/licenses/by/3.0/\"",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/ia-SalamanderGrandPianoV3-metadata.json",
+     "url": "https://archive.org/metadata/SalamanderGrandPianoV3",
+     "fetched_at": "2026-09-26T11:53:38Z",
+     "sha256": "4b7b44b77fee513b04a3cc18644eba9cf729f44554ab0e8840ad489350ed8974",
+     "text": "Author: Alexander Holm",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/ia-SalamanderGrandPianoV3-metadata.json",
+     "url": "https://archive.org/metadata/SalamanderGrandPianoV3",
+     "fetched_at": "2026-09-26T11:53:38Z",
+     "sha256": "4b7b44b77fee513b04a3cc18644eba9cf729f44554ab0e8840ad489350ed8974",
+     "text": "Recorded @ 48khz24bit<br />16 Velocity layers Sampled in minor thirds from the lowest A.",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/ia-SalamanderGrandPianoV3-metadata.json",
+     "url": "https://archive.org/metadata/SalamanderGrandPianoV3",
+     "fetched_at": "2026-09-26T11:53:38Z",
+     "sha256": "4b7b44b77fee513b04a3cc18644eba9cf729f44554ab0e8840ad489350ed8974",
+     "text": "Replaced all pedal noise samples, there are now two down and two up samples.",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/freepats-acoustic-grand-piano.html",
+     "url": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+     "fetched_at": "2026-09-26T11:53:41Z",
+     "sha256": "b46621c9ed55008986c10a050531de2a3a2631a991e0333117f767365c847fdc",
+     "text": "Author: Alexander Holm, axeldenstore (at) gmail (dot) com. Creative Commons Attribution 3.0 license.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/sfz-salamander-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/SalamanderGrandPiano/master/LICENSE",
+     "fetched_at": "2026-09-26T11:51:44Z",
+     "sha256": "e6bc9e9c474700b708f568bac9e5a8a9bcb2b1dad53442f5ba449fcb848b8e76",
+     "text": "Attribution 3.0 Unported",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/sfz-salamander-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/SalamanderGrandPiano/master/LICENSE",
+     "fetched_at": "2026-09-26T11:51:44Z",
+     "sha256": "e6bc9e9c474700b708f568bac9e5a8a9bcb2b1dad53442f5ba449fcb848b8e76",
+     "text": "derivative work, arrangement of music or other alterations of a\n    literary or artistic work, or phonogram or performance",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": true,
+    "deciding_clause": {
+     "file": "samples/sfz-salamander-LICENSE.txt",
+     "sha256": "e6bc9e9c474700b708f568bac9e5a8a9bcb2b1dad53442f5ba449fcb848b8e76",
+     "text": "d. to Distribute and Publicly Perform Adaptations.",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    },
+    "credit_clause": [
+     {
+      "file": "samples/sfz-salamander-LICENSE.txt",
+      "sha256": "e6bc9e9c474700b708f568bac9e5a8a9bcb2b1dad53442f5ba449fcb848b8e76",
+      "text": "b. If You Distribute, or Publicly Perform the Work or any Adaptations or\n    Collections, You must, unless a request has been made pursuant to\n    Section 4(a), keep intact all copyright notices for the Work and\n    provide, reasonable to the medium or means You are utilizing: (i) the\n    name of the Original Author",
+      "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+     },
+     {
+      "file": "samples/sfz-salamander-LICENSE.txt",
+      "sha256": "e6bc9e9c474700b708f568bac9e5a8a9bcb2b1dad53442f5ba449fcb848b8e76",
+      "text": "(iv) , consistent with Section 3(b), in the case of an Adaptation,\n    a credit identifying the use of the Work in the Adaptation",
+      "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+     }
+    ],
+    "credit_in_file_metadata": "yes (reasonable to the medium): author, title, licence URI, e.g. 'Piano samples: Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0, https://creativecommons.org/licenses/by/3.0/'",
+    "credit_on_page": "yes: the same credit beside the player, at least as prominent as other contributor credits (4(b))"
+   },
+   "redistribution_and_commercial": "allowed with attribution; shipping the samples must carry the licence (4(a)) and the credit",
+   "specs": {
+    "velocity_layers": 16,
+    "note_spacing": "minor thirds from A0 (30 notes, A0-C8)",
+    "sample_format": "FLAC 48 kHz 24-bit stereo in the sfz repo (header probe); archive.org also has 44.1/16 and Ogg versions",
+    "release_samples": "yes: 88 hammer-noise releases (chromatic, one layer); 69 string-resonance releases (minor thirds, three layers)",
+    "pedal_noise": "yes: 2 pedal-down + 2 pedal-up samples"
+   },
+   "size": {
+    "tree": {
+     "listing": "samples/gh-tree-sfzinstruments_SalamanderGrandPiano.json",
+     "tree_sha": "3382bf9496bba2486f5ab0de55a264d1dfc38404",
+     "truncated": false,
+     "path_prefix": null,
+     "audio_files": 641,
+     "audio_bytes": 748397030,
+     "all_bytes": 748451483,
+     "per_file_checksum": "git blob SHA-1 for every file in the listing",
+     "listing_sha256": "401fa193d9ca6f9eed73c62568b1a2e1eddd1ff7c530b2631f04c00c6f3fe171",
+     "listing_fetched_at": "2026-09-26T12:05:46Z",
+     "listing_url": "https://api.github.com/repos/sfzinstruments/SalamanderGrandPiano/git/trees/master?recursive=1"
+    },
+    "heads": [
+     {
+      "url": "https://archive.org/download/SalamanderGrandPianoV3/SalamanderGrandPianoV3_48khz24bit.tar.bz2",
+      "status": 200,
+      "fetched_at": "2026-09-26T11:56:25Z",
+      "headers": {
+       "Server": "nginx",
+       "Content-Type": "application/octet-stream",
+       "Content-Length": "1448107335",
+       "Last-Modified": "Wed, 18 Feb 2015 18:34:06 GMT",
+       "ETag": "\"54e4db1e-56505d47\"",
+       "Accept-Ranges": "bytes"
+      }
+     },
+     {
+      "url": "https://freepats.zenvoid.org/Piano/SalamanderGrandPiano/SalamanderGrandPiano-SFZ+FLAC-V3+20200602.tar.gz",
+      "status": 200,
+      "fetched_at": "2026-09-26T11:56:27Z",
+      "headers": {
+       "Server": "nginx",
+       "Content-Type": "application/octet-stream",
+       "Content-Length": "741757374",
+       "Last-Modified": "Tue, 02 Jun 2020 12:29:16 GMT",
+       "ETag": "\"5ed6461c-2c3651be\"",
+       "Accept-Ranges": "bytes"
+      }
+     }
+    ]
+   },
+   "canonical_download": "https://archive.org/download/SalamanderGrandPianoV3/SalamanderGrandPianoV3_48khz24bit.tar.bz2 (FreePats mirror: SalamanderGrandPiano-SFZ+FLAC-V3+20200602.tar.gz)",
+   "checksums_published": "archive.org metadata lists md5 44c5be2c774aeb968cf9bc09952511dd and sha1 90dfa11fa1f812a1cd956f38e66bc82820c918aa for the 48khz24bit archive; FreePats publishes none",
+   "probe": "salamander-sfz-flac",
+   "format_probe": {
+    "url": "https://raw.githubusercontent.com/sfzinstruments/SalamanderGrandPiano/master/Samples/A0v10.flac",
+    "bytes_read": 128,
+    "content_range": "bytes 0-127/2799401",
+    "parsed": {
+     "container": "flac",
+     "channels": 2,
+     "sample_rate": 48000,
+     "bits_per_sample": 24,
+     "total_samples": 1239814
+    },
+    "fetched_at": "2026-09-26T11:56:23Z"
+   }
+  },
+  {
+   "id": "iowa-mis-piano",
+   "name": "University of Iowa Musical Instrument Samples (MIS) - Piano",
+   "maker": "University of Iowa Electronic Music Studios (Lawrence Fritts); performer Evan Mazunik; recorded 5 and 27 Nov 2001",
+   "instrument": "Steinway & Sons model B",
+   "licence": {
+    "name": "permission statement (not a standard licence): 'used for any projects, without restrictions'",
+    "url": "https://theremin.music.uiowa.edu/MIS.html",
+    "stated_at": [
+     "MIS.html"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/iowa-MIS.html",
+     "url": "https://theremin.music.uiowa.edu/MIS.html",
+     "fetched_at": "2026-09-26T11:53:39Z",
+     "sha256": "231fe88b1b9ea6d8999e7671c904932045bd2edddec0e11a6b6f6f7a8a239874",
+     "text": "Since 1997, these recordings have been freely available on this website and may be downloaded and used for any projects, without restrictions.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/iowa-MISpiano.html",
+     "url": "https://theremin.music.uiowa.edu/MISpiano.html",
+     "fetched_at": "2026-09-26T11:53:40Z",
+     "sha256": "d813fabed15797fb72ffe724cd584d4c9358fa040152f0e487ab560ee6ece9b7",
+     "text": "Steinway & Sons model B",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/iowa-MISpiano.html",
+     "url": "https://theremin.music.uiowa.edu/MISpiano.html",
+     "fetched_at": "2026-09-26T11:53:40Z",
+     "sha256": "d813fabed15797fb72ffe724cd584d4c9358fa040152f0e487ab560ee6ece9b7",
+     "text": "16-bit, 44.1 kHz, stereo",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/iowa-MISpiano.html",
+     "url": "https://theremin.music.uiowa.edu/MISpiano.html",
+     "fetched_at": "2026-09-26T11:53:40Z",
+     "sha256": "d813fabed15797fb72ffe724cd584d4c9358fa040152f0e487ab560ee6ece9b7",
+     "text": "stereo, non-anechoic recording",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": true,
+    "deciding_clause": {
+     "file": "samples/iowa-MIS.html",
+     "sha256": "231fe88b1b9ea6d8999e7671c904932045bd2edddec0e11a6b6f6f7a8a239874",
+     "text": "may be downloaded and used for any projects, without restrictions.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    "credit_in_file_metadata": "none required",
+    "credit_on_page": "none required (the page asks to be told if the samples helped)"
+   },
+   "redistribution_and_commercial": "no explicit redistribution or commercial clause; 'without restrictions' reads as permitting both, but it is an informal statement with no waiver, no warranty text and no term",
+   "specs": {
+    "velocity_layers": "3 dynamics: pp (87 notes Bb0-C8), mf (86 notes B0-C8), ff (87 notes A0-C8)",
+    "note_spacing": "chromatic",
+    "sample_format": "AIFF, 44.1 kHz, 16-bit, stereo (page + header probe)",
+    "release_samples": "none",
+    "pedal_noise": "none; no pedal-down set",
+    "mics": "two Neumann KM 84, 8 inches above bass and treble strings"
+   },
+   "size": {
+    "iowa_heads": {
+     "file": "samples/iowa-piano-head-all.jsonl",
+     "requests": 260,
+     "ok": 260,
+     "total_bytes": 1415729086
+    }
+   },
+   "canonical_download": "https://theremin.music.uiowa.edu/MISpiano.html (260 individual AIFF files)",
+   "checksums_published": "none",
+   "probe": "iowa-aiff",
+   "format_probe": {
+    "url": "https://theremin.music.uiowa.edu/sound%20files/MIS/Piano_Other/piano/Piano.mf.C4.aiff",
+    "bytes_read": 128,
+    "content_range": "bytes 0-127/5453058",
+    "parsed": {
+     "container": "aiff",
+     "channels": 2,
+     "frames": 1363238,
+     "bits_per_sample": 16,
+     "sample_rate": 44100.0
+    },
+    "fetched_at": "2026-09-26T11:56:24Z"
+   }
+  },
+  {
+   "id": "headroom-piano",
+   "name": "Headroom Piano (Bengt Nilsson), SFZ remap by kinwie",
+   "maker": "Bengt Nilsson; recorded at Headroom Recordings, Karlstad, 2002",
+   "instrument": "Yamaha C3",
+   "licence": {
+    "name": "CC BY 4.0 -- stated only by the third-party SFZ remap; the author's own page states no licence",
+    "url": "http://creativecommons.org/licenses/by/4.0/",
+    "stated_at": [
+     "https://github.com/sfzinstruments/BengtNilsson.HeadroomPiano (README, LICENSE)"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/sfz-headroom-README.md",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/BengtNilsson.HeadroomPiano/master/README.md",
+     "fetched_at": "2026-09-26T11:51:45Z",
+     "sha256": "3a4a2fdf83b73094adb7ee0b598d70c1b94f2195c8be03e43c804161265f3734",
+     "text": "Creative Commons Attribution 4.0 International License",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/sfz-headroom-README.md",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/BengtNilsson.HeadroomPiano/master/README.md",
+     "fetched_at": "2026-09-26T11:51:45Z",
+     "sha256": "3a4a2fdf83b73094adb7ee0b598d70c1b94f2195c8be03e43c804161265f3734",
+     "text": "Mapped by kinwie using sfz format v2 with ARIA extensions,\nwith the author's permission as long keeping the original instrument name.",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/bengtnilsson-samplelibraries.html",
+     "url": "http://www.bengtnilsson.com/samplelibraries.html",
+     "fetched_at": "2026-09-26T11:55:32Z",
+     "sha256": "572cefb43aea24ce3fa35435467c6421d9396181f2f29afbcff2ec7884cd9361",
+     "text": "Headroom Piano - FREEBIE.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/sfz-headroom-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/BengtNilsson.HeadroomPiano/master/LICENSE",
+     "fetched_at": "2026-09-26T11:51:46Z",
+     "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+     "text": "1. If You Share the Licensed Material (including in modified\n          form), You must:",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    },
+    {
+     "file": "samples/sfz-headroom-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/BengtNilsson.HeadroomPiano/master/LICENSE",
+     "fetched_at": "2026-09-26T11:51:46Z",
+     "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+     "text": "2. You may satisfy the conditions in Section 3(a)(1) in any\n          reasonable manner based on the medium, means, and context in\n          which You Share the Licensed Material.",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": "yes under CC BY 4.0 if that licence is valid; the author's own page grants nothing explicit",
+    "deciding_clause": {
+     "file": "samples/sfz-headroom-LICENSE.txt",
+     "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+     "text": "1. If You Share the Licensed Material (including in modified\n          form), You must:",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    },
+    "credit_in_file_metadata": "yes: creator, licence name and link, and that it was modified",
+    "credit_on_page": "yes, beside the player (3(a)(2) allows a link to a page holding the details)"
+   },
+   "redistribution_and_commercial": "per CC BY 4.0 if valid; provenance of the licence is second-hand",
+   "specs": {
+    "velocity_layers": 5,
+    "note_spacing": "minor thirds (MIDI 21-108, 30 notes)",
+    "mics": "2 (close, Decca tree)",
+    "sample_format": "FLAC 44.1 kHz 16-bit stereo (header probe)",
+    "release_samples": "none found",
+    "pedal_noise": "none found"
+   },
+   "size": {
+    "tree": {
+     "listing": "samples/gh-tree-sfzinstruments_BengtNilsson.HeadroomPiano.json",
+     "tree_sha": "2a7df3f7252227a3484202c1d61bc1bfe352a971",
+     "truncated": false,
+     "path_prefix": null,
+     "audio_files": 300,
+     "audio_bytes": 156189249,
+     "all_bytes": 156227297,
+     "per_file_checksum": "git blob SHA-1 for every file in the listing",
+     "listing_sha256": "dc21995deee336fe57a66c0d2ab858ca74fb31a8c9d3e451a0d7e99d983415b1",
+     "listing_fetched_at": "2026-09-26T12:05:47Z",
+     "listing_url": "https://api.github.com/repos/sfzinstruments/BengtNilsson.HeadroomPiano/git/trees/master?recursive=1"
+    }
+   },
+   "canonical_download": "https://github.com/sfzinstruments/BengtNilsson.HeadroomPiano",
+   "checksums_published": "git blob SHA-1 per file",
+   "probe": "headroom-flac",
+   "format_probe": {
+    "url": "https://raw.githubusercontent.com/sfzinstruments/BengtNilsson.HeadroomPiano/master/Samples/HEADROOM%20PIANO%20LEVEL1%20CLOSE%20102.flac",
+    "bytes_read": 128,
+    "content_range": "bytes 0-127/112990",
+    "parsed": {
+     "container": "flac",
+     "channels": 2,
+     "sample_rate": 44100,
+     "bits_per_sample": 16,
+     "total_samples": 169390
+    },
+    "fetched_at": "2026-09-26T11:56:24Z"
+   }
+  },
+  {
+   "id": "piano-in-162",
+   "name": "Piano in 162 (Ivy Audio, Simon Dalzell)",
+   "maker": "Ivy Audio",
+   "instrument": "Steinway Model B",
+   "licence": {
+    "name": "freeware; public redistribution prohibited (2019 page); current page states no licence",
+    "url": "https://www.ivyaudio.com/freebies",
+    "stated_at": [
+     "http://web.archive.org/web/20191231150010/http://www.ivyaudio.com:80/Piano-in-162"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/wayback-ivyaudio-Piano-in-162-20191231.html",
+     "url": "https://web.archive.org/web/20191231150010id_/http://www.ivyaudio.com:80/Piano-in-162",
+     "fetched_at": "2026-09-26T11:54:55Z",
+     "sha256": "97679aa14c7e128611c6df2f6315c3cbbf3cc4a10b4dd587aa9cff330cd3b39e",
+     "text": "Disclaimer: While this library is provided free of charge, public redistribution of the library is prohibited.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/wayback-ivyaudio-Piano-in-162-20191231.html",
+     "url": "https://web.archive.org/web/20191231150010id_/http://www.ivyaudio.com:80/Piano-in-162",
+     "fetched_at": "2026-09-26T11:54:55Z",
+     "sha256": "97679aa14c7e128611c6df2f6315c3cbbf3cc4a10b4dd587aa9cff330cd3b39e",
+     "text": "Piano in 162 is a sample library of a Steinway Model B grand piano, available in Kontakt, SFZ, and Korg Kronos formats.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/wayback-ivyaudio-Piano-in-162-20191231.html",
+     "url": "https://web.archive.org/web/20191231150010id_/http://www.ivyaudio.com:80/Piano-in-162",
+     "fetched_at": "2026-09-26T11:54:55Z",
+     "sha256": "97679aa14c7e128611c6df2f6315c3cbbf3cc4a10b4dd587aa9cff330cd3b39e",
+     "text": "Piano in 162 features five dynamic levels, two round robins, and separate pedal on and off samples for a true to life sound with realistic sympathetic resonance.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/wayback-ivyaudio-Piano-in-162-20191231.html",
+     "url": "https://web.archive.org/web/20191231150010id_/http://www.ivyaudio.com:80/Piano-in-162",
+     "fetched_at": "2026-09-26T11:54:55Z",
+     "sha256": "97679aa14c7e128611c6df2f6315c3cbbf3cc4a10b4dd587aa9cff330cd3b39e",
+     "text": "Piano in 162 was recorded at 96kHz through two pairs of Rode NT5 cardiod microphones, an ambient pair in the hall and a close pair inside the piano.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/ivyaudio-Piano-in-162.html",
+     "url": "https://www.ivyaudio.com/Piano-in-162",
+     "fetched_at": "2026-09-26T11:53:42Z",
+     "sha256": "9560a8d216fb5aeea589594108e6ed45018e05512b59467386b842990d2b7027",
+     "text": "To use the links below, install a BitTorrent client.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": "not stated anywhere found",
+    "deciding_clause": {
+     "file": "samples/wayback-ivyaudio-Piano-in-162-20191231.html",
+     "sha256": "97679aa14c7e128611c6df2f6315c3cbbf3cc4a10b4dd587aa9cff330cd3b39e",
+     "text": "public redistribution of the library is prohibited.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    "credit_in_file_metadata": "n/a",
+    "credit_on_page": "n/a"
+   },
+   "redistribution_and_commercial": "REFUSED: redistribution prohibited; the product could not ship or download-and-bundle it",
+   "specs": {
+    "velocity_layers": 5,
+    "round_robins": 2,
+    "sets": "pedal on and off",
+    "mics": "close pair + ambient pair",
+    "recorded": "96 kHz"
+   },
+   "size": {
+    "note": "BitTorrent magnet links only; no HEAD-able URL"
+   },
+   "canonical_download": "magnet links on https://www.ivyaudio.com/freebies",
+   "checksums_published": "BitTorrent info-hash only",
+   "probe": null
+  },
+  {
+   "id": "maestro-concert-grand",
+   "name": "Maestro Concert Grand (Mats Helgesson, 2003)",
+   "maker": "Mats Helgesson",
+   "instrument": "Yamaha CF-3",
+   "licence": {
+    "name": "all rights reserved",
+    "url": "https://github.com/sfzinstruments/MatsHelgesson.MaestroConcertGrandPiano/blob/master/mcgreadme.txt",
+    "stated_at": [
+     "mcgreadme.txt"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/sfz-maestro-mcgreadme.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/MatsHelgesson.MaestroConcertGrandPiano/master/mcgreadme.txt",
+     "fetched_at": "2026-09-26T11:51:48Z",
+     "sha256": "936f2006bfa14dcf633bc27f7d6f405ec625d081c9bf07898608f7c83b79ef95",
+     "text": "All rights reserved.",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/sfz-maestro-mcgreadme.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/MatsHelgesson.MaestroConcertGrandPiano/master/mcgreadme.txt",
+     "fetched_at": "2026-09-26T11:51:48Z",
+     "sha256": "936f2006bfa14dcf633bc27f7d6f405ec625d081c9bf07898608f7c83b79ef95",
+     "text": "You may not sell this sound set or any of the samples",
+     "check": "byte-exact substring of the fetched file"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": "not stated",
+    "deciding_clause": {
+     "file": "samples/sfz-maestro-mcgreadme.txt",
+     "sha256": "936f2006bfa14dcf633bc27f7d6f405ec625d081c9bf07898608f7c83b79ef95",
+     "text": "All rights reserved.",
+     "check": "byte-exact substring of the fetched file"
+    },
+    "credit_in_file_metadata": "n/a",
+    "credit_on_page": "n/a"
+   },
+   "redistribution_and_commercial": "REFUSED: all rights reserved; modification and redistribution need written permission",
+   "specs": {
+    "velocity_layers": 5,
+    "note_spacing": "chromatic",
+    "pedal_noise": "yes (separate patch)"
+   },
+   "size": {
+    "tree": {
+     "listing": "samples/gh-tree-sfzinstruments_MatsHelgesson.MaestroConcertGrandPiano.json",
+     "tree_sha": "717078b450eccc4a7733755f4b5973426ebc23e9",
+     "truncated": false,
+     "path_prefix": null,
+     "audio_files": 805,
+     "audio_bytes": 268479040,
+     "all_bytes": 268507286,
+     "per_file_checksum": "git blob SHA-1 for every file in the listing",
+     "listing_sha256": "e7086b4c502df6fd02cff1926bc2701ab6d54cebb35067c725de50bb93bad62c",
+     "listing_fetched_at": "2026-09-26T12:05:48Z",
+     "listing_url": "https://api.github.com/repos/sfzinstruments/MatsHelgesson.MaestroConcertGrandPiano/git/trees/master?recursive=1"
+    }
+   },
+   "canonical_download": "n/a",
+   "checksums_published": "git blob SHA-1 per file",
+   "probe": null
+  },
+  {
+   "id": "splendid-grand",
+   "name": "Splendid Grand Piano (SFZ by kinwie)",
+   "maker": "Akai (claimed)",
+   "instrument": "Steinway (per README)",
+   "licence": {
+    "name": "claimed public domain; no licence file; no primary source for the claim",
+    "url": "https://github.com/sfzinstruments/SplendidGrandPiano",
+    "stated_at": [
+     "README.md"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/sfz-splendid-README.md",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/SplendidGrandPiano/master/README.md",
+     "fetched_at": "2026-09-26T11:51:49Z",
+     "sha256": "441e881e9d12f4110d2843ce3f04e4d789678599ecf391e2b124142bc9361bb7",
+     "text": "Public Domain samples by AKAI",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/sfz-splendid-README.md",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/SplendidGrandPiano/master/README.md",
+     "fetched_at": "2026-09-26T11:51:49Z",
+     "sha256": "441e881e9d12f4110d2843ce3f04e4d789678599ecf391e2b124142bc9361bb7",
+     "text": "This samples set was released as public domain in early 2000 by Akai company.",
+     "check": "byte-exact substring of the fetched file"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": "unverified",
+    "deciding_clause": {
+     "file": "samples/sfz-splendid-README.md",
+     "sha256": "441e881e9d12f4110d2843ce3f04e4d789678599ecf391e2b124142bc9361bb7",
+     "text": "Public Domain samples by AKAI",
+     "check": "byte-exact substring of the fetched file"
+    },
+    "credit_in_file_metadata": "n/a",
+    "credit_on_page": "n/a"
+   },
+   "redistribution_and_commercial": "UNKNOWN: the public-domain claim is second-hand and unsourced",
+   "specs": {
+    "velocity_layers": "4 recorded (+1 filtered)",
+    "note": "Steinway samples, 256 MB version"
+   },
+   "size": {
+    "tree": {
+     "listing": "samples/gh-tree-sfzinstruments_SplendidGrandPiano.json",
+     "tree_sha": "1c595d827b7fd7f0be3134aaed0f90b3662a09cf",
+     "truncated": false,
+     "path_prefix": null,
+     "audio_files": 226,
+     "audio_bytes": 76828674,
+     "all_bytes": 76861502,
+     "per_file_checksum": "git blob SHA-1 for every file in the listing",
+     "listing_sha256": "93cf7ecc0aca4ab9061c990e6395e74591bc4b8200cefd09ed532d1065997c98",
+     "listing_fetched_at": "2026-09-26T12:05:49Z",
+     "listing_url": "https://api.github.com/repos/sfzinstruments/SplendidGrandPiano/git/trees/master?recursive=1"
+    }
+   },
+   "canonical_download": "https://github.com/sfzinstruments/SplendidGrandPiano",
+   "checksums_published": "git blob SHA-1 per file",
+   "probe": null
+  },
+  {
+   "id": "scarypiano",
+   "name": "Scarypiano (Karoryfer Samples, 2015)",
+   "maker": "Karoryfer Samples, from the University of Iowa piano samples",
+   "instrument": "Iowa Steinway B, processed",
+   "licence": {
+    "name": "CC0 1.0",
+    "url": "https://github.com/sfzinstruments/karoryfer.scarypiano/blob/master/LICENSE",
+    "stated_at": [
+     "LICENSE",
+     "readme.txt"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/sfz-scarypiano-LICENSE.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/karoryfer.scarypiano/master/LICENSE",
+     "fetched_at": "2026-09-26T11:51:50Z",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "CC0 1.0 Universal",
+     "check": "byte-exact substring of the fetched file"
+    },
+    {
+     "file": "samples/sfz-scarypiano-readme.txt",
+     "url": "https://raw.githubusercontent.com/sfzinstruments/karoryfer.scarypiano/master/readme.txt",
+     "fetched_at": "2026-09-26T11:51:50Z",
+     "sha256": "ca1fcec0b79a66f5826085ac91b969d1d0295dab34585dd51fb1c77937bdc14f",
+     "text": "processed with Krotos Dehumaniser",
+     "check": "byte-exact substring of the fetched file"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": true,
+    "deciding_clause": {
+     "file": "samples/sfz-scarypiano-LICENSE.txt",
+     "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+     "text": "(iv) for any purpose whatsoever,\nincluding without limitation commercial, advertising or promotional\npurposes",
+     "check": "byte-exact substring of the fetched file (matched by pattern across line breaks)"
+    },
+    "credit_in_file_metadata": "none",
+    "credit_on_page": "none"
+   },
+   "redistribution_and_commercial": "allowed, but the sound is an effect-processed (Halloween) piano, unsuitable",
+   "specs": {
+    "note": "effect-processed; not a clean piano"
+   },
+   "size": {
+    "tree": {
+     "listing": "samples/gh-tree-sfzinstruments_karoryfer.scarypiano.json",
+     "tree_sha": "46305e8cb71239bfa861fbe8487dd12b8d8de40c",
+     "truncated": false,
+     "path_prefix": null,
+     "audio_files": 430,
+     "audio_bytes": 585635238,
+     "all_bytes": 586874734,
+     "per_file_checksum": "git blob SHA-1 for every file in the listing",
+     "listing_sha256": "979d9e2565aa6bbd720524f9ff80ae45edfa5c3039409113d7b13a1a8421c5c5",
+     "listing_fetched_at": "2026-09-26T12:05:45Z",
+     "listing_url": "https://api.github.com/repos/sfzinstruments/karoryfer.scarypiano/git/trees/master?recursive=1"
+    }
+   },
+   "canonical_download": "https://github.com/sfzinstruments/karoryfer.scarypiano",
+   "checksums_published": "git blob SHA-1 per file",
+   "probe": null
+  },
+  {
+   "id": "freepats-others",
+   "name": "FreePats: Upright Piano KW (CC0, an upright) and YDP Grand Piano (CC BY 3.0, SF2 36 MiB)",
+   "maker": "FreePats project",
+   "instrument": "Kawai upright; Yamaha Disklavier Pro (Zenph/OLPC samples)",
+   "licence": {
+    "name": "CC0 1.0 (Upright KW); CC BY 3.0 (YDP)",
+    "url": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+    "stated_at": [
+     "FreePats page"
+    ]
+   },
+   "quotes": [
+    {
+     "file": "samples/freepats-acoustic-grand-piano.html",
+     "url": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+     "fetched_at": "2026-09-26T11:53:41Z",
+     "sha256": "b46621c9ed55008986c10a050531de2a3a2631a991e0333117f767365c847fdc",
+     "text": "Published under the terms of the Creative Commons CC0 1.0 public domain dedication.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    {
+     "file": "samples/freepats-acoustic-grand-piano.html",
+     "url": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+     "fetched_at": "2026-09-26T11:53:41Z",
+     "sha256": "b46621c9ed55008986c10a050531de2a3a2631a991e0333117f767365c847fdc",
+     "text": "Built from the Zenph Studios Yamaha Disklavier Pro Piano Multisamples for OLPC .",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    }
+   ],
+   "rendered_audio": {
+    "allowed": true,
+    "deciding_clause": {
+     "file": "samples/freepats-acoustic-grand-piano.html",
+     "sha256": "b46621c9ed55008986c10a050531de2a3a2631a991e0333117f767365c847fdc",
+     "text": "Published under the terms of the Creative Commons CC0 1.0 public domain dedication.",
+     "check": "substring of the page's visible text (tags stripped, entities decoded, whitespace collapsed)"
+    },
+    "credit_in_file_metadata": "none (KW)",
+    "credit_on_page": "none (KW)"
+   },
+   "redistribution_and_commercial": "allowed; out of scope (upright; YDP is a small SF2)",
+   "specs": {
+    "velocity_layers": "2 (KW)"
+   },
+   "size": {
+    "note": "KW SFZ+FLAC 32 MiB; YDP SF2 36 MiB (page-stated)"
+   },
+   "canonical_download": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+   "checksums_published": "none",
+   "probe": null
+  }
+ ]
+}

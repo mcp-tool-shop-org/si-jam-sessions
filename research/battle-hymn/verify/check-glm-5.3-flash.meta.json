@@ -1,0 +1,37 @@
+{
+  "model_requested": "glm-5.3-flash:cloud",
+  "model_served": "glm-5.3-flash",
+  "think": "high",
+  "brief_sha256": "2214bc523acc0148a6822bf6324db98814a83915cfb063721898c656533462c4",
+  "text_sha256": "def065f78f07b0ced5473bc74c13173a28f5cd25ed6368bb9a2bfe6c3c51e161",
+  "images": [
+    {
+      "path": "loc-ditson-1862-muscivilwar-200000858-002.jp2",
+      "sha256": "e1e046c7d4418cb1551cb98ffba02679cf4ff260264acd4b99de0b0bc941145c",
+      "sent_px": [
+        2200,
+        2845
+      ]
+    },
+    {
+      "path": "loc-ditson-1862-muscivilwar-200000858-003.jp2",
+      "sha256": "7c13c1d18e352686e19403a9a7a74ddce752dbfbe882c1342d4da013676d2162",
+      "sent_px": [
+        2200,
+        2918
+      ]
+    },
+    {
+      "path": "loc-ditson-1862-muscivilwar-200000858-004.jp2",
+      "sha256": "0a803fc07998d4cdaec5c877e90a157cd25f7740dae8ca8b1bd4492308010b99",
+      "sent_px": [
+        2200,
+        2876
+      ]
+    }
+  ],
+  "prompt_eval_count": 30386,
+  "eval_count": 40434,
+  "done_reason": "stop",
+  "wall_s": 727.0
+}
