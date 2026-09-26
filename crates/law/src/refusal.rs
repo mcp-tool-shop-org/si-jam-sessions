@@ -650,6 +650,7 @@ fn receipt_reason(f: &mut fmt::Formatter<'_>, error: &ReceiptError) -> fmt::Resu
         ReceiptError::AnonymousAuthorDeathYear => {
             write!(f, "an author it records as unknown has a death year")
         }
+        ReceiptError::EmptyAuthorName => write!(f, "an author's name is empty"),
         ReceiptError::Canonical { offset, problem } => write!(
             f,
             "its canonical bytes are malformed at byte {offset} ({problem:?})"

@@ -1783,6 +1783,25 @@ fn an_unknown_author_has_no_death_year() {
     );
 }
 
+/// An author is named or recorded as unknown: a name that is empty, or only whitespace,
+/// is refused as the receipt loads, from JSON or from a receipt built in code.
+#[test]
+fn an_author_name_is_never_empty() {
+    for name in ["", " ", "\t\n"] {
+        let mut f = Fixture::new();
+        f.receipt.composition.authors[0].name = Some(name.into());
+        assert_eq!(
+            f.refused(),
+            Refusal::Receipt(ReceiptError::EmptyAuthorName),
+            "{name:?}"
+        );
+    }
+    assert_eq!(
+        json_error(|t| t.replacen("\"name\": \"Scott Joplin\"", "\"name\": \"\"", 1)),
+        ReceiptError::EmptyAuthorName
+    );
+}
+
 /// In JSON an unknown author's name is `null`, as every value the receipt does not know
 /// is. Any other value that is not a string is refused.
 #[test]
@@ -2045,10 +2064,45 @@ fn text(value: &crate::json::Value) -> Option<&str> {
     }
 }
 
+/// The evidence manifest's files that the Battle Hymn fixture leaves off. The fixture
+/// carries, for each claim it rests on, the files that hold the quoted words. A file joins
+/// this list only by review.
+const LEFT_OFF_THE_FIXTURE: &[&str] = &[
+    // Other pages of documents the fixture cites, which hold none of its quotes.
+    "ia-atlantic-1862-02-leaf1-p146.jpg",
+    "ia-atlantic-1862-02-leaf3-p148.jpg",
+    "loc-ditson-1862-muscivilwar-200000858-003.jp2",
+    "loc-ditson-1862-muscivilwar-200000858-004.jp2",
+    "ia-prayer-meeting-tune-book-1859-title-n6.jpg",
+    "ia-prayer-meeting-tune-book-1859-verso-n7.jpg",
+    "loc-glory-glory-1861-ditson-002.jp2",
+    // The archives' catalogue records of documents the fixture cites.
+    "ia-prayer-meeting-tune-book-1859-metadata.json",
+    "ia-grand-lodge-pa-1911-metadata.json",
+    // Further sources for claims the cited files already carry: the tune in print by 1859,
+    // its disputed authorship, and William Steffe's dates.
+    "ia-sunday-school-times-1859-01-15-djvu.txt",
+    "ia-sunday-school-times-1859-01-15-metadata.json",
+    "loc-ditson-1890-reissue-item-2023871344.json",
+    "loc-ditson-1890-reissue-p1-50pct.jpg",
+    "ia-army-navy-journal-1885-03-21-djvu.txt",
+    "ia-army-navy-journal-1885-03-21-metadata.json",
+    "ia-elson-national-music-of-america-1900-djvu.txt",
+    "ia-elson-national-music-of-america-1900-metadata.json",
+    "ia-hymn-society-papers-djvu.txt",
+    "ia-hymn-society-papers-metadata.json",
+    "ia-grand-lodge-pa-1912-djvu.txt",
+    "ia-grand-lodge-pa-1912-metadata.json",
+    "ia-masonic-temple-dedication-1875-djvu.txt",
+    "ia-masonic-temple-dedication-1875-metadata.json",
+];
+
 /// Every evidence entry on the fixture is one file of the committed evidence manifest:
 /// its URL, where it resolved, its size and its SHA-256 are the manifest's, it was fetched
-/// on the receipt's day, and its quotes are that file's manifest quotes, in order. And
-/// every entry is cited, by the composition, the edition or a note.
+/// on the receipt's day, and its quotes are that file's manifest quotes, in order. Every
+/// entry is cited, by the composition, the edition or a note. And every manifest file is on
+/// the receipt or in `LEFT_OFF_THE_FIXTURE`, so nothing the research found is dropped
+/// unseen.
 #[test]
 fn the_battle_hymn_fixture_is_built_from_the_evidence_manifest() {
     use crate::json::Value;
@@ -2059,11 +2113,13 @@ fn the_battle_hymn_fixture_is_built_from_the_evidence_manifest() {
         r.fetched_on.year, r.fetched_on.month, r.fetched_on.day
     );
     let mut found = 0;
+    let mut left_off = Vec::new();
     for source in items(member(&manifest, "evidence")) {
         for file in items(member(source, "files")) {
             let path = text(member(file, "file")).unwrap();
             let name = path.strip_prefix("evidence/").unwrap();
             let Some(e) = r.evidence(name) else {
+                left_off.push(name);
                 continue;
             };
             found += 1;
@@ -2092,6 +2148,13 @@ fn the_battle_hymn_fixture_is_built_from_the_evidence_manifest() {
         }
     }
     assert_eq!(found, r.evidence.len(), "an entry is not a manifest file");
+    let mut listed = LEFT_OFF_THE_FIXTURE.to_vec();
+    listed.sort_unstable();
+    left_off.sort_unstable();
+    assert_eq!(
+        left_off, listed,
+        "a manifest file is neither on the receipt nor listed as left off"
+    );
     for e in &r.evidence {
         let cited = r.composition.evidence.contains(&e.id)
             || r.source_edition.evidence.contains(&e.id)

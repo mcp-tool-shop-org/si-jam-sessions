@@ -300,6 +300,14 @@ impl Receipt {
         {
             return Err(ReceiptError::AnonymousAuthorDeathYear);
         }
+        if self
+            .composition
+            .authors
+            .iter()
+            .any(|a| a.name.as_deref().is_some_and(|n| n.trim().is_empty()))
+        {
+            return Err(ReceiptError::EmptyAuthorName);
+        }
         for pair in self.files.windows(2) {
             if pair[0].name >= pair[1].name {
                 return Err(ReceiptError::FilesNotSorted);

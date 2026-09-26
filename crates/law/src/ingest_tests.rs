@@ -586,6 +586,11 @@ fn the_predicate_version_3_refusals_have_codes_and_reasons() {
             100,
             "the receipt does not load: an author it records as unknown has a death year",
         ),
+        (
+            P::Receipt(ReceiptError::EmptyAuthorName),
+            100,
+            "the receipt does not load: an author's name is empty",
+        ),
     ];
     for (refusal, code, reason) in cases {
         let r = IngestRefusal::Licence(refusal);
