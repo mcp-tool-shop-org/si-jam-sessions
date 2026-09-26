@@ -40,7 +40,7 @@
 //!   Rust API disagree or when stepping moves the hash. Negative controls in
 //!   the tests and in CI prove each check can fail.
 //! - **NAMED_COMPENSATORS.** Nothing here is irreversible: `write-golden`
-//!   rewrites two files in the working tree, which git restores, and CI
+//!   rewrites the golden files in the working tree, which git restores, and CI
 //!   publishes nothing. There is nothing to undo.
 //! - **DECOMPOSE_BY_SECRETS 2.** The law takes bytes and returns a status and
 //!   a hash; its wasm imports nothing (the law's own test), so the harness
