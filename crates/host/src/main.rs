@@ -22,9 +22,10 @@ use cpal::traits::StreamTrait;
 use golden::take::Perturbation;
 use host::anchor::{Reading, residuals};
 use host::bridge::{Law, Refused};
+use host::callback::{Callback, Shared};
 use host::device::{self, Output, Playing};
 use host::event::{Event, Monitor};
-use host::live::{Clocks, Pairing, Passed, Press, pass};
+use host::live::{Clocks, Held, Passed, Press, pass, release_all};
 use host::schedule::Scheduler;
 use host::score::{Piece, clock, root};
 use host::synth::Synth;
@@ -272,23 +273,74 @@ fn open(
     // RingBuffer::new.
     let (mut events, events_out) = RingBuffer::new(RING_EVENTS);
     let (readings_in, readings) = RingBuffer::new(1_024);
+    let shared = Arc::new(Shared::default());
     let mut scheduler = Scheduler::new(0);
-    // The first 100 ms are in the ring before the first callback.
-    scheduler.pump(law, 0, &mut events).map_err(refused)?;
-    let playing = device::start(
-        output,
+    // The first H + 1 quanta are in the ring before the first callback, and
+    // the callback knows how far: its pre-roll waits for a callback they
+    // cover.
+    let pumped = scheduler.pump(law, 0, &mut events).map_err(refused)?;
+    shared.covered.store(pumped.covered, Ordering::Release);
+    let callback = Callback::new(
         Synth::new(0),
         events_out,
         monitor,
         readings_in,
+        Arc::clone(&shared),
         mute,
-    )?;
+    );
+    let playing = device::start(output, callback, shared)?;
     Ok(Session {
         playing,
         scheduler,
         events,
         readings,
     })
+}
+
+impl Session {
+    /// Steps the law to the callback's position, fills the ring, and tells
+    /// the callback how far the ring is complete.
+    fn pump(&mut self, law: &mut Law) -> Result<(), String> {
+        let shared = &self.playing.shared;
+        let frame = shared.frames.load(Ordering::Acquire);
+        let pumped = self
+            .scheduler
+            .pump(law, frame, &mut self.events)
+            .map_err(refused)?;
+        shared.covered.store(pumped.covered, Ordering::Release);
+        Ok(())
+    }
+}
+
+/// Reports, once, when law time started: how long the silent pre-roll ran,
+/// and what the device's first callback asked for.
+#[derive(Default)]
+struct Startup {
+    told: bool,
+}
+
+impl Startup {
+    fn watch(&mut self, session: &Session) {
+        let shared = &session.playing.shared;
+        if self.told || !shared.started.load(Ordering::Acquire) {
+            return;
+        }
+        self.told = true;
+        let silent = shared.preroll_frames.load(Ordering::Relaxed);
+        let first = shared.first_buffer.load(Ordering::Relaxed);
+        if silent == 0 {
+            println!(
+                "  Law time started with the first callback ({first} frames), which the ring \
+                 covered."
+            );
+        } else {
+            println!(
+                "  The first callback asked for {first} frames, more than the ring covered; \
+                 {silent} frames ({:.1} ms) of silence came before law sample 0.",
+                silent as f64 / 48.0
+            );
+        }
+    }
 }
 
 /// Says what the output is, now; its latency follows once it settles.
@@ -394,12 +446,17 @@ fn device_error(session: &Session) -> Option<String> {
 fn counted(session: &Session) -> String {
     let s = &session.playing.shared;
     format!(
-        "{} notes and {} beats started, {} live notes heard back, {} late, {} dropped",
+        "{} notes and {} beats started, {} live notes heard back, {} late, {} dropped; the \
+         first callback asked for {} frames, the largest for {}, and {} frames of silence came \
+         before law sample 0",
         s.notes.load(Ordering::Relaxed),
         s.beats.load(Ordering::Relaxed),
         s.monitored.load(Ordering::Relaxed),
         s.late.load(Ordering::Relaxed),
-        s.dropped.load(Ordering::Relaxed)
+        s.dropped.load(Ordering::Relaxed),
+        s.first_buffer.load(Ordering::Relaxed),
+        s.largest_buffer.load(Ordering::Relaxed),
+        s.preroll_frames.load(Ordering::Relaxed)
     )
 }
 
@@ -419,14 +476,16 @@ fn play(o: &Options) -> Result<(), String> {
     let end = piece.end + 48_000;
     let mut failed = None;
     let mut latency = Latency::default();
+    let mut startup = Startup::default();
     while !stop.load(Ordering::Relaxed) {
         latency.watch(&output, &session);
+        startup.watch(&session);
         let frame = session.playing.shared.frames.load(Ordering::Acquire);
         if frame >= end {
             break;
         }
-        if let Err(e) = session.scheduler.pump(&mut law, frame, &mut session.events) {
-            failed = Some(refused(e));
+        if let Err(e) = session.pump(&mut law) {
+            failed = Some(e);
             break;
         }
         while session.readings.pop().is_ok() {}
@@ -592,13 +651,13 @@ fn finish_input(started: Started) {
     }
 }
 
-/// Moves the readings into the audio clock and passes every completed note
-/// to the law.
+/// Moves the readings into the audio clock and passes every press to the
+/// law, in the order they were received.
 fn take_presses(
     session: &mut Session,
     presses: &mut Consumer<Press>,
     clocks: &mut Clocks,
-    pairing: &mut Pairing,
+    held: &mut Held,
     law: &mut Law,
     passed: &mut Vec<Passed>,
 ) {
@@ -609,9 +668,7 @@ fn take_presses(
         let Some(instant) = clocks.instant(press.stamp) else {
             continue;
         };
-        if let Some(played) = pairing.press(press.down, press.pitch, press.velocity, instant) {
-            passed.push(pass(law, clocks, played));
-        }
+        pass(law, clocks, held, press, instant, passed);
     }
 }
 
@@ -634,26 +691,28 @@ fn jam(o: &Options) -> Result<(), String> {
     );
 
     let mut clocks = Clocks::default();
-    let mut pairing = Pairing::default();
+    let mut held = Held::default();
     let mut passed: Vec<Passed> = Vec::new();
     let end = piece.end + 48_000;
     let mut failed = None;
     let mut latency = Latency::default();
+    let mut startup = Startup::default();
     while !stop.load(Ordering::Relaxed) {
         latency.watch(&output, &session);
+        startup.watch(&session);
         let frame = session.playing.shared.frames.load(Ordering::Acquire);
         if frame >= end {
             break;
         }
-        if let Err(e) = session.scheduler.pump(&mut law, frame, &mut session.events) {
-            failed = Some(refused(e));
+        if let Err(e) = session.pump(&mut law) {
+            failed = Some(e);
             break;
         }
         take_presses(
             &mut session,
             &mut presses,
             &mut clocks,
-            &mut pairing,
+            &mut held,
             &mut law,
             &mut passed,
         );
@@ -661,19 +720,17 @@ fn jam(o: &Options) -> Result<(), String> {
     }
     stop.store(true, Ordering::SeqCst);
     finish_input(started);
-    // Presses still queued, and notes still held, end now.
+    // Presses still queued pass now, and notes still held end now.
     take_presses(
         &mut session,
         &mut presses,
         &mut clocks,
-        &mut pairing,
+        &mut held,
         &mut law,
         &mut passed,
     );
     let now = device::nanos(session.playing.stream.now());
-    for played in pairing.release_all(now) {
-        passed.push(pass(&mut law, &clocks, played));
-    }
+    release_all(&mut law, &clocks, &mut held, now, &mut passed);
     let _ = session.playing.stream.pause();
     println!("{}", counted(&session));
     if let Some(e) = device_error(&session).or(failed) {
@@ -682,46 +739,54 @@ fn jam(o: &Options) -> Result<(), String> {
     verdicts(&mut law, &passed)
 }
 
-/// Prints the live notes' verdicts: every row the law wrote for a note that
-/// was played, and every note it refused.
+/// Prints the live take's verdicts: what the law took and refused, and its
+/// rows. In a live session the law gives an unplayed score note its row only
+/// once the performance has passed it, so the rows cover the score as far as
+/// the jam reached, and no further.
 fn verdicts(law: &mut Law, passed: &[Passed]) -> Result<(), String> {
     let record = law.record().map_err(refused)?;
-    let played: Vec<&str> = record
-        .rows
-        .lines()
-        .filter(|r| !r.ends_with("never played"))
-        .collect();
-    let never = record.rows.lines().count() - played.len();
+    let (ons, offs): (Vec<&Passed>, Vec<&Passed>) = passed.iter().partition(|p| p.down);
+    let placed = |list: &[&Passed]| list.iter().filter(|p| p.sample.is_some()).count();
+    let took = |list: &[&Passed]| {
+        list.iter()
+            .filter(|p| p.sample.is_some() && p.refused.is_none())
+            .count()
+    };
     println!(
-        "{} live notes played; the law admitted {} and refused {}.",
-        passed.len(),
-        passed.iter().filter(|p| p.refused.is_none()).count(),
-        passed.iter().filter(|p| p.refused.is_some()).count()
+        "{} keys went down: the law took {} note-ons and refused {}; {} came before law time \
+         and were not passed. It took {} note-offs and refused {}.",
+        ons.len(),
+        took(&ons),
+        placed(&ons) - took(&ons),
+        ons.len() - placed(&ons),
+        took(&offs),
+        placed(&offs) - took(&offs)
     );
     for p in passed {
-        if let Some(r) = &p.refused {
+        if let (Some(sample), Some(r)) = (p.sample, &p.refused) {
+            let what = if p.down { "note-on" } else { "note-off" };
             println!(
-                "  {} ({}) at law sample {}: {}",
-                name(p.played.pitch),
-                p.played.pitch,
-                p.onset,
+                "  {what} {} ({}) at law sample {sample}: {}",
+                name(p.pitch),
+                p.pitch,
                 r.reason
             );
         }
     }
-    println!("The law's rows for the notes you played, in score order:");
-    for row in &played {
+    let rows: Vec<&str> = record.rows.lines().collect();
+    let count = |word: &str| rows.iter().filter(|r| r.ends_with(word)).count();
+    println!("The law's rows, in score order, as far as the jam reached:");
+    for row in &rows {
         println!("  {row}");
     }
-    let count = |word: &str| played.iter().filter(|r| r.ends_with(word)).count();
     println!(
-        "match {}, early {}, late {}, wrong pitch {}, addition {}; {never} score notes never \
-         played",
+        "match {}, early {}, late {}, wrong pitch {}, addition {}, never played {}",
         count(": match"),
         count(": early"),
         count(": late"),
         count(": wrong pitch"),
-        count(": addition")
+        count(": addition"),
+        count(": never played")
     );
     Ok(())
 }
@@ -730,8 +795,19 @@ fn jitter(o: &Options) -> Result<(), String> {
     let output = device::choose_output(o.output.as_deref())?;
     let (_events_in, events_out) = RingBuffer::<Event>::new(1);
     let (readings_in, mut readings) = RingBuffer::<Reading>::new(1_024);
-    // A silent stream: the synth has no events, so nothing is heard.
-    let playing = device::start(&output, Synth::new(0), events_out, None, readings_in, true)?;
+    // A silent stream: the synth has no events, so nothing is heard, and there
+    // is nothing for a pre-roll to wait for.
+    let shared = Arc::new(Shared::default());
+    shared.covered.store(u64::MAX, Ordering::Release);
+    let callback = Callback::new(
+        Synth::new(0),
+        events_out,
+        None,
+        readings_in,
+        Arc::clone(&shared),
+        true,
+    );
+    let playing = device::start(&output, callback, shared)?;
     println!("Measuring {} for 3 s with a silent stream...", output.name);
     let mut all = Vec::new();
     for _ in 0..600 {

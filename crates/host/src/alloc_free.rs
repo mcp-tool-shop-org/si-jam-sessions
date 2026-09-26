@@ -1,6 +1,8 @@
-//! The render allocates nothing: a counting global allocator watches many
-//! callbacks' worth of `Synth::render`, fed from the ring with the committed
-//! events of *The Entertainer* and with live notes through the monitor.
+//! The audio callback allocates nothing: a counting global allocator watches
+//! many calls of its body, `Callback::run`, which renders through
+//! `Synth::render`, fed from the ring with the committed events of *The
+//! Entertainer* and with live notes through the monitor, after a first fill
+//! that the silent pre-roll renders.
 //!
 //! The allocator counts every allocation, reallocation and free made by the
 //! thread that is measuring, and only while it measures, so the other tests
@@ -71,18 +73,23 @@ fn counted<R>(f: impl FnOnce() -> R) -> (R, u64) {
 mod tests {
     use super::*;
     use crate::bridge::Law;
+    use crate::callback::{Callback, Shared};
     use crate::event::{Event, Monitor};
     use crate::offline;
     use crate::score::{Piece, root};
     use crate::synth::Synth;
     use rtrb::RingBuffer;
     use std::hint::black_box;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
 
     /// Thirty seconds of *The Entertainer*, its take and its clicks, with a
-    /// live note held and released through the monitor, rendered in callbacks
-    /// of irregular sizes (some longer than one pass): no allocation.
+    /// live note held and released through the monitor, through the callback's
+    /// body in callbacks of irregular sizes (some longer than one pass), after
+    /// a first fill longer than the ring's cover, which the pre-roll renders as
+    /// silence: no allocation.
     #[test]
-    fn the_render_allocates_nothing() {
+    fn the_callback_allocates_nothing() {
         let piece = Piece::entertainer(&root()).unwrap();
         let events: Vec<Event> = {
             let mut law = Law::acquire();
@@ -91,18 +98,31 @@ mod tests {
             offline::events(&mut law, 48_000 * 30).unwrap()
         };
         assert!(events.len() > 500, "{}", events.len());
-        let (mut producer, mut consumer) = RingBuffer::new(events.len());
+        let (mut producer, consumer) = RingBuffer::new(events.len());
         for e in &events {
             producer.push(*e).unwrap();
         }
-        let (mut live, mut monitor) = RingBuffer::new(8);
-        let mut synth = Synth::new(0);
-        let mut out = vec![0.0f32; 2 * 4_096];
+        let (mut live, monitor) = RingBuffer::new(8);
+        let (readings, _readings_out) = RingBuffer::new(8_192);
+        let shared = Arc::new(Shared::default());
+        // The cover at the start, law samples 0..4,848.
+        shared.covered.store(4_848, Ordering::Release);
+        let mut callback = Callback::new(
+            Synth::new(0),
+            consumer,
+            Some(monitor),
+            readings,
+            Arc::clone(&shared),
+            false,
+        );
+        let mut out = vec![0.0f32; 2 * 8_192];
         let sizes = [480usize, 441, 1, 1_024, 4_096, 97, 512, 2_000];
 
         let ((), allocations) = counted(|| {
+            // The first fill, past the cover: the pre-roll's silence.
+            callback.run(&mut out, 2, 1_000_000, Some(10_000_000));
             let mut i = 0;
-            while synth.frame() < 48_000 * 30 {
+            while shared.frames.load(Ordering::Acquire) < 48_000 * 30 {
                 if i == 100 {
                     let _ = live.push(Monitor::On {
                         pitch: 60,
@@ -114,16 +134,69 @@ mod tests {
                 }
                 let frames = sizes[i % sizes.len()];
                 let buffer = &mut out[..2 * frames];
-                synth.render(buffer, 2, &mut consumer, Some(&mut monitor));
+                callback.run(buffer, 2, 2_000_000 + i as u64, Some(10_000_000));
                 black_box(&buffer[0]);
                 i += 1;
             }
         });
         assert_eq!(allocations, 0);
-        let counts = synth.counts();
-        assert_eq!(counts.notes + counts.beats, events.len() as u64);
-        assert_eq!((counts.late, counts.dropped, counts.monitored), (0, 0, 1));
+        assert_eq!(shared.preroll_frames.load(Ordering::Relaxed), 8_192);
+        let count = |a: &std::sync::atomic::AtomicU64| a.load(Ordering::Relaxed);
+        assert_eq!(
+            count(&shared.notes) + count(&shared.beats),
+            events.len() as u64
+        );
+        assert_eq!(
+            (
+                count(&shared.late),
+                count(&shared.dropped),
+                count(&shared.monitored)
+            ),
+            (0, 0, 1)
+        );
         assert!(out.iter().any(|s| *s != 0.0));
+    }
+
+    /// The WinMM callback's work after its clock read, for a thousand
+    /// note-ons and note-offs and a thousand clock ticks, into rings too small
+    /// for them all: no allocation. Each note message is delivered while there
+    /// is room, a clock tick is dropped, and a full ring drops the rest.
+    #[cfg(windows)]
+    #[test]
+    fn the_midi_callback_allocates_nothing() {
+        use crate::live::{Press, Stamp};
+        let (mut monitor, mut heard) = RingBuffer::new(256);
+        let (mut input, mut presses) = RingBuffer::new(512);
+        let ((), allocations) = counted(|| {
+            for i in 0..1_000usize {
+                let status = if i % 2 == 0 { 0x90 } else { 0x80 };
+                let message = status | (60 << 8) | (100 << 16);
+                crate::winmm::deliver(&mut monitor, &mut input, 7_000, message, i);
+                crate::winmm::deliver(&mut monitor, &mut input, 7_000, 0xF8, i);
+            }
+        });
+        assert_eq!(allocations, 0);
+        assert_eq!((heard.slots(), presses.slots()), (256, 512));
+        assert_eq!(
+            heard.pop(),
+            Ok(Monitor::On {
+                pitch: 60,
+                velocity: 100
+            })
+        );
+        let second = presses.pop().and_then(|_| presses.pop());
+        assert_eq!(
+            second,
+            Ok(Press {
+                down: false,
+                pitch: 60,
+                velocity: 100,
+                stamp: Stamp::Midi {
+                    micros: 1_000,
+                    arrived: 7_000
+                }
+            })
+        );
     }
 
     /// The counter counts: a `Vec` growing inside the measured span moves it,

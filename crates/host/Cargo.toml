@@ -33,3 +33,7 @@ windows = { version = "=0.62.2", features = [
     "Win32_System_Console",
     "Win32_System_Threading",
 ] }
+
+# The tests build scores of their own in the law's score layout.
+[dev-dependencies]
+score-model = { path = "../score-model" }

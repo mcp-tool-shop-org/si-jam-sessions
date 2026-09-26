@@ -9,13 +9,17 @@
 //! - [`synth`]: the render, two oscillator voices and a click. The audio
 //!   callback calls it; it allocates nothing, locks nothing and makes no system
 //!   call, and it puts every event on its sample exactly.
+//! - [`callback`]: the audio callback's body, which calls the synth. Its
+//!   silent pre-roll holds law time at sample 0 until a callback's frames are
+//!   all in the ring, so the device's first fill makes no event late.
 //! - [`event`]: what crosses into the callback, through `rtrb` rings created
 //!   before the stream.
 //! - [`schedule`]: the non-real-time side. It steps the law one quantum per 48
 //!   samples of the audio clock and moves committed frames into the ring ahead
 //!   of the playhead, each exactly once.
 //! - [`anchor`] and [`live`]: the clocks, and live input from a press to the
-//!   law's live verb. A key press is stamped on the stream clock, a MIDI message
+//!   law's live verbs, a note-on when a key goes down and a note-off when it
+//!   comes up. A key press is stamped on the stream clock, a MIDI message
 //!   on WinMM's; both become a law sample through the same audio clock, which is
 //!   re-anchored on every callback.
 //! - [`offline`]: the same pipeline without a device, for `render`.
@@ -57,6 +61,7 @@
 mod alloc_free;
 pub mod anchor;
 pub mod bridge;
+pub mod callback;
 #[cfg(windows)]
 pub mod console;
 pub mod device;

@@ -2,15 +2,17 @@
 //!
 //! A thin shell around cpal 0.18.2 (WASAPI shared mode on Windows): nothing
 //! here decides anything, and none of it runs in CI, which has no audio
-//! device. The callback does three things, none of which allocates, locks or
-//! makes a system call:
-//! 1. it pushes a [`Reading`] into the readings ring: the law sample of the
-//!    buffer's first frame and cpal's prediction of when that frame is heard
+//! device. The data callback reads cpal's timestamps and calls
+//! [`Callback::run`] with them, which allocates nothing, locks nothing and
+//! makes no system call:
+//! 1. after the silent pre-roll, it pushes a [`crate::anchor::Reading`] into
+//!    the readings ring: the law sample of the buffer's first frame and cpal's
+//!    prediction of when that frame is heard
 //!    (`OutputCallbackInfo::timestamp().playback`, KB recipe 1532);
-//! 2. it renders the buffer ([`Synth::render`]), popping committed events and
-//!    the live monitor from their rings;
+//! 2. it renders the buffer ([`crate::synth::Synth::render`]), popping
+//!    committed events and the live monitor from their rings;
 //! 3. it publishes how far it has rendered, and what the synth counted, in
-//!    atomics the law thread reads.
+//!    atomics the law thread reads ([`Shared`]).
 //!
 //! The error callback only records the error's kind and raises the stop flag;
 //! the command stops the stream and reports it. cpal 0.18.2 reports buffer
@@ -21,15 +23,14 @@
 //! default device changes. Any of them stops the command cleanly.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, ErrorKind, OutputCallbackInfo, SampleFormat, StreamConfig};
-use rtrb::{Consumer, Producer};
 
-use crate::anchor::Reading;
-use crate::event::{Event, Monitor};
-use crate::synth::{RATE, Synth};
+use crate::callback::Callback;
+pub use crate::callback::Shared;
+use crate::synth::RATE;
 
 /// The buffer the host asks WASAPI for: 480 frames, 10 ms. Shared mode may
 /// round it (KB recipe 1531).
@@ -121,27 +122,6 @@ pub fn choose_output(choice: Option<&str>) -> Result<Output, String> {
         .ok_or_else(|| String::from("the output list changed while it was read"))
 }
 
-/// What the callback and the error callback share with the rest of the host.
-#[derive(Default)]
-pub struct Shared {
-    /// The law sample of the next frame to render: frames rendered so far.
-    pub frames: AtomicU64,
-    /// Raised by the error callback, or by the command to stop.
-    pub stop: AtomicBool,
-    /// The error callback's error, as [`kind_code`] numbers it; 0 for none.
-    pub error: AtomicU32,
-    /// The latest `playback - callback`, in nanoseconds: the output latency
-    /// cpal predicts.
-    pub latency_nanos: AtomicU64,
-    pub callbacks: AtomicU64,
-    pub largest_buffer: AtomicU64,
-    pub notes: AtomicU64,
-    pub beats: AtomicU64,
-    pub late: AtomicU64,
-    pub dropped: AtomicU64,
-    pub monitored: AtomicU64,
-}
-
 /// A number for an error kind, so the error callback can store it in an
 /// atomic; [`kind_text`] reads it back.
 pub fn kind_code(kind: ErrorKind) -> u32 {
@@ -184,55 +164,27 @@ pub struct Playing {
 
 /// Opens `output` at 48 kHz in f32 (KB recipe 1540), asking for a buffer of
 /// [`REQUESTED_FRAMES`] (and the device's default if that is refused), and
-/// starts it. The synth and the rings move into the callback; every ring was
-/// created before this call, which is the only time `rtrb` allocates. With
-/// `mute`, everything is rendered and counted as usual, and the device is sent
-/// silence: for checking the pipeline on a device without playing through it.
+/// starts it. The callback's state moves into the data callback; every ring
+/// in it was created before this call, which is the only time `rtrb`
+/// allocates. `shared` is the one the callback was made with.
 pub fn start(
     output: &Output,
-    mut synth: Box<Synth>,
-    mut events: Consumer<Event>,
-    mut monitor: Option<Consumer<Monitor>>,
-    mut readings: Producer<Reading>,
-    mute: bool,
+    mut callback: Callback,
+    shared: Arc<Shared>,
 ) -> Result<Playing, String> {
     let supported = output
         .device
         .default_output_config()
         .map_err(|e| format!("{}: no output configuration: {e}", output.name))?;
     let channels = supported.channels();
-    let shared = Arc::new(Shared::default());
-    let callback_shared = Arc::clone(&shared);
     let channel_count = usize::from(channels);
     let data = move |data: &mut [f32], info: &OutputCallbackInfo| {
-        let first = synth.frame();
         let stamp = info.timestamp();
-        let heard = u64::try_from(stamp.playback.as_nanos()).unwrap_or(u64::MAX);
-        let _ = readings.push(Reading {
-            sample: first,
-            nanos: heard,
-        });
-        if let Some(latency) = stamp.playback.checked_duration_since(stamp.callback) {
-            let nanos = u64::try_from(latency.as_nanos()).unwrap_or(u64::MAX);
-            callback_shared
-                .latency_nanos
-                .store(nanos, Ordering::Relaxed);
-        }
-        synth.render(data, channel_count, &mut events, monitor.as_mut());
-        if mute {
-            data.fill(0.0);
-        }
-        let s = &callback_shared;
-        let counts = synth.counts();
-        s.notes.store(counts.notes, Ordering::Relaxed);
-        s.beats.store(counts.beats, Ordering::Relaxed);
-        s.late.store(counts.late, Ordering::Relaxed);
-        s.dropped.store(counts.dropped, Ordering::Relaxed);
-        s.monitored.store(counts.monitored, Ordering::Relaxed);
-        s.callbacks.fetch_add(1, Ordering::Relaxed);
-        let frames = (data.len() / channel_count.max(1)) as u64;
-        s.largest_buffer.fetch_max(frames, Ordering::Relaxed);
-        s.frames.store(synth.frame(), Ordering::Release);
+        let latency = stamp
+            .playback
+            .checked_duration_since(stamp.callback)
+            .map(|d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX));
+        callback.run(data, channel_count, nanos(stamp.playback), latency);
     };
     let error_shared = Arc::clone(&shared);
     let on_error = move |error: cpal::Error| {

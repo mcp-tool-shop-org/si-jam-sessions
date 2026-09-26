@@ -31,6 +31,11 @@ pub struct Pumped {
     pub pushed: usize,
     /// Events read but still waiting for room in the ring.
     pub pending: usize,
+    /// The law sample before which every committed event is in the ring: the
+    /// first waiting event's onset, or, with none waiting, the first sample of
+    /// the first quantum not yet read. The callback's pre-roll waits for it
+    /// ([`crate::callback`]).
+    pub covered: u64,
 }
 
 /// The non-real-time side of the host's clock.
@@ -85,6 +90,10 @@ impl Scheduler {
             }
         }
         pumped.pending = self.pending.len();
+        pumped.covered = match self.pending.front() {
+            Some(event) => event.onset(),
+            None => self.next.saturating_mul(u64::from(QUANTUM_SAMPLES)),
+        };
         Ok(pumped)
     }
 }
@@ -183,6 +192,34 @@ mod tests {
             assert!(taken == want, "blocks {blocks:?}: the events differ");
             assert_eq!(late, 0, "blocks {blocks:?}");
         }
+    }
+
+    /// Before the stream starts, the ring holds the first H + 1 quanta, and
+    /// the cover says so; with events waiting for room, the cover stops at the
+    /// first of them.
+    #[test]
+    fn the_cover_is_how_far_the_ring_is_complete() {
+        let piece = Piece::entertainer(&crate::score::root()).unwrap();
+        let mut law = Law::acquire();
+        law.ingest(&piece.container).unwrap();
+        law.admit_take(&piece.take).unwrap();
+        let (mut producer, mut consumer) = RingBuffer::new(crate::RING_EVENTS);
+        let mut scheduler = Scheduler::new(0);
+        let pumped = scheduler.pump(&mut law, 0, &mut producer).unwrap();
+        let lead = (u64::from(HORIZON_QUANTA) + 1) * u64::from(QUANTUM_SAMPLES);
+        assert_eq!((pumped.pending, pumped.covered), (0, lead));
+        while consumer.pop().is_ok() {}
+
+        // A ring with room for the events at sample 0 only: the first event
+        // after them waits, and the cover is its onset.
+        let all = expected(&piece, 10_000 + u64::from(HORIZON_QUANTA));
+        let at_zero = all.iter().position(|e| e.onset() > 0).unwrap();
+        let (mut producer, _consumer) = RingBuffer::new(at_zero);
+        let mut scheduler = Scheduler::new(0);
+        let pumped = scheduler.pump(&mut law, 480_000, &mut producer).unwrap();
+        assert_eq!(pumped.pending, all.len() - at_zero);
+        assert_eq!(pumped.covered, all[at_zero].onset());
+        assert!(pumped.covered > 0);
     }
 
     /// A ring too small for a chord: the scheduler keeps what does not fit and

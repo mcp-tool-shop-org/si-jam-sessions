@@ -12,9 +12,12 @@
 //!
 //! WinMM stamps each message in milliseconds since `midiInStart`, and the host
 //! reads it in microseconds, as midir does (KB recipe 1536). The callback does
-//! no more than it must: it reads the stream clock for the message's arrival,
-//! starts or releases the monitor voice, and hands the press to the law thread,
-//! through two `rtrb` rings. It allocates nothing and takes no lock.
+//! no more than it must: it reads the stream clock for the message's arrival
+//! (cpal's `Stream::now`, which on WASAPI is `QueryPerformanceCounter`), then
+//! [`deliver`] starts or releases the monitor voice and hands the press to the
+//! law thread, through two `rtrb` rings made before the port opened. It calls
+//! no multimedia function, allocates nothing and takes no lock; a full ring
+//! drops the message rather than wait.
 
 use std::sync::Arc;
 
@@ -138,15 +141,29 @@ unsafe extern "system" fn on_message(
     // is the only reference to it while the call runs.
     let sink = unsafe { &mut *(instance as *mut Sink) };
     let arrived = nanos(sink.stream.now());
+    deliver(&mut sink.monitor, &mut sink.input, arrived, param1, param2);
+}
+
+/// The callback's work once it has read the clock: a note-on or note-off,
+/// arrived at stream instant `arrived`, goes to the monitor and to the law
+/// thread with its WinMM time; any other message is dropped. It only pushes
+/// into rings, which never allocate or block (`alloc_free` counts it).
+pub(crate) fn deliver(
+    monitor: &mut Producer<Monitor>,
+    input: &mut Producer<Press>,
+    arrived: u64,
+    param1: usize,
+    param2: usize,
+) {
     let Some((down, pitch, velocity)) = midi_press(param1 as u32) else {
         return;
     };
-    let _ = sink.monitor.push(if down {
+    let _ = monitor.push(if down {
         Monitor::On { pitch, velocity }
     } else {
         Monitor::Off { pitch }
     });
-    let _ = sink.input.push(Press {
+    let _ = input.push(Press {
         down,
         pitch,
         velocity,

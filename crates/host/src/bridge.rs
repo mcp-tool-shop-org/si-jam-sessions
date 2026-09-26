@@ -7,6 +7,12 @@
 //!
 //! The exports share one state per process, so a process holds one [`Law`]
 //! at a time: [`Law::acquire`] waits for it.
+//!
+//! The host calls `law_frames`, `law_horizon`, `law_live_note` and
+//! `law_live_note_off`, which came with law version 4; version 3 has none of
+//! them. A host that loads a law reads `law_version()` first. This one links
+//! the law it is built with, so it checks when it builds: a law before version
+//! 4 fails the build at [`LAW_VERSION_NEEDED`], not at a call.
 
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -43,6 +49,11 @@ pub struct Record {
     pub hash: [u8; 32],
     pub rows: String,
 }
+
+/// The first law version with the verbs the host calls.
+pub const LAW_VERSION_NEEDED: u32 = 4;
+
+const _: () = assert!(law::LAW_VERSION >= LAW_VERSION_NEEDED);
 
 static HELD: AtomicBool = AtomicBool::new(false);
 
@@ -121,6 +132,13 @@ impl Law {
         Law::pass(abi::law_admit_take, "law_admit_take", take)
     }
 
+    /// Loads a score in the law's score layout, with no receipt: the tests'
+    /// own scores. A host plays a score through [`Law::ingest`].
+    #[cfg(test)]
+    pub fn load_score(&mut self, score: &[u8]) -> Result<(), Refused> {
+        Law::pass(abi::law_load_score, "law_load_score", score)
+    }
+
     /// Steps one quantum.
     pub fn step(&mut self) -> Result<(), Refused> {
         Law::check("law_step", abi::law_step())
@@ -150,17 +168,26 @@ impl Law {
         })
     }
 
-    /// The live verb: one note a person played, on the law's sample clock.
+    /// The live note-on: a key went down, heard at law sample
+    /// `onset_sample`. The law decides what it cites.
     pub fn live_note(
         &mut self,
         onset_sample: i64,
         pitch: u32,
         velocity: u32,
-        duration_samples: u64,
     ) -> Result<(), Refused> {
         Law::check(
             "law_live_note",
-            abi::law_live_note(onset_sample, pitch, velocity, duration_samples),
+            abi::law_live_note(onset_sample, pitch, velocity),
+        )
+    }
+
+    /// The live note-off: the key of `pitch` came up at law sample
+    /// `off_sample`, which ends the live note of that pitch the law holds.
+    pub fn live_note_off(&mut self, pitch: u32, off_sample: i64) -> Result<(), Refused> {
+        Law::check(
+            "law_live_note_off",
+            abi::law_live_note_off(pitch, off_sample),
         )
     }
 
