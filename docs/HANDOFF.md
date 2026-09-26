@@ -1,9 +1,5 @@
 # Handoff — si-jam-sessions, 2026-09-26
 
-> **In progress (remove this banner when done):** this file describes the state after the full treatment
-> merges. The treatment is on branch `treatment/full`, and the release `v0.1.0` is a draft. The steps that
-> remain are in [`TREATMENT-FINISH.md`](TREATMENT-FINISH.md).
-
 Read this first, then [`PHASE-0.md`](PHASE-0.md). It says where the project stands, what was decided and why,
 and exactly what to do next.
 
