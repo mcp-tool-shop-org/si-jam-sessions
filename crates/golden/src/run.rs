@@ -701,6 +701,61 @@ mod tests {
         compute(&Inputs::read(&repo_root()).unwrap(), SEED, TakeEdit::None).unwrap()
     }
 
+    /// The constructed take played through the live verb instead of admitted
+    /// whole: through the C ABI, one note at a time, in reverse order, each
+    /// with no citation and the length of the score note it plays, once the
+    /// transport has committed every quantum the take reaches. The law cites
+    /// every note as the constructed take does, so the rows are the committed
+    /// rows and the snapshot's SHA-256 is the committed golden.
+    #[test]
+    fn the_constructed_take_played_live_is_the_golden() {
+        let root = repo_root();
+        let g = golden();
+        let committed = GoldenFile::read(&root).unwrap().golden().unwrap();
+        assert_eq!(g.golden, committed);
+        let notes = wire::decode_take(&g.take).unwrap();
+        let score = Law::ingest(&g.container).unwrap().score().clone();
+        let last = notes
+            .iter()
+            .map(|n| n.onset_sample / u64::from(QUANTUM_SAMPLES))
+            .max()
+            .unwrap();
+
+        let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        pass(&g.container, abi::law_ingest, "law_ingest").unwrap();
+        let steps = last + 1 - u64::from(law::HORIZON_QUANTA);
+        for _ in 0..steps {
+            assert_eq!(abi::law_step(), 0);
+        }
+        assert_eq!(
+            abi::law_horizon(),
+            last,
+            "the last onset's quantum, exactly"
+        );
+        for n in notes.iter().rev() {
+            let length = n
+                .cites
+                .and_then(|id| score.note(id))
+                .map_or(1, |s| s.duration_samples);
+            let status = abi::law_live_note(
+                i64::try_from(n.onset_sample).unwrap(),
+                u32::from(n.pitch),
+                u32::from(n.velocity),
+                length,
+            );
+            if status != 0 {
+                panic!("{}", refusal("law_live_note", status));
+            }
+        }
+        assert_eq!(snapshot_hash().unwrap(), committed);
+        let rows = read_out(abi::law_rows_ptr(), abi::law_rows_len());
+        assert_eq!(rows, g.rows.as_bytes());
+        assert_eq!(
+            fs::read(root.join(ROWS_FILE)).unwrap(),
+            [rows, b"\n".to_vec()].concat()
+        );
+    }
+
     /// The expected verdicts of PHASE-0's constructed take, graded by the law
     /// from the committed inputs, and the rows that state them in digits.
     #[test]
