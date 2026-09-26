@@ -209,7 +209,11 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 ///   receipt's digest is unchanged (`e23ba2e9…`), and the Entertainer is admitted as public
 ///   domain.
 ///
-/// Version 3's pushed refinements, one line each: none yet.
+/// Version 3's pushed refinements, one line each. Under every one of them the Entertainer
+/// receipt's digest is unchanged (`e23ba2e9…`), and the Entertainer is admitted as public
+/// domain. A commit that only edits this record refines nothing.
+/// - `4d720d6`: an author's name may not be empty or only whitespace, and a licence
+///   notice in a sequencer-specific or unknown meta event, a SysEx or an escape is read.
 pub const PREDICATE_VERSION: u32 = 3;
 
 impl Receipt {
