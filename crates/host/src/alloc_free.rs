@@ -169,6 +169,103 @@ mod tests {
         assert!(out.iter().any(|s| *s != 0.0));
     }
 
+    /// The same, with the score on the piano: thirty seconds of *The
+    /// Entertainer*'s committed events through the callback's body, every
+    /// score note started on a sampled key, pitched between keys, released
+    /// with its hammer noise, some voices ending partway through a pass, with
+    /// the take, the click and a live note beside them: no allocation. The
+    /// samples are the synthetic fixture's, long enough to sound through each
+    /// note, and were decoded before the measured span, as a host loads them
+    /// before its stream.
+    #[test]
+    fn the_callback_with_the_piano_allocates_nothing() {
+        use crate::fixture;
+        use crate::piano::{File, Needs};
+
+        let piece = Piece::entertainer(&root()).unwrap();
+        let events: Vec<Event> = {
+            let mut law = Law::acquire();
+            law.ingest(&piece.container).unwrap();
+            law.admit_take(&piece.take).unwrap();
+            offline::events(&mut law, 48_000 * 30).unwrap()
+        };
+        let mut needs = Needs::default();
+        for n in piece.score.notes() {
+            needs.note(n.pitch, n.velocity);
+        }
+        let bank = std::sync::Arc::new(fixture::bank(&needs, |file| match file {
+            File::Note { .. } => 24_000,
+            File::Release { .. } => 480,
+        }));
+        let (mut producer, consumer) = RingBuffer::new(events.len());
+        for e in &events {
+            producer.push(*e).unwrap();
+        }
+        let (mut live, monitor) = RingBuffer::new(8);
+        let (readings, _readings_out) = RingBuffer::new(8_192);
+        let shared = Arc::new(Shared::default());
+        shared.covered.store(4_848, Ordering::Release);
+        let mut callback = Callback::new(
+            Synth::new(0).with_piano(bank),
+            consumer,
+            Some(monitor),
+            readings,
+            Arc::clone(&shared),
+            false,
+        );
+        let mut out = vec![0.0f32; 2 * 8_192];
+        let sizes = [480usize, 441, 1, 1_024, 4_096, 97, 512, 2_000];
+
+        let ((), allocations) = counted(|| {
+            callback.run(&mut out, 2, 1_000_000, Some(10_000_000));
+            let mut i = 0;
+            while shared.frames.load(Ordering::Acquire) < 48_000 * 30 {
+                if i == 100 {
+                    let _ = live.push(Monitor::On {
+                        pitch: 60,
+                        velocity: 80,
+                    });
+                }
+                if i == 400 {
+                    let _ = live.push(Monitor::Off { pitch: 60 });
+                }
+                let frames = sizes[i % sizes.len()];
+                let buffer = &mut out[..2 * frames];
+                callback.run(buffer, 2, 2_000_000 + i as u64, Some(10_000_000));
+                black_box(&buffer[0]);
+                i += 1;
+            }
+        });
+        assert_eq!(allocations, 0);
+        let count = |a: &std::sync::atomic::AtomicU64| a.load(Ordering::Relaxed);
+        assert_eq!(
+            count(&shared.notes) + count(&shared.beats),
+            events.len() as u64
+        );
+        assert_eq!((count(&shared.late), count(&shared.dropped)), (0, 0));
+        assert!(out.iter().any(|s| *s != 0.0));
+    }
+
+    /// The piano's negative control: a sampler that decoded its samples as it
+    /// needed them, in the callback, would allocate. Decoding one fixture
+    /// sample, or making a piano's voices, moves the counter.
+    #[test]
+    fn decoding_a_sample_or_making_a_piano_allocates() {
+        use crate::fixture;
+        use crate::piano::{Bank, File, Needs, decode};
+        use crate::sampler::Piano;
+
+        let file = File::Note { zone: 13, layer: 7 };
+        let bytes = fixture::sample_bytes(file, 480);
+        let (sample, decoding) = counted(|| decode(&file.name(), &bytes));
+        assert!(sample.is_ok());
+        assert!(decoding >= 1, "{decoding}");
+        let bank = std::sync::Arc::new(Bank::load(&Needs::default(), |_| Ok(Vec::new())).unwrap());
+        let (piano, making) = counted(|| Piano::new(bank));
+        black_box(&piano);
+        assert!(making >= 1, "{making}");
+    }
+
     /// The WinMM callback's work after its clock read, for a thousand
     /// note-ons and note-offs and a thousand clock ticks, into rings too small
     /// for them all: no allocation. Each note message is delivered while there

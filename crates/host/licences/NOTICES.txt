@@ -4,17 +4,23 @@ The host is MIT, like the rest of si-jam-sessions (LICENSE at the repository
 root). These crates are linked into it, and their licences travel with it.
 
 Windows (x86_64-pc-windows-msvc), the target the host is run on:
+  adler2 2.0.1  0BSD OR MIT OR Apache-2.0
   block-buffer 0.12.1  MIT OR Apache-2.0
   cfg-if 1.0.5  MIT OR Apache-2.0
+  claxon 0.4.3  Apache-2.0
   cpal 0.18.2  Apache-2.0
   cpufeatures 0.3.1  MIT OR Apache-2.0
+  crc32fast 1.5.2  MIT OR Apache-2.0
   crypto-common 0.2.2  MIT OR Apache-2.0
   dasp_sample 0.11.0  MIT OR Apache-2.0
   digest 0.11.3  MIT OR Apache-2.0
+  flate2 1.1.10  MIT OR Apache-2.0
   hybrid-array 0.4.15  MIT OR Apache-2.0
   midly 0.5.3  Unlicense
+  miniz_oxide 0.9.1  MIT OR Zlib OR Apache-2.0
   rtrb 0.4.0  MIT OR Apache-2.0
   sha2 0.11.0  MIT OR Apache-2.0
+  simd-adler32 0.3.10  MIT
   typenum 1.20.1  MIT OR Apache-2.0
   windows 0.62.2  MIT OR Apache-2.0
   windows-collections 0.3.2  MIT OR Apache-2.0
@@ -27,34 +33,47 @@ Windows (x86_64-pc-windows-msvc), the target the host is run on:
   windows-threading 0.2.1  MIT OR Apache-2.0
 
 Linux (x86_64-unknown-linux-gnu), where CI builds and tests it:
+  adler2 2.0.1  0BSD OR MIT OR Apache-2.0
   alsa 0.11.0  Apache-2.0/MIT
   alsa-sys 0.4.0  MIT
   bitflags 2.13.2  MIT OR Apache-2.0
   block-buffer 0.12.1  MIT OR Apache-2.0
   cfg-if 1.0.5  MIT OR Apache-2.0
+  claxon 0.4.3  Apache-2.0
   cpal 0.18.2  Apache-2.0
   cpufeatures 0.3.1  MIT OR Apache-2.0
+  crc32fast 1.5.2  MIT OR Apache-2.0
   crypto-common 0.2.2  MIT OR Apache-2.0
   dasp_sample 0.11.0  MIT OR Apache-2.0
   digest 0.11.3  MIT OR Apache-2.0
+  flate2 1.1.10  MIT OR Apache-2.0
   hybrid-array 0.4.15  MIT OR Apache-2.0
   libc 0.2.189  MIT OR Apache-2.0
   midly 0.5.3  Unlicense
+  miniz_oxide 0.9.1  MIT OR Zlib OR Apache-2.0
   rtrb 0.4.0  MIT OR Apache-2.0
   sha2 0.11.0  MIT OR Apache-2.0
+  simd-adler32 0.3.10  MIT
   typenum 1.20.1  MIT OR Apache-2.0
 
 What each licence asks:
-- cpal is Apache-2.0 only. Apache-2.0 asks that a recipient be given a copy
-  of the licence, and that any NOTICE file the work includes be reproduced;
-  cpal 0.18.2 includes none. The licence's text follows.
-- Every crate above offered as "MIT OR Apache-2.0" (or "Apache-2.0/MIT") is
-  taken here under Apache-2.0, so the same text covers it.
-- alsa-sys is MIT only, on Linux; its copyright and permission notice
-  follows the Apache-2.0 text.
+- cpal and claxon are Apache-2.0 only. Apache-2.0 asks that a recipient be
+  given a copy of the licence, and that any NOTICE file the work includes be
+  reproduced; cpal 0.18.2 and claxon 0.4.3 include none. The licence's text
+  follows.
+- Every crate above offered as "MIT OR Apache-2.0" (or "Apache-2.0/MIT"), or
+  with further choices ("0BSD OR MIT OR Apache-2.0", "MIT OR Zlib OR
+  Apache-2.0"), is taken here under Apache-2.0, so the same text covers it.
+- alsa-sys (on Linux) and simd-adler32 are MIT only; their copyright and
+  permission notices follow the Apache-2.0 text.
 - midly is under the Unlicense, which asks for nothing.
 
 Not used: midir, whose 0.11.0 brings libloading 0.7.4 (ISC) into the
 lockfile through its Android dependencies; MIDI input is read from WinMM
 directly. assert_no_alloc, whose BSD-1-Clause notice would travel with its
-source; the render's freedom from allocation is proved by a test instead.
+source; the render's freedom from allocation is proved by a test instead. An
+HTTP client: fetch-piano downloads with the system's curl, so no TLS stack is
+linked.
+
+The piano's samples are not a crate and are not shipped with the host; their
+notice and licence come last.

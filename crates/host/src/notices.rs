@@ -1,10 +1,13 @@
-//! The licences of the crates the host is built from, which `host notices`
-//! prints. cpal is Apache-2.0 only, so a recipient of the host gets the
-//! licence's text (KB recipe 1524); alsa-sys, on Linux, is MIT only, so its
-//! notice goes too (KB recipe 1528).
+//! The licences of the crates the host is built from, and of the samples its
+//! piano plays, which `host notices` prints. cpal is Apache-2.0 only, so a
+//! recipient of the host gets the licence's text (KB recipe 1524); alsa-sys,
+//! on Linux, is MIT only, so its notice goes too (KB recipe 1528). The
+//! piano's samples are CC BY 3.0, so their credit and the licence's legal code
+//! go with the host, though the samples themselves are fetched, not shipped.
 
-/// The notices, the Apache-2.0 text (cpal's own `LICENSE`, unchanged) and
-/// alsa-sys's MIT notice.
+/// The notices, the Apache-2.0 text (cpal's own `LICENSE`, unchanged),
+/// alsa-sys's MIT notice, and the piano samples' notice with the CC BY 3.0
+/// legal code.
 pub const TEXT: &str = concat!(
     include_str!("../licences/NOTICES.txt"),
     "\n---------------------------------------------------------------------\n\n",
@@ -12,6 +15,13 @@ pub const TEXT: &str = concat!(
     "\n---------------------------------------------------------------------\n\n",
     "alsa-sys 0.4.0:\n\n",
     include_str!("../licences/alsa-sys-MIT.txt"),
+    "\n---------------------------------------------------------------------\n\n",
+    "simd-adler32 0.3.10:\n\n",
+    include_str!("../licences/simd-adler32-MIT.txt"),
+    "\n---------------------------------------------------------------------\n\n",
+    include_str!("../licences/Salamander-NOTICE.txt"),
+    "\n",
+    include_str!("../licences/CC-BY-3.0.txt"),
 );
 
 #[cfg(test)]
@@ -92,10 +102,12 @@ mod tests {
             .map(|l| l.splitn(3, ' ').nth(2).unwrap_or("").to_owned())
             .collect();
         let expected: BTreeSet<String> = [
+            "0BSD OR MIT OR Apache-2.0",
             "Apache-2.0",
             "Apache-2.0/MIT",
             "MIT",
             "MIT OR Apache-2.0",
+            "MIT OR Zlib OR Apache-2.0",
             "Unlicense",
         ]
         .into_iter()
@@ -108,6 +120,25 @@ mod tests {
     fn the_notices_carry_the_licence_texts() {
         assert!(super::TEXT.contains("Apache License\n                           Version 2.0"));
         assert!(super::TEXT.contains("Copyright (c) 2018 diwic"));
+        assert!(super::TEXT.contains("Copyright (c) [2021] [Marvin Countryman]"));
         assert!(super::TEXT.contains("Permission is hereby granted, free of charge"));
+    }
+
+    /// The piano's credit is in the notices word for word, with the CC BY 3.0
+    /// legal code, byte for byte the file the research manifest recorded.
+    #[test]
+    fn the_notices_carry_the_pianos_credit_and_licence() {
+        let credit = crate::piano::CREDIT.split_whitespace().collect::<Vec<_>>();
+        let text = super::TEXT.split_whitespace().collect::<Vec<_>>();
+        assert!(
+            text.windows(credit.len()).any(|w| w == credit.as_slice()),
+            "the credit"
+        );
+        let legal = include_bytes!("../licences/CC-BY-3.0.txt");
+        assert_eq!(
+            golden::run::hex(&golden::run::sha256(legal)),
+            "e6bc9e9c474700b708f568bac9e5a8a9bcb2b1dad53442f5ba449fcb848b8e76"
+        );
+        assert!(super::TEXT.contains("Attribution 3.0 Unported"));
     }
 }

@@ -2,21 +2,24 @@
 //!
 //! ```text
 //! cargo run -p host --release -- devices
-//! cargo run -p host --release -- play [--output <index|name>] [--mute]
-//! cargo run -p host --release -- render <out.wav>
-//! cargo run -p host --release -- jam [--output <index|name>] [--midi <index|name> | --keyboard] [--mute]
+//! cargo run -p host --release -- play [--output <index|name>] [--mute] [--voice piano|osc] [--samples <dir>]
+//! cargo run -p host --release -- render <out.wav> [--voice piano|osc] [--samples <dir>]
+//! cargo run -p host --release -- jam [--output <index|name>] [--midi <index|name> | --keyboard] [--mute] [--voice piano|osc] [--samples <dir>]
 //! cargo run -p host --release -- jitter [--output <index|name>]
+//! cargo run -p host --release -- fetch-piano [--dir <dir>] [--archive <file>] [--keep-archive]
+//! cargo run -p host --release -- preview <in.mid> <out.wav> [--samples <dir>]
 //! cargo run -p host --release -- notices
 //! ```
 //!
 //! Exit status: 0 when the command finished, 1 when it stopped on an error (a
 //! refused law call, a device error, a bad argument), with the reason printed.
 
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cpal::traits::StreamTrait;
 use golden::take::Perturbation;
@@ -26,37 +29,47 @@ use host::callback::{Callback, Shared};
 use host::device::{self, Output, Playing};
 use host::event::{Event, Monitor};
 use host::live::{Dropped, Passed, Press, Taker, close_through, delivery, release_all};
+use host::piano::{self, Bank, Needs};
 use host::schedule::{Scheduler, steps_for};
 use host::score::{Piece, clock, root};
 use host::synth::Synth;
-use host::{RING_EVENTS, offline};
+use host::{RING_EVENTS, fetch, offline, preview};
 use rtrb::{Consumer, Producer, RingBuffer};
 
 const USAGE: &str = "usage:
   host devices                  list the audio outputs and the MIDI inputs
-  host play [--output X] [--mute]
+  host play [--output X] [--mute] [--voice piano|osc] [--samples DIR]
                                 play The Entertainer's constructed take against the score and the click;
                                 --mute renders and counts everything and sends the device silence
-  host render <out.wav>         render the same mix to a WAV file, with no device
-  host jam [--output X] [--midi X | --keyboard] [--mute]
+  host render <out.wav> [--voice piano|osc] [--samples DIR]
+                                render the same mix to a WAV file, with no device
+  host jam [--output X] [--midi X | --keyboard] [--mute] [--voice piano|osc] [--samples DIR]
                                 play the score and the click, take a live take, print its verdicts
   host jitter [--output X]      measure the audio clock's readings and the console's key path
-  host notices                  print the licences of the crates the host is built from
-X is an index from `host devices` or part of a name.";
+  host fetch-piano [--dir DIR] [--archive FILE] [--keep-archive]
+                                download the piano's samples (742 MB, CC BY 3.0) into the per-user
+                                cache or DIR, check them against the SHA-256 the host pins, unpack them
+  host preview <in.mid> <out.wav> [--samples DIR]
+                                a PREVIEW: render a MIDI file straight through the piano, without the
+                                law, to audition a draft; it is not the law's committed frames
+  host notices                  print the licences of the crates and the samples the host uses
+X is an index from `host devices` or part of a name.
+--voice is the score's voice: the piano when fetch-piano has put its samples in the per-user cache
+(or in the DIR --samples names), the oscillator otherwise. The take, your live notes and the click
+are oscillators either way. The piano prints its credit whenever it plays.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.split_first() {
         Some((command, rest)) => match command.as_str() {
-            "devices" => no_options(rest).and_then(|()| devices()),
-            "play" => options(rest, false, true).and_then(|o| play(&o)),
-            "render" => match rest {
-                [path] => render(path),
-                _ => Err(String::from("render takes one argument, the WAV to write")),
-            },
-            "jam" => options(rest, true, true).and_then(|o| jam(&o)),
-            "jitter" => options(rest, false, false).and_then(|o| jitter(&o)),
-            "notices" => no_options(rest).map(|()| print!("{}", host::notices::TEXT)),
+            "devices" => options(rest, Accepts::NONE, 0).and_then(|_| devices()),
+            "play" => options(rest, Accepts::PLAY, 0).and_then(|o| play(&o)),
+            "render" => options(rest, Accepts::VOICE, 1).and_then(|o| render(&o)),
+            "jam" => options(rest, Accepts::JAM, 0).and_then(|o| jam(&o)),
+            "jitter" => options(rest, Accepts::OUTPUT, 0).and_then(|o| jitter(&o)),
+            "fetch-piano" => options(rest, Accepts::FETCH, 0).and_then(|o| fetch_piano(&o)),
+            "preview" => options(rest, Accepts::SAMPLES, 2).and_then(|o| preview(&o)),
+            "notices" => options(rest, Accepts::NONE, 0).map(|_| print!("{}", host::notices::TEXT)),
             "help" | "--help" | "-h" => {
                 println!("{USAGE}");
                 Ok(())
@@ -74,24 +87,79 @@ fn main() -> ExitCode {
     }
 }
 
-#[derive(Default)]
+/// The score's voice a command was asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VoiceChoice {
+    Piano,
+    Osc,
+}
+
+#[derive(Debug, Default)]
 struct Options {
     output: Option<String>,
     midi: Option<String>,
     keyboard: bool,
     mute: bool,
+    voice: Option<VoiceChoice>,
+    samples: Option<PathBuf>,
+    dir: Option<PathBuf>,
+    archive: Option<PathBuf>,
+    keep_archive: bool,
+    /// The command's arguments that are not options, in order.
+    positional: Vec<String>,
 }
 
-fn no_options(rest: &[String]) -> Result<(), String> {
-    match rest {
-        [] => Ok(()),
-        _ => Err(format!("unexpected arguments: {}", rest.join(" "))),
-    }
+/// The options a command takes.
+#[derive(Clone, Copy, Debug)]
+struct Accepts {
+    output: bool,
+    /// `--midi` and `--keyboard`.
+    live: bool,
+    mute: bool,
+    voice: bool,
+    samples: bool,
+    /// `--dir`, `--archive` and `--keep-archive`.
+    fetch: bool,
 }
 
-/// The options a command takes: `--output` always; `--midi` and `--keyboard`
-/// for `jam` (`live`); `--mute` for `play` and `jam` (`mute`).
-fn options(rest: &[String], live: bool, mute: bool) -> Result<Options, String> {
+impl Accepts {
+    const NONE: Accepts = Accepts {
+        output: false,
+        live: false,
+        mute: false,
+        voice: false,
+        samples: false,
+        fetch: false,
+    };
+    const OUTPUT: Accepts = Accepts {
+        output: true,
+        ..Accepts::NONE
+    };
+    const SAMPLES: Accepts = Accepts {
+        samples: true,
+        ..Accepts::NONE
+    };
+    const VOICE: Accepts = Accepts {
+        voice: true,
+        ..Accepts::SAMPLES
+    };
+    const PLAY: Accepts = Accepts {
+        output: true,
+        mute: true,
+        ..Accepts::VOICE
+    };
+    const JAM: Accepts = Accepts {
+        live: true,
+        ..Accepts::PLAY
+    };
+    const FETCH: Accepts = Accepts {
+        fetch: true,
+        ..Accepts::NONE
+    };
+}
+
+/// Reads a command's options, and exactly `positional` other arguments.
+fn options(rest: &[String], accepts: Accepts, positional: usize) -> Result<Options, String> {
     let mut o = Options::default();
     let mut args = rest.iter();
     while let Some(arg) = args.next() {
@@ -101,12 +169,38 @@ fn options(rest: &[String], live: bool, mute: bool) -> Result<Options, String> {
                 .ok_or_else(|| format!("{arg} needs a value"))
         };
         match arg.as_str() {
-            "--output" if o.output.is_none() => o.output = Some(value()?),
-            "--midi" if live && o.midi.is_none() => o.midi = Some(value()?),
-            "--keyboard" if live && !o.keyboard => o.keyboard = true,
-            "--mute" if mute && !o.mute => o.mute = true,
+            "--output" if accepts.output && o.output.is_none() => o.output = Some(value()?),
+            "--midi" if accepts.live && o.midi.is_none() => o.midi = Some(value()?),
+            "--keyboard" if accepts.live && !o.keyboard => o.keyboard = true,
+            "--mute" if accepts.mute && !o.mute => o.mute = true,
+            "--voice" if accepts.voice && o.voice.is_none() => {
+                o.voice = Some(match value()?.as_str() {
+                    "piano" => VoiceChoice::Piano,
+                    "osc" => VoiceChoice::Osc,
+                    other => {
+                        return Err(format!("--voice is piano or osc, not \"{other}\""));
+                    }
+                });
+            }
+            "--samples" if accepts.samples && o.samples.is_none() => {
+                o.samples = Some(PathBuf::from(value()?));
+            }
+            "--dir" if accepts.fetch && o.dir.is_none() => o.dir = Some(PathBuf::from(value()?)),
+            "--archive" if accepts.fetch && o.archive.is_none() => {
+                o.archive = Some(PathBuf::from(value()?));
+            }
+            "--keep-archive" if accepts.fetch && !o.keep_archive => o.keep_archive = true,
+            other if !other.starts_with("--") && o.positional.len() < positional => {
+                o.positional.push(other.to_owned());
+            }
             other => return Err(format!("unexpected argument \"{other}\"\n{USAGE}")),
         }
+    }
+    if o.positional.len() != positional {
+        return Err(format!(
+            "that command takes {positional} argument{} besides its options\n{USAGE}",
+            if positional == 1 { "" } else { "s" }
+        ));
     }
     if o.keyboard && o.midi.is_some() {
         return Err(String::from(
@@ -114,6 +208,86 @@ fn options(rest: &[String], live: bool, mute: bool) -> Result<Options, String> {
         ));
     }
     Ok(o)
+}
+
+/// The piano's samples for the notes a command will play, `(pitch,
+/// velocity)`, loaded before any stream exists; `None` when the score plays
+/// on the oscillator. The piano plays when `--voice piano` asks for it, and by
+/// default when `fetch-piano` has put verified samples where `--samples` (or
+/// the per-user cache) says; `--voice osc` plays the oscillator.
+fn piano_for(
+    o: &Options,
+    notes: impl Iterator<Item = (u8, u8)>,
+) -> Result<Option<Arc<Bank>>, String> {
+    if o.voice == Some(VoiceChoice::Osc) {
+        return Ok(None);
+    }
+    let asked = o.voice == Some(VoiceChoice::Piano);
+    let dir = match fetch::dir_or_default(o.samples.as_deref()) {
+        Ok(dir) => dir,
+        Err(e) if !asked => {
+            println!("The score plays on the oscillator: {e}.");
+            return Ok(None);
+        }
+        Err(e) => return Err(e),
+    };
+    if !asked && fetch::verified(&dir).is_err() {
+        println!(
+            "The score plays on the oscillator: the piano's samples are not in {}. `host \
+             fetch-piano` downloads them (742 MB).",
+            dir.display()
+        );
+        return Ok(None);
+    }
+    let mut needs = Needs::default();
+    for (pitch, velocity) in notes {
+        needs.note(pitch, velocity);
+    }
+    load_piano(&dir, &needs).map(Some)
+}
+
+/// Loads the samples `needs` names from `dir`, and prints the piano's credit
+/// and what it holds.
+fn load_piano(dir: &Path, needs: &Needs) -> Result<Arc<Bank>, String> {
+    let started = Instant::now();
+    let bank = Bank::open(dir, needs)?;
+    let (count, bytes) = bank.size();
+    println!("{}", piano::CREDIT);
+    println!(
+        "  {count} samples loaded from {} in {:.1} s: {:.1} MiB of audio in memory.",
+        dir.display(),
+        started.elapsed().as_secs_f64(),
+        bytes as f64 / 1_048_576.0
+    );
+    Ok(Arc::new(bank))
+}
+
+/// The synth a command plays through: the score on the piano when there is
+/// one.
+fn synth_for(piano: Option<&Arc<Bank>>) -> Box<Synth> {
+    match piano {
+        Some(bank) => Synth::new(0).with_piano(Arc::clone(bank)),
+        None => Synth::new(0),
+    }
+}
+
+/// A render's loudest sample in dB below full scale, and how many samples
+/// reached full scale and were clipped there.
+fn level(samples: &[f32]) -> String {
+    let peak = samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+    let clipped = samples.iter().filter(|s| s.abs() >= 1.0).count();
+    if peak == 0.0 {
+        return String::from("silent");
+    }
+    format!(
+        "peak {:.1} dBFS, {clipped} samples at full scale",
+        20.0 * peak.log10()
+    )
+}
+
+/// The file's SHA-256, in hex.
+fn sha256_hex(bytes: &[u8]) -> String {
+    golden::run::hex(&golden::run::sha256(bytes))
 }
 
 fn refused(r: Refused) -> String {
@@ -173,11 +347,19 @@ fn list_midi() {
     println!("MIDI inputs: live input is built for Windows (WinMM and the console) only");
 }
 
+/// The score's voice, as the listening guide names it.
+fn score_voice(piano: bool) -> &'static str {
+    if piano { "the piano" } else { "the pure one" }
+}
+
 /// Prints where to listen, for `play` and `render`, in time order.
-fn guide(piece: &Piece) {
+fn guide(piece: &Piece, piano: bool) {
     let mut drawn = piece.drawn;
     drawn.sort_by_key(|d| piece.score.note(d.note).map_or(0, |n| n.onset_sample));
-    println!("Where to listen (the take is the reedy voice, the score the pure one):");
+    println!(
+        "Where to listen (the take is the reedy voice, the score {}):",
+        score_voice(piano)
+    );
     for d in drawn {
         let Some(note) = piece.score.note(d.note) else {
             continue;
@@ -225,33 +407,152 @@ fn drawn_rows(piece: &Piece, rows: &str) {
     }
 }
 
-fn render(path: &str) -> Result<(), String> {
+/// The notes the score plays, for the piano's needs.
+fn score_notes(piece: &Piece) -> impl Iterator<Item = (u8, u8)> + '_ {
+    piece.score.notes().iter().map(|n| (n.pitch, n.velocity))
+}
+
+fn render(o: &Options) -> Result<(), String> {
+    let path = o.positional.first().map_or("", String::as_str);
     let piece = Piece::entertainer(&root())?;
+    let piano = piano_for(o, score_notes(&piece))?;
     let mut law = Law::acquire();
     law.ingest(&piece.container).map_err(refused)?;
     law.admit_take(&piece.take).map_err(refused)?;
     let end = piece.end + 48_000;
-    let (samples, counts) = offline::render(&mut law, end, 480).map_err(refused)?;
-    let mut bytes = Vec::with_capacity(samples.len() * 4 + 58);
-    offline::write_wav(&mut bytes, &samples).map_err(|e| e.to_string())?;
+    let synth = synth_for(piano.as_ref());
+    let (samples, channels, counts) =
+        offline::render_with(&mut law, end, 480, synth).map_err(refused)?;
+    let info: &[([u8; 4], &str)] = if piano.is_some() {
+        &[
+            (*b"ICMT", piano::CREDIT),
+            (*b"ISFT", "si-jam-sessions host"),
+        ]
+    } else {
+        &[]
+    };
+    let mut bytes = Vec::with_capacity(samples.len() * 4 + 512);
+    offline::write_wav_with(&mut bytes, &samples, channels as u16, info)
+        .map_err(|e| e.to_string())?;
     std::fs::write(path, &bytes).map_err(|e| format!("{path}: {e}"))?;
     let record = law.record().map_err(refused)?;
+    let frames = samples.len() / channels.max(1);
     println!(
-        "Rendered {} frames ({}) of The Entertainer's constructed take, the score and the \
-         click to {path}: mono 32-bit float at 48 kHz; sample n of the file is law sample n.",
-        samples.len(),
-        clock(samples.len() as u64)
+        "Rendered {frames} frames ({}) of The Entertainer's constructed take, the score on {} \
+         and the click to {path}: {} 32-bit float at 48 kHz; frame n of the file is law sample n.",
+        clock(frames as u64),
+        if piano.is_some() {
+            "the piano"
+        } else {
+            "the oscillator"
+        },
+        if channels == 2 { "stereo" } else { "mono" }
     );
     println!(
-        "  {} notes and {} beats started, {} late, {} dropped; file SHA-256 {}",
+        "  {} notes and {} beats started, {} late, {} dropped; {}; file SHA-256 {}",
         counts.notes,
         counts.beats,
         counts.late,
         counts.dropped,
-        golden::run::hex(&golden::run::sha256(&bytes))
+        level(&samples),
+        sha256_hex(&bytes)
     );
-    guide(&piece);
+    if piano.is_some() {
+        println!("  The WAV carries the piano's credit in its LIST/INFO chunk (ICMT).");
+    }
+    guide(&piece, piano.is_some());
     drawn_rows(&piece, &record.rows);
+    Ok(())
+}
+
+/// `fetch-piano`: the piano's samples downloaded, verified and unpacked.
+fn fetch_piano(o: &Options) -> Result<(), String> {
+    let dir = fetch::dir_or_default(o.dir.as_deref())?;
+    println!("{}", piano::CREDIT);
+    let fetched = fetch::fetch(&dir, o.archive.as_deref(), o.keep_archive)?;
+    if fetched.fetched {
+        println!("Unpacked {} files into {}.", fetched.files, dir.display());
+        if let Some(kept) = &fetched.kept {
+            println!("  The archive is kept at {}.", kept.display());
+        }
+    } else {
+        println!(
+            "{} already holds the piano's samples, fetched and verified against SHA-256 {}.",
+            dir.display(),
+            fetch::ARCHIVE_SHA256
+        );
+    }
+    println!(
+        "  The samples are CC BY 3.0: the host prints their credit whenever the piano plays and \
+         writes it into every WAV it renders, and `host notices` prints the licence. To remove \
+         them, delete {}.",
+        dir.display()
+    );
+    Ok(())
+}
+
+/// What a preview's WAV says it is, in its LIST/INFO chunk.
+const PREVIEW_LABEL: &str = "si-jam-sessions host preview: a MIDI file rendered on the piano \
+                             without the law; not the law's committed frames";
+
+/// `preview`: a MIDI file straight through the piano, without the law.
+fn preview(o: &Options) -> Result<(), String> {
+    let (midi, wav) = match o.positional.as_slice() {
+        [midi, wav] => (midi, wav),
+        _ => return Err(String::from("preview takes a MIDI file and a WAV to write")),
+    };
+    println!(
+        "PREVIEW, not the law's committed frames: {midi} rendered straight through the piano, \
+         without the law (no receipt, no licence predicate, no step, no hash)."
+    );
+    let bytes = std::fs::read(midi).map_err(|e| format!("{midi}: {e}"))?;
+    let draft = preview::read(&bytes).map_err(|e| format!("{midi}: {e}"))?;
+    let dir = fetch::dir_or_default(o.samples.as_deref())?;
+    let bank = load_piano(&dir, &draft.needs)?;
+    let (samples, counts) = preview::render(&draft, bank);
+    let mut out = Vec::with_capacity(samples.len() * 4 + 512);
+    offline::write_wav_with(
+        &mut out,
+        &samples,
+        2,
+        &[(*b"ICMT", piano::CREDIT), (*b"ISFT", PREVIEW_LABEL)],
+    )
+    .map_err(|e| e.to_string())?;
+    std::fs::write(wav, &out).map_err(|e| format!("{wav}: {e}"))?;
+    let bpm = if draft.first_us_per_quarter == 0 {
+        0.0
+    } else {
+        60_000_000.0 / f64::from(draft.first_us_per_quarter)
+    };
+    println!(
+        "  {} notes at PPQ {}; {} tempo change{}, the first {bpm:.1} quarter notes a minute.",
+        draft.events.len(),
+        draft.ppq,
+        draft.tempos,
+        if draft.tempos == 1 { "" } else { "s" }
+    );
+    if draft.pedal > 0 {
+        println!(
+            "  {} sustain-pedal messages were ignored: the note lengths are the sustain.",
+            draft.pedal
+        );
+    }
+    if counts.outside > 0 {
+        println!(
+            "  {} notes are off the piano's keyboard (A0 to C8) and were not played.",
+            counts.outside
+        );
+    }
+    let frames = samples.len() / 2;
+    println!(
+        "Wrote a PREVIEW of {frames} frames ({}) to {wav}: stereo 32-bit float at 48 kHz; {} \
+         notes played, {} dropped; {}; SHA-256 {}. It is not the law's committed frames.",
+        clock(frames as u64),
+        counts.notes,
+        counts.dropped,
+        level(&samples),
+        sha256_hex(&out)
+    );
     Ok(())
 }
 
@@ -263,11 +564,14 @@ struct Session {
     readings: Consumer<Reading>,
 }
 
+/// Opens `output` and starts its stream, the score on the piano when `piano`
+/// holds its samples, which were loaded before this is called.
 fn open(
     output: &Output,
     law: &mut Law,
     monitor: Option<(Consumer<Monitor>, Consumer<Monitor>)>,
     mute: bool,
+    piano: Option<&Arc<Bank>>,
 ) -> Result<Session, String> {
     // Every ring is made before the stream: rtrb allocates only in
     // RingBuffer::new.
@@ -282,9 +586,10 @@ fn open(
         .pump(law, steps_for(0, 0, None), &mut events)
         .map_err(refused)?;
     shared.covered.store(pumped.covered, Ordering::Release);
+    let synth = synth_for(piano);
     let callback = match monitor {
         None => Callback::new(
-            Synth::new(0),
+            synth,
             events_out,
             None,
             readings_in,
@@ -292,7 +597,7 @@ fn open(
             mute,
         ),
         Some((monitor, hush)) => Callback::new(
-            Synth::new(0),
+            synth,
             events_out,
             Some(monitor),
             readings_in,
@@ -480,12 +785,14 @@ fn counted(session: &Session) -> String {
 fn play(o: &Options) -> Result<(), String> {
     let piece = Piece::entertainer(&root())?;
     let output = device::choose_output(o.output.as_deref())?;
+    // Every sample is in memory before the stream exists.
+    let piano = piano_for(o, score_notes(&piece))?;
     let mut law = Law::acquire();
     law.ingest(&piece.container).map_err(refused)?;
     law.admit_take(&piece.take).map_err(refused)?;
-    let mut session = open(&output, &mut law, None, o.mute)?;
+    let mut session = open(&output, &mut law, None, o.mute, piano.as_ref())?;
     describe(&output, &session);
-    guide(&piece);
+    guide(&piece, piano.is_some());
     let muted = if o.mute { ", muted" } else { "" };
     println!("Playing {}{muted}; press Enter to stop.", clock(piece.end));
     let stop = stop_flag(&session);
@@ -759,12 +1066,20 @@ fn jam(o: &Options) -> Result<(), String> {
     let piece = Piece::entertainer(&root())?;
     let input = choose_input(o)?;
     let output = device::choose_output(o.output.as_deref())?;
+    // Every sample is in memory before the stream exists.
+    let piano = piano_for(o, score_notes(&piece))?;
     let mut law = Law::acquire();
     law.ingest(&piece.container).map_err(refused)?;
     let (monitor_in, monitor_out) = RingBuffer::<Monitor>::new(256);
     let (mut hush_in, hush_out) = RingBuffer::<Monitor>::new(256);
     let (presses_in, mut presses) = RingBuffer::<Press>::new(4_096);
-    let mut session = open(&output, &mut law, Some((monitor_out, hush_out)), o.mute)?;
+    let mut session = open(
+        &output,
+        &mut law,
+        Some((monitor_out, hush_out)),
+        o.mute,
+        piano.as_ref(),
+    )?;
     describe(&output, &session);
     let stop = stop_flag(&session);
     let dropped = Arc::new(Dropped::default());
@@ -777,8 +1092,13 @@ fn jam(o: &Options) -> Result<(), String> {
         Arc::clone(&dropped),
     )?;
     println!(
-        "Play along with the score (the pure voice) and the click; your notes sound in the \
-         reedy voice. The score ends at {}.",
+        "Play along with the score ({}) and the click; your notes sound in the reedy voice. The \
+         score ends at {}.",
+        if piano.is_some() {
+            "the piano"
+        } else {
+            "the pure voice"
+        },
         clock(piece.end)
     );
 

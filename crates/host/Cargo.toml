@@ -21,6 +21,20 @@ golden = { path = "../golden" }
 cpal = { version = "=0.18.2", default-features = false }
 # The single-producer single-consumer rings into and out of the audio callback.
 rtrb = "=0.4.0"
+# The piano: its FLAC samples decoded, in pure Rust (Apache-2.0).
+claxon = "=0.4.3"
+# fetch-piano: the sample archive's gzip stream, inflated by miniz_oxide in
+# pure Rust (flate2: MIT OR Apache-2.0).
+flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
+# fetch-piano: the archive's SHA-256, with the pin the law and the golden use.
+sha2 = { version = "=0.11.0", default-features = false }
+# preview: a MIDI file read by the law's own SMF reader, which is not the law
+# (score-model is its integer score), and its sustain-pedal messages counted
+# with the same pinned midly. The tests also build scores of their own in the
+# law's score layout with score-model.
+ingest = { path = "../ingest" }
+score-model = { path = "../score-model" }
+midly = { version = "=0.5.3", default-features = false, features = ["alloc", "strict"] }
 
 # WinMM MIDI input and the console keyboard, through the same windows crate
 # cpal links on Windows (MIT OR Apache-2.0).
@@ -33,7 +47,3 @@ windows = { version = "=0.62.2", features = [
     "Win32_System_Console",
     "Win32_System_Threading",
 ] }
-
-# The tests build scores of their own in the law's score layout.
-[dev-dependencies]
-score-model = { path = "../score-model" }
