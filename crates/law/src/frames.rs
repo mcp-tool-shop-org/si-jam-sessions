@@ -57,7 +57,8 @@ pub struct FrameNote {
     pub velocity: u8,
     /// How long the note sounds, in samples. A score note's is its own. A take
     /// note's is the score note's it cites, and an addition admitted as a take
-    /// has none, so 0. A live note's is the length the host passed.
+    /// has none, so 0. A live note's runs from its note-on to its note-off, and
+    /// is 0 while the note is still held.
     pub duration_samples: u64,
 }
 
@@ -104,11 +105,12 @@ const _: () = {
     assert!(WHOLE_NOTE_TICKS.is_multiple_of(1 << 7));
 };
 
-/// The length of a live note, which the take does not hold.
+/// The length of a live note, which the take does not hold: `None` while the
+/// note is held, until its note-off.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct LiveLength {
     pub(crate) key: TakeKey,
-    pub(crate) duration_samples: u64,
+    pub(crate) duration_samples: Option<u64>,
 }
 
 /// The window's samples, `first × Q ..= (last + 1) × Q - 1`, cut to the law's
@@ -180,7 +182,10 @@ pub(crate) fn collect(
         let (voice, duration_samples) = match live.binary_search_by(|l| l.key.cmp(&key)) {
             Ok(i) => (
                 Voice::Live,
-                live.get(i).ok_or(Refusal::Overflow)?.duration_samples,
+                live.get(i)
+                    .ok_or(Refusal::Overflow)?
+                    .duration_samples
+                    .unwrap_or(0),
             ),
             Err(_) => {
                 let length = match t.cites {

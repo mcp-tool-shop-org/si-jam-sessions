@@ -701,12 +701,13 @@ mod tests {
         compute(&Inputs::read(&repo_root()).unwrap(), SEED, TakeEdit::None).unwrap()
     }
 
-    /// The constructed take played through the live verb instead of admitted
-    /// whole: through the C ABI, one note at a time, in reverse order, each
-    /// with no citation and the length of the score note it plays, once the
-    /// transport has committed every quantum the take reaches. The law cites
-    /// every note as the constructed take does, so the rows are the committed
-    /// rows and the snapshot's SHA-256 is the committed golden.
+    /// The constructed take played through the live verbs instead of admitted
+    /// whole: through the C ABI, one note at a time, in reverse order, each a
+    /// note-on with no citation and a note-off after the length of the score
+    /// note it plays, once the transport has committed every quantum the take
+    /// reaches. The law cites every note as the constructed take does, each
+    /// score note once, so the rows are the committed rows and the snapshot's
+    /// SHA-256 is the committed golden. The lengths are not hashed.
     #[test]
     fn the_constructed_take_played_live_is_the_golden() {
         let root = repo_root();
@@ -715,9 +716,14 @@ mod tests {
         assert_eq!(g.golden, committed);
         let notes = wire::decode_take(&g.take).unwrap();
         let score = Law::ingest(&g.container).unwrap().score().clone();
+        let length = |n: &TakeNote| {
+            n.cites
+                .and_then(|id| score.note(id))
+                .map_or(1, |s| s.duration_samples)
+        };
         let last = notes
             .iter()
-            .map(|n| n.onset_sample / u64::from(QUANTUM_SAMPLES))
+            .map(|n| (n.onset_sample + length(n)) / u64::from(QUANTUM_SAMPLES))
             .max()
             .unwrap();
 
@@ -730,21 +736,23 @@ mod tests {
         assert_eq!(
             abi::law_horizon(),
             last,
-            "the last onset's quantum, exactly"
+            "the last note-off's quantum, exactly"
         );
         for n in notes.iter().rev() {
-            let length = n
-                .cites
-                .and_then(|id| score.note(id))
-                .map_or(1, |s| s.duration_samples);
             let status = abi::law_live_note(
                 i64::try_from(n.onset_sample).unwrap(),
                 u32::from(n.pitch),
                 u32::from(n.velocity),
-                length,
             );
             if status != 0 {
                 panic!("{}", refusal("law_live_note", status));
+            }
+            let status = abi::law_live_note_off(
+                u32::from(n.pitch),
+                i64::try_from(n.onset_sample + length(n)).unwrap(),
+            );
+            if status != 0 {
+                panic!("{}", refusal("law_live_note_off", status));
             }
         }
         assert_eq!(snapshot_hash().unwrap(), committed);
@@ -855,6 +863,22 @@ mod tests {
             g.snapshot[36..40],
             provenance::PREDICATE_VERSION.to_le_bytes()
         );
+    }
+
+    /// Law version 4 changes nothing version 3 computed: its snapshot of the
+    /// constructed take, with the law-version word (bytes 12 to 15) written back
+    /// to 3, is version 3's snapshot byte for byte, so it hashes to version 3's
+    /// golden.
+    #[test]
+    fn the_version_4_snapshot_is_version_3_but_for_its_version_word() {
+        const VERSION_3_GOLDEN: &str =
+            "145c7af9f964a47f2e21566dd253ff5de6cc5cd65c6f2cbf5f04afe745c03b40";
+        let g = golden();
+        let mut bytes = g.snapshot.clone();
+        assert_eq!(bytes[12..16], [4, 0, 0, 0]);
+        bytes[12] = 3;
+        assert_eq!(hex(&sha256(&bytes)), VERSION_3_GOLDEN);
+        assert_ne!(hex(&g.golden), VERSION_3_GOLDEN);
     }
 
     #[test]

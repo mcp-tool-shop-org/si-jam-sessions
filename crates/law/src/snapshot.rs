@@ -57,6 +57,9 @@ pub const SNAPSHOT_MAGIC: [u8; 8] = *b"SIJAMLAW";
 /// hashed too: a change to a row's wording is a change to a label.
 ///
 /// Format 2 added the predicate's pins to the header and the "PROV" section.
+/// Law version 4 keeps format 2: its live sessions change which verdicts a
+/// snapshot holds (an unreached uncited score note has none), not how any of
+/// them is written.
 pub const SNAPSHOT_FORMAT: u32 = 2;
 
 struct Out {

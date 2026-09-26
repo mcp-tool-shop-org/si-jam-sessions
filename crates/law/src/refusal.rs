@@ -127,15 +127,17 @@ pub enum Refusal {
     Overflow,
     /// Another call into the law's C ABI was running.
     Busy,
-    /// A live note arrived while the transport is stopped: nothing is
-    /// committed yet, so there is no clock for it to be a record on.
+    /// A live note-on or note-off arrived while the transport is stopped:
+    /// nothing is committed yet, so there is no clock for it to be a record on.
     LiveStopped,
-    /// A live note's onset is before sample 0, where the take starts.
-    LiveBeforeStart { onset_sample: i64 },
-    /// A live note's onset is in a quantum after the committed horizon. A live
-    /// note records what was played, and that quantum has not been reached.
+    /// A live note-on or note-off is before sample 0, where the take starts.
+    /// `sample` is the note-on's onset or the note-off's release.
+    LiveBeforeStart { sample: i64 },
+    /// A live note-on or note-off is in a quantum after the committed horizon.
+    /// A live note records what was played, and that quantum has not been
+    /// reached.
     LiveAhead {
-        onset_sample: u64,
+        sample: u64,
         quantum: u64,
         horizon: u64,
     },
@@ -143,13 +145,9 @@ pub enum Refusal {
     LivePitch { pitch: u32 },
     /// A live note's velocity is outside 1..=127.
     LiveVelocity { velocity: u32 },
-    /// A live note lasts no samples.
-    LiveEmpty { onset_sample: u64 },
-    /// A live note ends past [`MAX_SAMPLE`], or its end does not fit a `u64`.
-    LiveEndOutOfRange {
-        onset_sample: u64,
-        duration_samples: u64,
-    },
+    /// A live note-off is not after the note-on it ends: the note would last
+    /// no samples. The note stays held.
+    LiveEmpty { onset_sample: u64, off_sample: u64 },
     /// A live note has the onset, the pitch and the citation of a note
     /// already admitted.
     LiveDuplicate {
@@ -157,6 +155,8 @@ pub enum Refusal {
         pitch: u8,
         cites: Option<u32>,
     },
+    /// A live note-off for a pitch no live note is holding.
+    LiveNotHeld { pitch: u8 },
     /// A frame window's first quantum is after its last.
     FramesWindow { first: u64, last: u64 },
     /// Frames were asked for while the transport is stopped: no quantum is
@@ -199,15 +199,18 @@ impl Refusal {
     /// | 163 | [`Refusal::LivePitch`] |
     /// | 164 | [`Refusal::LiveVelocity`] |
     /// | 165 | [`Refusal::LiveEmpty`] |
-    /// | 166 | [`Refusal::LiveEndOutOfRange`] |
     /// | 167 | [`Refusal::LiveDuplicate`] |
+    /// | 168 | [`Refusal::LiveNotHeld`] |
     /// | 170 | [`Refusal::FramesWindow`] |
     /// | 171 | [`Refusal::FramesStopped`] |
     /// | 172 | [`Refusal::FramesNotCommitted`] |
     ///
-    /// Codes 160 to 172 were appended under law version 3 with the live verb
-    /// and the frame export. They follow every code the ingest verb uses (see
-    /// [`IngestRefusal::code`]), so no status names two refusals.
+    /// Codes 160 to 172 came with law version 4, the live verbs and the frame
+    /// export. They follow every code the ingest verb uses (see
+    /// [`IngestRefusal::code`]), so no status names two refusals. 166 is not
+    /// used: it named a live note ending past the last sample while the live
+    /// verb took a length, before the note-off verb replaced it, and it never
+    /// reached `main`.
     pub fn code(&self) -> u32 {
         match self {
             Refusal::Model(error) => match error {
@@ -252,8 +255,8 @@ impl Refusal {
             Refusal::LivePitch { .. } => 163,
             Refusal::LiveVelocity { .. } => 164,
             Refusal::LiveEmpty { .. } => 165,
-            Refusal::LiveEndOutOfRange { .. } => 166,
             Refusal::LiveDuplicate { .. } => 167,
+            Refusal::LiveNotHeld { .. } => 168,
             Refusal::FramesWindow { .. } => 170,
             Refusal::FramesStopped => 171,
             Refusal::FramesNotCommitted { .. } => 172,
@@ -420,19 +423,18 @@ impl fmt::Display for Refusal {
                 f,
                 "live note refused: the transport is stopped, so no quantum is committed"
             ),
-            Refusal::LiveBeforeStart { onset_sample } => write!(
+            Refusal::LiveBeforeStart { sample } => write!(
                 f,
-                "live note refused: onset sample {onset_sample} is before sample 0, where the \
-                 take starts"
+                "live note refused: sample {sample} is before sample 0, where the take starts"
             ),
             Refusal::LiveAhead {
-                onset_sample,
+                sample,
                 quantum,
                 horizon,
             } => write!(
                 f,
-                "live note refused: onset sample {onset_sample} falls in quantum {quantum}, after \
-                 the committed horizon {horizon}; a live note records what was played"
+                "live note refused: sample {sample} falls in quantum {quantum}, after the \
+                 committed horizon {horizon}; a live note records what was played"
             ),
             Refusal::LivePitch { pitch } => {
                 write!(f, "live note refused: pitch {pitch} is above 127")
@@ -441,17 +443,13 @@ impl fmt::Display for Refusal {
                 f,
                 "live note refused: velocity {velocity} is outside 1..=127"
             ),
-            Refusal::LiveEmpty { onset_sample } => write!(
-                f,
-                "live note refused: the note at onset sample {onset_sample} lasts no samples"
-            ),
-            Refusal::LiveEndOutOfRange {
+            Refusal::LiveEmpty {
                 onset_sample,
-                duration_samples,
+                off_sample,
             } => write!(
                 f,
-                "live note refused: onset sample {onset_sample} plus {duration_samples} samples \
-                 ends past the law's last sample {MAX_SAMPLE}"
+                "live note-off refused: sample {off_sample} is not after the note-on at sample \
+                 {onset_sample} it ends, so the note stays held"
             ),
             Refusal::LiveDuplicate {
                 onset_sample,
@@ -468,6 +466,10 @@ impl fmt::Display for Refusal {
                 }
                 write!(f, " is already admitted")
             }
+            Refusal::LiveNotHeld { pitch } => write!(
+                f,
+                "live note-off refused: no live note of pitch {pitch} is held"
+            ),
             Refusal::FramesWindow { first, last } => write!(
                 f,
                 "frames refused: the window's first quantum {first} is after its last {last}"

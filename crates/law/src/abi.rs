@@ -47,14 +47,19 @@
 //! # The transport, live notes and frames
 //!
 //! `law_step()` steps one quantum and `law_horizon()` reads the committed
-//! horizon. `law_live_note(onset, pitch, velocity, duration)` is the live verb
-//! ([`Law::live`]): one note a person played, passed as scalars, admitted as a
-//! record at its own onset and never refused for lateness. `law_frames(first,
-//! last)` builds the committed frames of the quanta `first..=last`
-//! ([`Law::frames`], in the layout of [`crate::wire::decode_frames`]), and
-//! `law_frames_ptr/len` read them. Loading, ingesting, admitting and a live
-//! note clear the frames as they clear the snapshot, because a live note can
-//! land in a quantum that was already read.
+//! horizon. `law_live_note(onset, pitch, velocity)` and
+//! `law_live_note_off(pitch, off)` are the live verbs ([`Law::live`] and
+//! [`Law::live_off`]): a note a person played, passed as scalars when its key
+//! goes down and comes up, admitted as a record at its own onset and never
+//! refused for lateness. `law_frames(first, last)` builds the committed frames
+//! of the quanta `first..=last` ([`Law::frames`], in the layout of
+//! [`crate::wire::decode_frames`]), and `law_frames_ptr/len` read them.
+//! Loading, ingesting, admitting and the live verbs clear the frames as they
+//! clear the snapshot, because a live note can land in a quantum that was
+//! already read.
+//!
+//! These verbs came with law version 4 (`law_version()`); version 3 has none
+//! of them.
 //!
 //! # Threads
 //!
@@ -82,7 +87,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::law::digest;
 use crate::refusal::{IngestRefusal, Refusal};
-use crate::{LAW_VERSION, Law, LiveNote, wire};
+use crate::{LAW_VERSION, Law, LiveNote, LiveNoteOff, wire};
 
 struct State {
     law: Option<Law>,
@@ -339,29 +344,42 @@ pub unsafe extern "C" fn law_admit_take(ptr: *const u8, len: u32) -> u32 {
     })
 }
 
-/// The live verb ([`Law::live`]): one note a person played, admitted into the
+/// The live verb ([`Law::live`]): a note-on a person played, admitted into the
 /// take as a record at its own onset, never refused for lateness. Its onset is
 /// on the law's sample clock and may be negative (played before the take
 /// started, which is refused); its pitch and velocity are wide so that a value
-/// out of range is refused rather than cut; its duration is from note-on to
-/// note-off, in samples. The law decides what the note cites.
+/// out of range is refused rather than cut. The law decides what the note
+/// cites, each score note at most once, so the host passes notes in the order
+/// their keys went down. The note is held until [`law_live_note_off`].
 #[unsafe(no_mangle)]
-pub extern "C" fn law_live_note(
-    onset_sample: i64,
-    pitch: u32,
-    velocity: u32,
-    duration_samples: u64,
-) -> u32 {
+pub extern "C" fn law_live_note(onset_sample: i64, pitch: u32, velocity: u32) -> u32 {
     with_status(|state| {
         let note = LiveNote {
             onset_sample,
             pitch,
             velocity,
-            duration_samples,
         };
         let result = match state.law.as_mut() {
             None => Err(Refusal::NoScore),
             Some(law) => law.live(note).map(|_| ()),
+        };
+        if result.is_ok() {
+            state.record_changed();
+        }
+        status(state, result)
+    })
+}
+
+/// The live note-off ([`Law::live_off`]): the key of `pitch` came up at
+/// `off_sample`, which ends the latest held live note of that pitch. The
+/// length is kept for the committed frames; it is not graded or hashed.
+#[unsafe(no_mangle)]
+pub extern "C" fn law_live_note_off(pitch: u32, off_sample: i64) -> u32 {
+    with_status(|state| {
+        let off = LiveNoteOff { pitch, off_sample };
+        let result = match state.law.as_mut() {
+            None => Err(Refusal::NoScore),
+            Some(law) => law.live_off(off).map(|_| ()),
         };
         if result.is_ok() {
             state.record_changed();
@@ -778,14 +796,15 @@ mod tests {
         );
     }
 
-    /// The live verb, the horizon and the frame export through the C ABI: each
+    /// The live verbs, the horizon and the frame export through the C ABI: each
     /// status is the Rust law's, the frames are the Rust law's frames in their
     /// layout, and the snapshot after live notes is the Rust law's.
     #[test]
     fn the_live_and_frame_exports_agree_with_the_rust_law() {
         let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         reset();
-        assert_eq!(law_live_note(0, 60, 64, 10), Refusal::NoScore.code());
+        assert_eq!(law_live_note(0, 60, 64), Refusal::NoScore.code());
+        assert_eq!(law_live_note_off(60, 10), Refusal::NoScore.code());
         assert_eq!(law_frames(0, 0), Refusal::NoScore.code());
         assert_eq!(law_horizon(), 0);
         assert_eq!(law_frames_len(), 0);
@@ -795,11 +814,12 @@ mod tests {
             0
         );
         assert_eq!(law_horizon(), 0, "stopped: nothing is committed");
-        assert_eq!(law_live_note(0, 60, 64, 10), 160);
+        assert_eq!(law_live_note(0, 60, 64), 160);
         assert_eq!(
             refusal_text(),
             "live note refused: the transport is stopped, so no quantum is committed"
         );
+        assert_eq!(law_live_note_off(60, 10), 160);
         assert_eq!(law_frames(0, 0), 171);
 
         let mut native = Law::load(&ingested()).unwrap();
@@ -810,38 +830,84 @@ mod tests {
         let horizon = 1_099 + u64::from(HORIZON_QUANTA);
         assert_eq!(law_horizon(), horizon);
         let ahead = (horizon + 1) * u64::from(QUANTUM_SAMPLES);
-        let notes: [(i64, u32, u32, u64, u32); 10] = [
-            (0, 60, 64, 12_000, 0),
-            (24_050, 62, 80, 100, 0),
-            (48_000, 66, 1, 7, 0),
-            (-1, 60, 64, 10, 161),
-            (0, 60, 90, 5, 167),
-            (30, 128, 64, 5, 163),
-            (30, 61, 0, 5, 164),
-            (30, 61, 64, 0, 165),
-            (ahead as i64, 61, 64, 5, 162),
-            (i64::MAX - 5, 61, 64, 5, 162),
+        // The score: note 0 (sample 0, pitch 60), note 1 (0, 64), note 2
+        // (24,000, 62), note 3 (48,000, 65).
+        let notes: [(i64, u32, u32, u32, Option<u32>); 11] = [
+            (0, 60, 64, 0, Some(0)),
+            (24_050, 62, 80, 0, Some(2)),
+            (48_000, 66, 1, 0, Some(3)),
+            // Note 0 is cited, so the same key again cites note 1, then
+            // nothing: an addition, which a third time is a duplicate.
+            (0, 60, 90, 0, Some(1)),
+            (0, 60, 90, 0, None),
+            (0, 60, 90, 167, None),
+            (-1, 60, 64, 161, None),
+            (30, 128, 64, 163, None),
+            (30, 61, 0, 164, None),
+            (ahead as i64, 61, 64, 162, None),
+            (i64::MAX - 5, 61, 64, 162, None),
         ];
-        for (onset_sample, pitch, velocity, duration_samples, code) in notes {
-            let status = law_live_note(onset_sample, pitch, velocity, duration_samples);
-            let rust = native
-                .live(LiveNote {
-                    onset_sample,
-                    pitch,
-                    velocity,
-                    duration_samples,
-                })
-                .map_or_else(|r| r.code(), |_| 0);
-            assert_eq!((status, rust), (code, code), "onset {onset_sample}");
+        for (onset_sample, pitch, velocity, code, cites) in notes {
+            let status = law_live_note(onset_sample, pitch, velocity);
+            let rust = native.live(LiveNote {
+                onset_sample,
+                pitch,
+                velocity,
+            });
+            let rust_code = rust.as_ref().map_or_else(|r| r.code(), |_| 0);
+            assert_eq!((status, rust_code), (code, code), "onset {onset_sample}");
+            if let Ok(admitted) = rust {
+                assert_eq!(admitted.cites.map(|id| id.0), cites, "onset {onset_sample}");
+            }
         }
         assert_eq!(
             refusal_text(),
             std::format!(
-                "live note refused: onset sample {} falls in quantum {}, after the committed \
-                 horizon {horizon}; a live note records what was played",
+                "live note refused: sample {} falls in quantum {}, after the committed horizon \
+                 {horizon}; a live note records what was played",
                 i64::MAX - 5,
                 (i64::MAX as u64 - 5) / 48
             )
+        );
+
+        // Held: three notes of pitch 60 at sample 0, one each of 62 and 66.
+        // A note-off ends the latest by key: the one citing note 1.
+        let offs: [(u32, i64, u32); 7] = [
+            (60, 100, 0),
+            (60, 0, 165),
+            (61, 100, 168),
+            (128, 100, 163),
+            (60, -1, 161),
+            (60, ahead as i64, 162),
+            (62, 24_060, 0),
+        ];
+        for (pitch, off_sample, code) in offs {
+            let status = law_live_note_off(pitch, off_sample);
+            let rust = native
+                .live_off(LiveNoteOff { pitch, off_sample })
+                .map_or_else(|r| r.code(), |_| 0);
+            assert_eq!(
+                (status, rust),
+                (code, code),
+                "pitch {pitch} off {off_sample}"
+            );
+        }
+        // A refusal leaves the law as it was, so the Rust law needs no call.
+        assert_eq!(law_live_note_off(60, -1), 161);
+        assert_eq!(
+            refusal_text(),
+            "live note refused: sample -1 is before sample 0, where the take starts"
+        );
+        assert_eq!(law_live_note_off(60, 0), 165);
+        assert_eq!(
+            refusal_text(),
+            "live note-off refused: sample 0 is not after the note-on at sample 0 it ends, so \
+             the note stays held"
+        );
+        assert_eq!(law_live_note_off(61, 100), 168);
+        assert_eq!(
+            refusal_text(),
+            "live note-off refused: no live note of pitch 61 is held"
         );
 
         assert_eq!(law_frames(0, horizon), 0);
@@ -851,7 +917,7 @@ mod tests {
             wire::encode_frames(&native.frames(0, horizon).unwrap()).unwrap()
         );
         let decoded = wire::decode_frames(&frames).unwrap();
-        assert_eq!(decoded.notes.len(), 4 + 3);
+        assert_eq!(decoded.notes.len(), 4 + 5);
         assert_eq!(law_frames(horizon + 1, horizon + 1), 172);
         assert_eq!(
             refusal_text(),
@@ -867,19 +933,30 @@ mod tests {
         // A live note clears the frames: it can land in a window already read.
         assert_eq!(law_frames(0, 10), 0);
         assert!(law_frames_len() > 0);
-        assert_eq!(law_live_note(200, 64, 50, 3), 0);
+        assert_eq!(law_live_note(200, 64, 50), 0);
         native
             .live(LiveNote {
                 onset_sample: 200,
                 pitch: 64,
                 velocity: 50,
-                duration_samples: 3,
+            })
+            .unwrap();
+        assert_eq!(law_frames_len(), 0);
+        // So does a note-off: it sets a length the frames carry.
+        assert_eq!(law_frames(0, 10), 0);
+        assert!(law_frames_len() > 0);
+        assert_eq!(law_live_note_off(64, 203), 0);
+        native
+            .live_off(LiveNoteOff {
+                pitch: 64,
+                off_sample: 203,
             })
             .unwrap();
         assert_eq!(law_frames_len(), 0);
 
         SHARED.busy.store(true, Ordering::SeqCst);
-        assert_eq!(law_live_note(0, 60, 64, 10), 63);
+        assert_eq!(law_live_note(0, 60, 64), 63);
+        assert_eq!(law_live_note_off(60, 10), 63);
         assert_eq!(law_frames(0, 0), 63);
         assert!(law_frames_ptr().is_null());
         assert_eq!(law_frames_len(), 0);

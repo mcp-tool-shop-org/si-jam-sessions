@@ -8,7 +8,7 @@ use core::fmt::{self, Write};
 use crate::refusal::Refusal;
 use crate::score::{LawNote, LawScore};
 use crate::take::{ScoreNoteId, TakeNote};
-use crate::{GATE_SAMPLES, SAMPLES_PER_MS};
+use crate::{GATE_SAMPLES, LIVE_REACH_SAMPLES, SAMPLES_PER_MS};
 
 /// How a cited take note compares with the score note it cites.
 ///
@@ -126,18 +126,49 @@ fn cited(note: ScoreNoteId, take: u32, t: &TakeNote, s: &LawNote) -> Result<Verd
     })
 }
 
+/// Which score notes the performance has reached: an uncited score note is
+/// never played only once it is reached.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Reached {
+    /// Every score note: a take admitted as a batch, graded as a whole.
+    All,
+    /// A live session: the score notes whose reach window,
+    /// `onset ± LIVE_REACH_SAMPLES`, ends at or before this sample.
+    Through(u64),
+    /// A live session with nothing committed. The live verb refuses a note
+    /// while the transport is stopped, so no take is graded this way.
+    Nothing,
+}
+
+impl Reached {
+    fn reaches(self, onset_sample: u64) -> bool {
+        match self {
+            Reached::All => true,
+            Reached::Through(last) => {
+                onset_sample.saturating_add(u64::from(LIVE_REACH_SAMPLES)) <= last
+            }
+            Reached::Nothing => false,
+        }
+    }
+}
+
 /// Grades a take against a score.
 ///
 /// The verdicts come in one fixed order:
 /// 1. for each score note in id order, a [`Verdict::Cited`] for every take
 ///    note that cites it, in take order, or one [`Verdict::NeverPlayed`] when
-///    none does;
+///    none does and `reached` reaches it;
 /// 2. then a [`Verdict::Addition`] for every take note that cites nothing, in
 ///    take order.
 ///
-/// Every take note gets exactly one verdict, and so does every score note that
-/// no take note cites.
-pub(crate) fn verdicts(score: &LawScore, take: &[TakeNote]) -> Result<Vec<Verdict>, Refusal> {
+/// Every take note gets exactly one verdict, and so does every reached score
+/// note that no take note cites. With [`Reached::All`], that is every score
+/// note that no take note cites, as law version 3 graded.
+pub(crate) fn verdicts(
+    score: &LawScore,
+    take: &[TakeNote],
+    reached: Reached,
+) -> Result<Vec<Verdict>, Refusal> {
     let too_long = Refusal::TakeTooLong { count: take.len() };
     let mut citations: Vec<(ScoreNoteId, u32)> = reserved(take.len())?;
     for (index, t) in take.iter().enumerate() {
@@ -173,7 +204,7 @@ pub(crate) fn verdicts(score: &LawScore, take: &[TakeNote]) -> Result<Vec<Verdic
                 .ok_or(Refusal::Overflow)?;
             out.push(cited(id, take_index, t, s)?);
         }
-        if !played {
+        if !played && reached.reaches(s.onset_sample) {
             out.push(Verdict::NeverPlayed {
                 note: id,
                 onset_sample: s.onset_sample,
@@ -387,7 +418,7 @@ mod tests {
         ];
         for (delta, expected) in cases {
             let take = [played(&s, 3, delta, 0)];
-            let v = verdicts(&s, &take).unwrap();
+            let v = verdicts(&s, &take, Reached::All).unwrap();
             let cited = v
                 .iter()
                 .find(|v| matches!(v, Verdict::Cited { .. }))
@@ -400,7 +431,7 @@ mod tests {
     fn rows_state_the_comparison_in_digits() {
         let s = score();
         let row_for = |delta: i64, pitch_offset: u8| {
-            let v = verdicts(&s, &[played(&s, 2, delta, pitch_offset)]).unwrap();
+            let v = verdicts(&s, &[played(&s, 2, delta, pitch_offset)], Reached::All).unwrap();
             let cited = v
                 .into_iter()
                 .find(|v| matches!(v, Verdict::Cited { .. }))
@@ -467,7 +498,7 @@ mod tests {
     fn a_wrong_pitch_is_the_verdict_whatever_its_timing() {
         let s = score();
         for delta in [0, 2_160, -2_160] {
-            let v = verdicts(&s, &[played(&s, 5, delta, 2)]).unwrap();
+            let v = verdicts(&s, &[played(&s, 5, delta, 2)], Reached::All).unwrap();
             assert_eq!(kind_of(&v[5]), CitedKind::WrongPitch, "delta {delta}");
         }
     }
@@ -493,7 +524,7 @@ mod tests {
         let mut sorted = take;
         sorted.sort_by_key(TakeNote::key);
         assert_eq!(sorted[1], addition, "10,000 falls between notes 0 and 1");
-        let v = verdicts(&s, &sorted).unwrap();
+        let v = verdicts(&s, &sorted, Reached::All).unwrap();
         let summary: vec::Vec<(&str, Option<u32>)> = v
             .iter()
             .map(|v| {
@@ -548,7 +579,7 @@ mod tests {
             };
             take.push(played(&s, id, delta, pitch));
         }
-        let v = verdicts(&s, &take).unwrap();
+        let v = verdicts(&s, &take, Reached::All).unwrap();
         let words: vec::Vec<&str> = v.iter().map(Verdict::word).collect();
         assert_eq!(
             words,
@@ -583,7 +614,7 @@ mod tests {
             cites: Some(ScoreNoteId(8)),
         };
         assert_eq!(
-            verdicts(&s, &[stray]),
+            verdicts(&s, &[stray], Reached::All),
             Err(Refusal::TakeCitation {
                 index: 0,
                 cites: 8,

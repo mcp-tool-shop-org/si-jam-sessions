@@ -3,7 +3,7 @@
 # `write-golden --check` exits non-zero when regenerating would change this file or
 # golden/entertainer.rows. The golden hash is the SHA-256 of the law's snapshot.
 golden-format 1
-law-version 3
+law-version 4
 snapshot-format 2
 predicate-version 2
 rules-year 2026
@@ -39,4 +39,4 @@ steps 252917
 verdicts match 2617 early 1 late 2 wrong-pitch 1 addition 0 never-played 0
 rows 198106 114b64a92830a2bc1169ae3fe4226fcc41421a3851a55ad7004a604fd8f24b77
 snapshot 413207
-golden 145c7af9f964a47f2e21566dd253ff5de6cc5cd65c6f2cbf5f04afe745c03b40
+golden fd574ccce7ae9eb389642b5c7372c506c7d2787b0e1f3b190655e49b80695baa

@@ -176,6 +176,7 @@ fn the_release_wasm_exports_the_c_abi() {
         "law_load_score",
         "law_admit_take",
         "law_live_note",
+        "law_live_note_off",
         "law_step",
         "law_steps",
         "law_horizon",

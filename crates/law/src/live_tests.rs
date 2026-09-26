@@ -1,10 +1,11 @@
-//! The live verb and the frame export.
+//! The live verbs and the frame export.
 //!
 //! Most scores here run at 70,000 microseconds per quarter with source PPQ
 //! 3360, where one law tick is exactly one sample: 3,360 ticks × 70,000 us ×
 //! 48,000 / 3.36e9 = 3,360 samples. An onset written in ticks is then the
 //! onset in samples, and every boundary below is placed to the sample.
 
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -14,7 +15,8 @@ use crate::frames::{Beat, FrameNote, Frames, Voice};
 use crate::refusal::{Refusal, WireFault};
 use crate::take::{ScoreNoteId, TakeNote};
 use crate::{
-    GATE_SAMPLES, HORIZON_QUANTA, LIVE_REACH_SAMPLES, Law, LiveNote, QUANTUM_SAMPLES, wire,
+    GATE_SAMPLES, HORIZON_QUANTA, LIVE_REACH_SAMPLES, Law, LiveNote, LiveNoteOff, QUANTUM_SAMPLES,
+    wire,
 };
 
 const H: u64 = HORIZON_QUANTA as u64;
@@ -74,11 +76,14 @@ fn played(onset: i64, pitch: u32) -> LiveNote {
         onset_sample: onset,
         pitch,
         velocity: 90,
-        duration_samples: 500,
     }
 }
 
-/// Plays one live note and returns what the law made it cite.
+fn off(pitch: u32, off_sample: i64) -> LiveNoteOff {
+    LiveNoteOff { pitch, off_sample }
+}
+
+/// Plays one live note-on and returns what the law made it cite.
 fn cites(law: &mut Law, onset: u64, pitch: u8) -> Option<u32> {
     commit_through(law, onset / Q);
     law.live(played(onset as i64, u32::from(pitch)))
@@ -87,8 +92,17 @@ fn cites(law: &mut Law, onset: u64, pitch: u8) -> Option<u32> {
         .map(|id| id.0)
 }
 
+/// What one live note cites on a fresh law of `notes`.
+fn fresh(notes: &[(u64, u8)], onset: u64, pitch: u8) -> Option<u32> {
+    cites(&mut law_of(notes), onset, pitch)
+}
+
 fn words(law: &Law) -> Vec<&'static str> {
     law.verdicts().unwrap().iter().map(|v| v.word()).collect()
+}
+
+fn rows(law: &Law) -> Vec<String> {
+    law.rows().unwrap()
 }
 
 // --- The live verb: when it admits ------------------------------------------
@@ -142,7 +156,7 @@ fn a_live_note_past_the_horizon_is_refused() {
     assert_eq!(
         law.live(played(last as i64 + 1, 60)),
         Err(Refusal::LiveAhead {
-            onset_sample: last + 1,
+            sample: last + 1,
             quantum: horizon + 1,
             horizon,
         })
@@ -178,19 +192,11 @@ fn each_malformed_live_note_is_refused_by_name() {
                     ..base
                 }
             ),
-            Refusal::LiveBeforeStart { onset_sample }
+            Refusal::LiveBeforeStart {
+                sample: onset_sample
+            }
         );
     }
-    assert_eq!(
-        refused(
-            &mut law,
-            LiveNote {
-                duration_samples: 0,
-                ..base
-            }
-        ),
-        Refusal::LiveEmpty { onset_sample: 100 }
-    );
     // The checks run in order: pitch before velocity before the onset.
     assert_eq!(
         refused(
@@ -199,7 +205,6 @@ fn each_malformed_live_note_is_refused_by_name() {
                 onset_sample: -1,
                 pitch: 128,
                 velocity: 0,
-                duration_samples: 0
             }
         ),
         Refusal::LivePitch { pitch: 128 }
@@ -228,8 +233,9 @@ fn each_malformed_live_note_is_refused_by_name() {
     }
 }
 
-/// The live verb runs the take's admission: a note with the onset, pitch and
-/// citation of an admitted note is a duplicate, whichever verb admitted it.
+/// The live verb runs the take's admission, and it counts the take's
+/// citations: a score note a take note cites is not cited again, and two
+/// additions struck at one onset and pitch are a duplicate.
 #[test]
 fn the_live_verb_shares_the_takes_admission() {
     let mut law = law_of(&[(24_000, 60)]);
@@ -245,54 +251,45 @@ fn the_live_verb_shares_the_takes_admission() {
         onset_sample: 24_100,
         pitch: 60,
         velocity: 100,
-        duration_samples: 10,
     };
+    // Score note 0 is cited by the take note, so the live note is an addition.
+    assert_eq!(law.live(again).map(|t| t.cites), Ok(None));
     assert_eq!(
         law.live(again),
         Err(Refusal::LiveDuplicate {
             onset_sample: 24_100,
             pitch: 60,
-            cites: Some(0)
-        })
-    );
-    // Struck twice live, as an addition: the second is the duplicate.
-    let addition = LiveNote {
-        onset_sample: 90_000,
-        ..again
-    };
-    commit_through(&mut law, 90_000 / Q);
-    assert!(law.live(addition).is_ok());
-    assert_eq!(
-        law.live(addition),
-        Err(Refusal::LiveDuplicate {
-            onset_sample: 90_000,
-            pitch: 60,
             cites: None
         })
     );
     assert_eq!(law.take().len(), 2);
+    assert_eq!(words(&law), ["match", "addition"]);
 }
 
-// --- The live verb: what it cites --------------------------------------------
+// --- What a live note cites ---------------------------------------------------
 
 /// A note of the score note's pitch answers it from up to twice the gate away
 /// on either side; one sample further, it is an addition.
 #[test]
 fn a_same_pitch_note_answers_within_the_reach() {
-    let mut law = law_of(&[(100_000, 60)]);
-    assert_eq!(cites(&mut law, 100_000 + REACH, 60), Some(0));
-    assert_eq!(cites(&mut law, 100_000 - REACH, 60), Some(0));
-    assert_eq!(cites(&mut law, 100_000 + REACH + 1, 60), None);
-    assert_eq!(cites(&mut law, 100_000 - REACH - 1, 60), None);
-    assert_eq!(words(&law), ["early", "late", "addition", "addition"]);
+    let score = [(100_000, 60)];
+    assert_eq!(fresh(&score, 100_000 + REACH, 60), Some(0));
+    assert_eq!(fresh(&score, 100_000 - REACH, 60), Some(0));
+    assert_eq!(fresh(&score, 100_000 + REACH + 1, 60), None);
+    assert_eq!(fresh(&score, 100_000 - REACH - 1, 60), None);
+    let mut law = law_of(&score);
+    cites(&mut law, 100_000 - REACH, 60);
+    assert_eq!(words(&law), ["early"]);
+    let mut law = law_of(&score);
+    cites(&mut law, 100_000 + REACH, 60);
+    assert_eq!(words(&law), ["late"]);
 }
 
 /// Of two notes of the pitch, the nearer; at equal distance, the one before
-/// the live note; at one onset, the lower id.
+/// the live note; at one onset (a doubled pitch), the lower id.
 #[test]
 fn a_same_pitch_note_answers_the_nearest() {
-    // Notes 0 and 1 at 100,000 on tracks 1 and 2 (a doubled pitch), note 2 at
-    // 103,000.
+    // Notes 0 and 1 at 100,000 on tracks 1 and 2, note 2 at 103,000.
     let score = scored(
         &[
             (100_000, 60, 500, 1),
@@ -301,83 +298,343 @@ fn a_same_pitch_note_answers_the_nearest() {
         ],
         &[(0, 4, 2)],
     );
-    let mut law = Law::load(&score).unwrap();
-    assert_eq!(cites(&mut law, 101_499, 60), Some(0), "nearer the first");
-    assert_eq!(cites(&mut law, 101_501, 60), Some(2), "nearer the second");
-    assert_eq!(
-        cites(&mut law, 101_500, 60),
-        Some(0),
-        "equidistant: the one before"
-    );
-    assert_eq!(cites(&mut law, 100_000, 60), Some(0), "the doubled pitch");
+    let on = |onset| cites(&mut Law::load(&score).unwrap(), onset, 60);
+    assert_eq!(on(101_499), Some(0), "nearer the first");
+    assert_eq!(on(101_501), Some(2), "nearer the second");
+    assert_eq!(on(101_500), Some(0), "equidistant: the one before");
+    assert_eq!(on(100_000), Some(0), "the doubled pitch: the lower id");
 }
 
 /// Another pitch answers a score note only within the gate: the nearest onset,
-/// then the nearest pitch, then the lower pitch.
+/// then the nearest pitch, then the lower pitch, then the lowest id.
 #[test]
 fn another_pitch_answers_within_the_gate() {
     // A chord of 57, 60 and 64 at 200,000 (ids 0, 1, 2); 62 alone at 202,000
     // (id 3).
-    let mut law = law_of(&[(200_000, 57), (200_000, 60), (200_000, 64), (202_000, 62)]);
+    let chord = [(200_000, 57), (200_000, 60), (200_000, 64), (202_000, 62)];
     // 61 on the chord: 60 is one semitone away; 62 is too, but 2,000 samples
     // off, outside the gate.
-    assert_eq!(cites(&mut law, 200_000, 61), Some(1));
+    assert_eq!(fresh(&chord, 200_000, 61), Some(1));
     // 58 on the chord: 57 is one away, 60 two.
-    assert_eq!(cites(&mut law, 200_000, 58), Some(0));
+    assert_eq!(fresh(&chord, 200_000, 58), Some(0));
     // 62 on the chord: its own pitch is 2,000 samples off, inside the reach,
-    // so it answers note 3, early, before any wrong-pitch reading.
-    assert_eq!(cites(&mut law, 200_000, 62), Some(3));
+    // so it answers note 3, before any wrong-pitch reading.
+    assert_eq!(fresh(&chord, 200_000, 62), Some(3));
     // 59, 1,000 samples before the chord: 60 is one away, 57 two.
-    assert_eq!(cites(&mut law, 199_000, 59), Some(1));
+    assert_eq!(fresh(&chord, 199_000, 59), Some(1));
     // 60 between 58 and 62 ties on pitch distance: the lower pitch.
-    let mut lone = law_of(&[(50_000, 58), (50_000, 62)]);
-    assert_eq!(cites(&mut lone, 50_000, 60), Some(0));
+    assert_eq!(fresh(&[(50_000, 58), (50_000, 62)], 50_000, 60), Some(0));
+    // Two notes of one pitch at one onset tie on everything: the lower id.
+    let doubled = scored(&[(50_000, 62, 500, 1), (50_000, 62, 500, 2)], &[(0, 4, 2)]);
+    assert_eq!(
+        cites(&mut Law::load(&doubled).unwrap(), 50_000, 61),
+        Some(0)
+    );
     // Another pitch one sample past the gate is an addition.
-    let mut far = law_of(&[(50_000, 60)]);
-    assert_eq!(cites(&mut far, 50_000 + GATE, 61), Some(0));
-    assert_eq!(cites(&mut far, 50_000 + GATE + 1, 61), None);
-    assert_eq!(cites(&mut far, 50_000 - GATE - 1, 61), None);
-    assert_eq!(words(&far), ["wrong pitch", "addition", "addition"]);
+    let lone = [(50_000, 60)];
+    assert_eq!(fresh(&lone, 50_000 + GATE, 61), Some(0));
+    assert_eq!(fresh(&lone, 50_000 + GATE + 1, 61), None);
+    assert_eq!(fresh(&lone, 50_000 - GATE - 1, 61), None);
+    let mut law = law_of(&lone);
+    cites(&mut law, 50_000 + GATE, 61);
+    assert_eq!(words(&law), ["wrong pitch"]);
 }
 
-/// The rule reads the score, never the take, so the order live notes arrive
-/// in does not change what they cite, and two may answer one score note.
+// --- At most once ---------------------------------------------------------------
+
+/// A score note is cited at most once: a second live note in its reach, with
+/// nothing else to answer, is an addition.
 #[test]
-fn arrival_order_does_not_change_the_take() {
-    let notes = [
-        played(100_000, 60),
-        played(100_600, 60),
-        played(101_000, 61),
-        played(99_000, 64),
-        played(150_000, 72),
-    ];
-    let run = |order: &[usize]| {
-        let mut law = law_of(&[(100_000, 60), (100_000, 64), (150_000, 70)]);
-        commit_through(&mut law, 200_000 / Q);
-        for &i in order {
-            law.live(notes[i]).unwrap();
-        }
-        law
-    };
-    let forward = run(&[0, 1, 2, 3, 4]);
-    let backward = run(&[4, 3, 2, 1, 0]);
-    let shuffled = run(&[2, 4, 0, 3, 1]);
-    assert_eq!(forward.take(), backward.take());
-    assert_eq!(forward.take(), shuffled.take());
-    assert_eq!(forward.snapshot_bytes(), shuffled.snapshot_bytes());
-    let cited: Vec<Option<u32>> = forward
-        .take()
-        .iter()
-        .map(|t| t.cites.map(|c| c.0))
-        .collect();
-    // 64 at 99,000 answers note 1; both 60s answer note 0 (a re-strike); 61 at
-    // 101,000 answers note 0 as a wrong pitch; 72 answers 70 the same way.
-    assert_eq!(cited, [Some(1), Some(0), Some(0), Some(0), Some(2)]);
+fn a_score_note_is_cited_at_most_once() {
+    let mut law = law_of(&[(100_000, 60)]);
+    assert_eq!(cites(&mut law, 100_000, 60), Some(0));
+    assert_eq!(cites(&mut law, 100_500, 60), None);
     assert_eq!(
-        words(&forward),
-        ["match", "match", "wrong pitch", "match", "wrong pitch"]
+        rows(&law),
+        [
+            "note 0: onset +0 samples (+0.0 ms) vs gate \u{b1}1920, pitch 60 vs 60: match",
+            "take note 1: onset 100500 samples, pitch 60, cites no score note: addition",
+        ]
     );
 }
+
+/// A second live note in a cited note's reach takes the next candidate, in the
+/// rule's order: the next score note of its pitch, then, once those are gone,
+/// the next of another pitch within the gate, and then nothing.
+#[test]
+fn a_second_note_takes_the_next_eligible_score_note() {
+    // Two 60s, 2,000 samples apart.
+    let mut law = law_of(&[(100_000, 60), (102_000, 60)]);
+    assert_eq!(cites(&mut law, 100_900, 60), Some(0), "900 away, not 1,100");
+    assert_eq!(cites(&mut law, 101_000, 60), Some(1), "0 is cited");
+    assert_eq!(words(&law), ["match", "match"]);
+    // A chord of 57, 60 and 64, and four 61s: 60, then 64, then 57, by pitch
+    // distance, and the fourth is an addition.
+    let mut law = law_of(&[(200_000, 57), (200_000, 60), (200_000, 64)]);
+    assert_eq!(cites(&mut law, 200_000, 61), Some(1));
+    assert_eq!(cites(&mut law, 200_010, 61), Some(2));
+    assert_eq!(cites(&mut law, 200_020, 61), Some(0));
+    assert_eq!(cites(&mut law, 200_030, 61), None);
+    assert_eq!(
+        words(&law),
+        ["wrong pitch", "wrong pitch", "wrong pitch", "addition"]
+    );
+}
+
+/// A pitch doubled on two tracks takes two live notes of the pitch, one each.
+#[test]
+fn a_doubled_pitch_gives_each_of_its_notes_one_live_note() {
+    let score = scored(
+        &[(100_000, 60, 500, 1), (100_000, 60, 500, 2)],
+        &[(0, 4, 2)],
+    );
+    let mut law = Law::load(&score).unwrap();
+    assert_eq!(cites(&mut law, 100_000, 60), Some(0));
+    assert_eq!(cites(&mut law, 100_010, 60), Some(1));
+    assert_eq!(cites(&mut law, 100_020, 60), None);
+    assert_eq!(words(&law), ["match", "match", "addition"]);
+}
+
+/// Every permutation of `0..n`, in a fixed order.
+fn permutations(n: usize) -> Vec<Vec<usize>> {
+    if n == 0 {
+        return vec![Vec::new()];
+    }
+    let mut out = Vec::new();
+    for rest in permutations(n - 1) {
+        for at in 0..=rest.len() {
+            let mut p = rest.clone();
+            p.insert(at, n - 1);
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// A chord of four notes, its keys going down in each of the 24 orders a few
+/// samples apart: each finds its own score note, because a note's own pitch is
+/// sought before any other.
+#[test]
+fn chords_find_their_own_notes_in_any_order() {
+    let chord = [(50_000, 60), (50_000, 64), (50_000, 67), (50_000, 72)];
+    let orders = permutations(4);
+    assert_eq!(orders.len(), 24);
+    for order in orders {
+        let mut law = law_of(&chord);
+        for (k, &i) in order.iter().enumerate() {
+            let onset = 50_000 + 7 * k as u64;
+            assert_eq!(
+                cites(&mut law, onset, chord[i].1),
+                Some(i as u32),
+                "order {order:?}"
+            );
+        }
+        assert_eq!(words(&law), ["match"; 4], "order {order:?}");
+    }
+}
+
+/// The placeholder follower's known limit: it does not revise a citation. A
+/// wrong key that goes down before the right one takes the chord note nearest
+/// its pitch, and each right key after it finds its note cited and takes the
+/// next, down to an addition.
+#[test]
+fn a_wrong_key_before_the_right_one_takes_its_note() {
+    // A chord of 60, 64 and 67; 65 (F) goes down first, then the chord.
+    let mut law = law_of(&[(50_000, 60), (50_000, 64), (50_000, 67)]);
+    assert_eq!(cites(&mut law, 50_000, 65), Some(1), "64 is nearest to 65");
+    assert_eq!(
+        cites(&mut law, 50_005, 64),
+        Some(2),
+        "64 is cited: 67 is next"
+    );
+    assert_eq!(
+        cites(&mut law, 50_010, 67),
+        Some(0),
+        "67 is cited: 60 is left"
+    );
+    assert_eq!(cites(&mut law, 50_015, 60), None);
+    assert_eq!(
+        words(&law),
+        ["wrong pitch", "wrong pitch", "wrong pitch", "addition"]
+    );
+}
+
+/// Because a cited note is passed over, the order two competing notes arrive
+/// in decides which cites the score note: the verb takes them in the order
+/// their keys went down.
+#[test]
+fn the_order_notes_arrive_in_decides_their_citations() {
+    let run = |first: u64, second: u64| {
+        let mut law = law_of(&[(100_000, 60)]);
+        let a = cites(&mut law, first, 60);
+        let b = cites(&mut law, second, 60);
+        (a, b, law.snapshot_bytes().unwrap())
+    };
+    let (a, b, early_first) = run(99_000, 100_500);
+    assert_eq!((a, b), (Some(0), None));
+    let (a, b, late_first) = run(100_500, 99_000);
+    assert_eq!((a, b), (Some(0), None));
+    assert_ne!(early_first, late_first, "the take cites a different note");
+}
+
+// --- Never played, in a live session -------------------------------------------
+
+/// In a live session, an uncited score note is never played once its reach
+/// window has passed the committed horizon, and its row says so; before that
+/// it has no row. The window passes the horizon about 20 ms before the note
+/// is due (the reach, 80 ms, is shorter than H, 100 ms), so a live note that
+/// arrives afterwards, as live notes do, can still cite it.
+#[test]
+fn in_a_live_session_a_note_is_never_played_once_its_window_passes_the_horizon() {
+    let mut law = law_of(&[(100_000, 60), (200_000, 62), (300_000, 64)]);
+    commit_through(&mut law, 100_000 / Q);
+    assert_eq!(cites(&mut law, 100_000, 60), Some(0));
+    let match_0 = "note 0: onset +0 samples (+0.0 ms) vs gate \u{b1}1920, pitch 60 vs 60: match";
+    assert_eq!(rows(&law), [match_0], "notes 1 and 2 are not reached");
+
+    // Note 1's window ends on sample 203,840. The horizon's last sample
+    // reaches it at quantum 4,246: (4,246 + 1) × 48 - 1 = 203,855.
+    commit_through(&mut law, 4_245);
+    assert_eq!(law.committed_horizon(), Ok(Some(4_245)));
+    assert_eq!(rows(&law), [match_0]);
+    let before = law.snapshot_bytes().unwrap();
+    law.step().unwrap();
+    let never_1 = "note 1: onset 200000 samples, pitch 62, no take note cites it: never played";
+    assert_eq!(rows(&law), [match_0, never_1]);
+    assert_ne!(law.snapshot_bytes().unwrap(), before, "the rows are hashed");
+    // The playhead is 992 samples (20.7 ms) short of note 1.
+    assert_eq!(200_000 - (law.steps() - 1) * Q, 992);
+
+    // A live note for note 1 arrives now, behind the horizon, and cites it.
+    assert_eq!(cites(&mut law, 200_100, 62), Some(1));
+    assert_eq!(
+        rows(&law),
+        [
+            match_0,
+            "note 1: onset +100 samples (+2.1 ms) vs gate \u{b1}1920, pitch 62 vs 62: match"
+        ]
+    );
+    // Note 2 is reached only when its own window passes.
+    commit_through(&mut law, 303_840 / Q);
+    assert_eq!(rows(&law).len(), 3);
+    assert!(rows(&law)[2].ends_with("never played"));
+}
+
+/// A window passes the horizon on the sample: when its last sample, the
+/// onset plus the reach, is the horizon's last sample.
+#[test]
+fn a_window_passes_the_horizon_on_its_last_sample() {
+    // Quantum 4,245 ends on sample 203,807, where this note's window ends.
+    let onset = (4_245 + 1) * Q - 1 - REACH;
+    assert_eq!(onset, 199_967);
+    let mut law = law_of(&[(50_000, 60), (onset, 62)]);
+    assert_eq!(cites(&mut law, 50_000, 60), Some(0), "a live session");
+    commit_through(&mut law, 4_244);
+    assert_eq!(law.committed_horizon(), Ok(Some(4_244)));
+    assert_eq!(words(&law), ["match"]);
+    law.step().unwrap();
+    assert_eq!(words(&law), ["match", "never played"]);
+}
+
+/// A take admitted as a batch, without the live verb, is graded as version 3
+/// graded it: every uncited score note is never played, stopped or running,
+/// and stepping does not change the record.
+#[test]
+fn a_take_admitted_as_a_batch_is_graded_as_version_3() {
+    let mut law = law_of(&[(100_000, 60), (200_000, 62), (300_000, 64)]);
+    law.admit(&[TakeNote {
+        onset_sample: 100_000,
+        pitch: 60,
+        velocity: 90,
+        cites: Some(ScoreNoteId(0)),
+    }])
+    .unwrap();
+    let stopped = law.snapshot_bytes().unwrap();
+    assert_eq!(words(&law), ["match", "never played", "never played"]);
+    for _ in 0..3_000 {
+        law.step().unwrap();
+    }
+    assert_eq!(words(&law), ["match", "never played", "never played"]);
+    assert_eq!(law.snapshot_bytes().unwrap(), stopped);
+}
+
+// --- The note-off ----------------------------------------------------------------
+
+/// A note-off ends the latest held note of its pitch, and the frames carry
+/// the length from the note-on to it.
+#[test]
+fn a_note_off_ends_the_latest_held_note_of_its_pitch() {
+    let mut law = law_of(&[(1_000, 60)]);
+    commit_through(&mut law, 100);
+    let first = law.live(played(1_000, 60)).unwrap();
+    let second = law.live(played(2_000, 60)).unwrap();
+    assert_eq!(first.cites, Some(ScoreNoteId(0)));
+    assert_eq!(second.cites, None, "0 is cited");
+    assert_eq!(law.live_off(off(60, 2_500)), Ok(second));
+    assert_eq!(law.live_off(off(60, 3_000)), Ok(first));
+    assert_eq!(
+        law.live_off(off(60, 3_500)),
+        Err(Refusal::LiveNotHeld { pitch: 60 })
+    );
+    let lengths: Vec<(u64, Voice, u64)> = law
+        .frames(0, 100)
+        .unwrap()
+        .notes
+        .iter()
+        .map(|n| (n.onset_sample, n.voice, n.duration_samples))
+        .collect();
+    assert_eq!(
+        lengths,
+        [
+            (1_000, Voice::Score, 1_000),
+            (1_000, Voice::Live, 2_000),
+            (2_000, Voice::Live, 500),
+        ]
+    );
+}
+
+#[test]
+fn each_bad_note_off_is_refused_by_name() {
+    let mut law = law_of(&[(1_000, 60)]);
+    assert_eq!(law.live_off(off(60, 10)), Err(Refusal::LiveStopped));
+    law.step().unwrap();
+    // In order: the pitch, then the release's place, then a held note.
+    assert_eq!(
+        law.live_off(off(128, -1)),
+        Err(Refusal::LivePitch { pitch: 128 })
+    );
+    assert_eq!(
+        law.live_off(off(60, -5)),
+        Err(Refusal::LiveBeforeStart { sample: -5 })
+    );
+    let ahead = (H + 1) * Q;
+    assert_eq!(
+        law.live_off(off(60, ahead as i64)),
+        Err(Refusal::LiveAhead {
+            sample: ahead,
+            quantum: H + 1,
+            horizon: H
+        })
+    );
+    assert_eq!(
+        law.live_off(off(60, 10)),
+        Err(Refusal::LiveNotHeld { pitch: 60 })
+    );
+    law.live(played(1_000, 60)).unwrap();
+    for release in [1_000u64, 999] {
+        assert_eq!(
+            law.live_off(off(60, release as i64)),
+            Err(Refusal::LiveEmpty {
+                onset_sample: 1_000,
+                off_sample: release
+            })
+        );
+    }
+    // A refused note-off leaves the note held.
+    assert!(law.live_off(off(60, 1_001)).is_ok());
+}
+
+// --- The same notes, live or as a take --------------------------------------------
 
 /// The slice-1 pattern played live, in reverse order, is the take admitted
 /// whole: the same citations, verdicts, rows and snapshot.
@@ -421,9 +678,10 @@ fn live_notes_grade_as_the_same_notes_admitted_as_a_take() {
             onset_sample: t.onset_sample as i64,
             pitch: u32::from(t.pitch),
             velocity: u32::from(t.velocity),
-            duration_samples: 1_234,
         };
         assert_eq!(live.live(note), Ok(*t));
+        let release = off(u32::from(t.pitch), t.onset_sample as i64 + 1_234);
+        assert_eq!(live.live_off(release), Ok(*t));
     }
     assert_eq!(live.take(), admitted.take());
     assert_eq!(live.verdicts(), admitted.verdicts());
@@ -634,9 +892,9 @@ fn consecutive_windows_hand_over_every_event_exactly_once() {
                 onset_sample: onset,
                 pitch,
                 velocity: 99,
-                duration_samples: 7,
             })
             .unwrap();
+        law.live_off(off(pitch, onset + 7)).unwrap();
         live.push((note, 7));
     }
 
@@ -705,7 +963,14 @@ fn a_frame_carries_each_voices_length_and_note() {
         onset_sample: 2_020,
         pitch: 62,
         velocity: 42,
-        duration_samples: 333,
+    })
+    .unwrap();
+    law.live_off(off(62, 2_353)).unwrap();
+    // Still held: its length is 0 until its note-off.
+    law.live(LiveNote {
+        onset_sample: 3_000,
+        pitch: 77,
+        velocity: 43,
     })
     .unwrap();
     let f = law.frames(0, 100).unwrap();
@@ -731,6 +996,7 @@ fn a_frame_carries_each_voices_length_and_note() {
             (1_500, Voice::Take, None, 90, 41, 0),
             (2_000, Voice::Score, Some(1), 62, 80, 1_000),
             (2_020, Voice::Live, Some(1), 62, 42, 333),
+            (3_000, Voice::Live, None, 77, 43, 0),
         ]
     );
     assert_eq!(
@@ -743,16 +1009,16 @@ fn a_frame_carries_each_voices_length_and_note() {
 /// two live takes that differ only in length have one snapshot.
 #[test]
 fn frames_change_nothing_and_lengths_are_not_hashed() {
-    let build = |duration_samples| {
+    let build = |length: i64| {
         let mut law = law_of(&[(1_000, 60)]);
-        commit_through(&mut law, 100);
+        commit_through(&mut law, 1_000);
         law.live(LiveNote {
             onset_sample: 1_000,
             pitch: 60,
             velocity: 64,
-            duration_samples,
         })
         .unwrap();
+        law.live_off(off(60, 1_000 + length)).unwrap();
         law
     };
     let short = build(10);
@@ -1026,24 +1292,24 @@ fn the_new_codes_are_appended_and_distinct() {
         Refusal::Overflow,
         Refusal::Busy,
         Refusal::LiveStopped,
-        Refusal::LiveBeforeStart { onset_sample: -1 },
+        Refusal::LiveBeforeStart { sample: -1 },
         Refusal::LiveAhead {
-            onset_sample: 0,
+            sample: 0,
             quantum: 0,
             horizon: 0,
         },
         Refusal::LivePitch { pitch: 0 },
         Refusal::LiveVelocity { velocity: 0 },
-        Refusal::LiveEmpty { onset_sample: 0 },
-        Refusal::LiveEndOutOfRange {
+        Refusal::LiveEmpty {
             onset_sample: 0,
-            duration_samples: 0,
+            off_sample: 0,
         },
         Refusal::LiveDuplicate {
             onset_sample: 0,
             pitch: 0,
             cites: None,
         },
+        Refusal::LiveNotHeld { pitch: 0 },
         Refusal::FramesWindow { first: 1, last: 0 },
         Refusal::FramesStopped,
         Refusal::FramesNotCommitted {
@@ -1057,7 +1323,7 @@ fn the_new_codes_are_appended_and_distinct() {
     sorted.dedup();
     assert_eq!(sorted.len(), codes.len(), "a code names two refusals");
     let (old, new) = codes.split_at(codes.len() - 11);
-    assert_eq!(new, [160, 161, 162, 163, 164, 165, 166, 167, 170, 171, 172]);
+    assert_eq!(new, [160, 161, 162, 163, 164, 165, 167, 168, 170, 171, 172]);
     assert!(old.iter().all(|&c| c <= 63));
     // The ingest verb's own codes run from 70 to 154.
     assert!(new.iter().all(|&c| c > 154));
@@ -1065,7 +1331,9 @@ fn the_new_codes_are_appended_and_distinct() {
     for r in &refusals[refusals.len() - 11..] {
         let text = alloc::format!("{r}");
         assert!(
-            text.starts_with("live note refused: ") || text.starts_with("frames refused: "),
+            text.starts_with("live note refused: ")
+                || text.starts_with("live note-off refused: ")
+                || text.starts_with("frames refused: "),
             "{text}"
         );
     }

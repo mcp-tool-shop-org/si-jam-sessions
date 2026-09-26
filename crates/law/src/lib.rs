@@ -80,7 +80,7 @@ pub mod wire;
 pub use frames::{Beat, FrameNote, Frames, Voice};
 pub use grade::{CitedKind, Verdict};
 pub use law::{Law, Provenance};
-pub use live::LiveNote;
+pub use live::{LiveNote, LiveNoteOff};
 pub use refusal::{Event, IngestRefusal, Refusal, WireFault};
 pub use score::{LawMeter, LawNote, LawScore, LawTempo};
 pub use snapshot::{SNAPSHOT_FORMAT, SNAPSHOT_MAGIC};
@@ -107,18 +107,31 @@ pub use time::{TempoMap, rescale_tick};
 ///   it. Version 2 named golden `f12b07b0…` on a pushed head, so the law with
 ///   predicate version 2 needed a new number; it names golden `145c7af9…`.
 ///   The SMF reader's two track-count refusals have codes of their own.
+/// - 4: the host's verbs, under the same predicate version 2 and cut-offs.
+///   - The frame export ([`Law::frames`], `law_frames`) reads the committed
+///     quanta of a window: every note-on of the score, the take and the live
+///     take, and every beat. It changes nothing.
+///   - The live verbs (`law_live_note` and `law_live_note_off`, [`Law::live`]
+///     and [`Law::live_off`]) admit a person's note as a record at its own
+///     onset, never refused for lateness. The law cites it by the rule of
+///     [`LIVE_REACH_SAMPLES`], each score note at most once, and it goes
+///     through the take's own admission and grading.
+///   - In a live session, an uncited score note is never played once its
+///     reach window has passed the committed horizon (see [`Law::verdicts`]).
+///   - `law_horizon` reads the committed horizon, and refusal codes 160 to 172
+///     name the new refusals.
 ///
-///   Version 3 then gained two verbs that do not move its golden: the frame
-///   export ([`Law::frames`]), which reads committed quanta and changes
-///   nothing, and the live verb ([`Law::live`]), which admits a record into
-///   the take through the take's own admission and grading, citing by the rule
-///   of [`LIVE_REACH_SAMPLES`]. A take admitted as a batch is graded, rowed and
-///   hashed exactly as before, and refusal codes 160 to 172 were appended.
+///   Nothing version 3 computed changes: a take admitted as a batch is graded,
+///   rowed and hashed as before, and the constructed take's snapshot differs
+///   from version 3's in its law-version word alone. So version 4 names golden
+///   `fd574ccc…`, and that snapshot with byte 12 written back to 3 hashes to
+///   `145c7af9…`. A host tells the verbs are there from `law_version()`:
+///   version 3 on `main` is the law without them.
 ///
 /// The predicate's rules are the law's, and the law pins their version and
 /// date cut-offs below. Moving any of them fails the build there until the
 /// pin is updated, and by rule the law version with it.
-pub const LAW_VERSION: u32 = 3;
+pub const LAW_VERSION: u32 = 4;
 
 // The licence predicate this law version admits scores under. provenance's
 // cut-offs move every January (`RULES_YEAR`), and a moved cut-off can change
@@ -128,7 +141,7 @@ pub const LAW_VERSION: u32 = 3;
 // rule above and the golden, which carries both numbers, do. The snapshot
 // header carries the same values, so a changed one also moves every hash.
 const _: () = {
-    assert!(LAW_VERSION == 3);
+    assert!(LAW_VERSION == 4);
     assert!(provenance::PREDICATE_VERSION == 2);
     assert!(provenance::RULES_YEAR == 2026);
     assert!(provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR == 1930);
@@ -212,12 +225,21 @@ pub const GATE_SAMPLES: u32 = 1_920;
 /// answer it: twice the gate, 3,840 samples (80 ms).
 ///
 /// A person's note does not say which score note it answers, and the host
-/// decides nothing, so the live verb decides ([`Law::live`]):
+/// decides nothing, so the live verb decides ([`Law::live`]). This is slice
+/// 1's placeholder score follower:
 /// - a live note answers the nearest score note of its own pitch up to this
 ///   far away, and grades match, early or late;
 /// - failing that, the nearest score note of any pitch within the gate, and
 ///   grades wrong pitch;
-/// - failing both, it is an addition.
+/// - failing both, it is an addition;
+/// - a score note is cited at most once: one already cited is passed over,
+///   so a second live note in its reach takes the next candidate or becomes an
+///   addition;
+/// - ties break by the earlier onset, then the lowest id for the same pitch,
+///   and by the nearest pitch, then the lower pitch, then the lowest id for
+///   another pitch (`live::cite` states them in full);
+/// - same-pitch candidates are taken before other pitches, so every note of a
+///   chord played at its own pitch finds its own score note.
 ///
 /// Why twice the gate: the constructed take plays notes up to 60 ms late
 /// (2,880 samples, one and a half gates), and a note played that late is still
