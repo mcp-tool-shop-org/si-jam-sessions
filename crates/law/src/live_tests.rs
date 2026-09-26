@@ -600,9 +600,9 @@ fn consecutive_windows_hand_over_every_event_exactly_once() {
         (9_600, 71, 10, 1),
         (13_439, 72, 10, 1),
     ];
-    // 2/4, then 3/8 from tick 6,720: beats every 3,360 samples, then every
-    // 1,680.
-    let score = scored(&notes, &[(0, 2, 2), (6_720, 3, 3)]);
+    // 2/4, then 3/8 from tick 6,719: beats every 3,360 samples on the first
+    // sample of a quantum, then every 1,680 on the last sample of one.
+    let score = scored(&notes, &[(0, 2, 2), (6_719, 3, 3)]);
     let mut law = Law::load(&score).unwrap();
     law.admit(&[
         TakeNote {
@@ -643,6 +643,12 @@ fn consecutive_windows_hand_over_every_event_exactly_once() {
     let (notes, beats) = expected(&law, last, &live);
     assert_eq!(notes.len(), 11 + 3 + 4);
     assert_eq!(beats.len(), 7);
+    assert!(
+        beats
+            .iter()
+            .any(|b| b.onset_sample > 0 && b.onset_sample % Q == 0)
+    );
+    assert!(beats.iter().any(|b| b.onset_sample % Q == Q - 1));
     let whole = law.frames(0, last).unwrap();
     assert_eq!(whole.notes, notes);
     assert_eq!(whole.beats, beats);
