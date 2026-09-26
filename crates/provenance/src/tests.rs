@@ -1264,6 +1264,61 @@ fn ai_products_and_prohibitions_in_a_licence_text_are_refused() {
     );
 }
 
+/// The fourth external review, at `0196e6d`: the nouns "restriction" and "restrictions"
+/// negated, so the Public Domain Mark's own sentence refused a public-domain markup or
+/// evidence quote that carried it. The nouns no longer negate; the verb forms and "no"
+/// still do.
+#[test]
+fn the_public_domain_mark_sentence_affirms() {
+    const PDM: &str = "This work has been identified as being free of known restrictions \
+                       under copyright law, including all related and neighboring rights.";
+    const PDM_SHORT: &str = "This work is free of known copyright restrictions.";
+    let markup = |text: &str| {
+        let mut f = Fixture::new();
+        f.ly_header(&format!(
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"Placed in the public domain. {text}\" }}\n"
+        ));
+        f
+    };
+    let mismatch = Err(Refusal::InFileLicenceMismatch {
+        name: named(LY_NAME),
+    });
+    let mut terms = Fixture::new();
+    terms.evidence_mut("terms").quotes = vec![format!("Dedicated to the public domain. {PDM}")];
+    let cases = [
+        ("markup: the mark", markup(PDM), Ok(Tier::PublicDomain)),
+        ("terms quote: the mark", terms, Ok(Tier::PublicDomain)),
+        (
+            "markup: the short form",
+            markup(PDM_SHORT),
+            Ok(Tier::PublicDomain),
+        ),
+        (
+            "markup: use is restricted",
+            markup("Use is restricted."),
+            mismatch.clone(),
+        ),
+        (
+            "markup: no restrictions",
+            markup("No restrictions."),
+            mismatch.clone(),
+        ),
+    ];
+    let mut wrong = Vec::new();
+    for (place, f, want) in &cases {
+        let got = f.admit().map(|a| a.tier);
+        if got != *want {
+            wrong.push(format!("{place}: {got:?}, not {want:?}"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{} of {} wrong: {wrong:#?}",
+        wrong.len(),
+        cases.len()
+    );
+}
+
 #[test]
 fn some_file_must_state_the_licence_outright() {
     // No statement anywhere.

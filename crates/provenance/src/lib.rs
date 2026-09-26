@@ -58,6 +58,14 @@
 //!   them with a prohibiting or negating word ("scraping is prohibited", "no scraping") is
 //!   refused by the negation rule, not by a class of its own; one without ("scraping
 //!   requires written permission") names nothing the predicate refuses.
+//! - **A limitation phrased only with the noun** ("restrictions apply", "subject to the
+//!   restrictions below") is no longer read as a negation. The nouns "restriction" and
+//!   "restrictions" are not negating words, because the Public Domain Mark says its work
+//!   is "free of known restrictions". The verb forms still are ("use is restricted").
+//! - **Standard rights statements that hold a negating word** are refused: "No known
+//!   copyright restrictions" and "No Copyright - United States" negate through "no".
+//!   Curating those belongs to the next ingest change, which admits CC0 and the Public
+//!   Domain Mark.
 
 #![no_std]
 
@@ -148,6 +156,8 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 ///   included.
 /// - `67228d5`: AI product names join the AI vocabulary (chatgpt, gpt, openai, ml and
 ///   others), and a text that prohibits or limits anything no longer affirms its licence.
+/// - `d9ebfdc`: the nouns "restriction" and "restrictions" no longer negate, so the Public
+///   Domain Mark's sentence affirms; the verb forms still negate.
 pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {

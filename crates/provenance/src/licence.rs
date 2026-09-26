@@ -241,7 +241,9 @@ const NEGATING_WORDS: &[&str] = &[
     "solely",
     "exclusively",
     "but",
-    // Prohibition: a text that prohibits anything no longer affirms its licence.
+    // Prohibition: a text that prohibits anything no longer affirms its licence. The nouns
+    // "restriction" and "restrictions" are left out, because the Public Domain Mark says
+    // its work is "free of known restrictions".
     "prohibit",
     "prohibits",
     "prohibited",
@@ -260,8 +262,6 @@ const NEGATING_WORDS: &[&str] = &[
     "restricts",
     "restricted",
     "restricting",
-    "restriction",
-    "restrictions",
     "disallow",
     "disallows",
     "disallowed",
@@ -919,6 +919,12 @@ mod tests {
             "commercial use prohibited",
             "public domain for study solely",
             "exclusively for performance",
+            // The verb forms of restrict still refuse, and "no" still refuses.
+            "use is restricted",
+            "no restrictions",
+            // Known limit: standard rights statements that hold a negating word refuse.
+            "no known copyright restrictions",
+            "no copyright - united states",
         ] {
             assert!(negates(text), "{text}");
         }
@@ -941,8 +947,6 @@ mod tests {
             "restricts",
             "restricted",
             "restricting",
-            "restriction",
-            "restrictions",
             "disallow",
             "disallows",
             "disallowed",
@@ -971,6 +975,14 @@ mod tests {
             // CC texts say these, and they limit nothing the licence does not.
             "some rights reserved",
             "attribution required",
+            // The Public Domain Mark, in its long and short forms.
+            "this work has been identified as being free of known restrictions under \
+             copyright law, including all related and neighboring rights.",
+            "this work is free of known copyright restrictions.",
+            // Known limit: a limitation phrased only with the noun is not read as a
+            // negation.
+            "restrictions apply",
+            "subject to the restrictions below",
         ] {
             assert!(!negates(text), "{text}");
         }
