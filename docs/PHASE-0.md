@@ -216,3 +216,29 @@ Scored 0–3 against the studio's six workflow standards. Nothing is built yet, 
 **The CC-BY tier.** You might expect the corpus to stay public-domain or self-engraved only. The lock admits CC-BY-4.0 in its own tier with a credit ledger, because Creative Commons treats a source link as training attribution and the tier widens the shelf. Share-alike, non-commercial and no-derivatives stay refused. Override by striking the tier before the first ingest.
 
 **The first score.** You might expect one of our own engravings. The lock starts from a receipted Mutopia public-domain typesetting of *The Entertainer*, because slice 1 tests the law and not the engraving pipeline. Override by naming another score with its receipt.
+
+## Decisions taken while building slice 1
+
+Each was settled by what slice 1 measured, under the Director's delegation, and can be overridden like the three above.
+
+**The quantum and the horizon.** *Q* = 48 samples (1 ms), so a lateness in quanta reads as milliseconds. It matches WinMM's 1 ms input resolution and divides both the gate (1,920 = 40 × 48) and the rate. *H* = 100 quanta (100 ms), the host's render-ahead budget. Nothing is committed before the first step.
+
+**The gate is inclusive.** A note is on time when |onset − score onset| ≤ 1,920 samples; 1,921 is late or early. The row always carries the exact sample count. Milliseconds with one decimal are exact only for multiples of 24 samples, so the displayed milliseconds round half away from zero.
+
+**Live input is a record, not a proposal.** A live note is admitted at its own sample onset on the law's clock; the commit horizon refuses late *proposals* only. You might expect the horizon to apply to every input. It cannot: a note a person plays always arrives at or behind the committed horizon, and "the live input is admitted on the law's clock and never waits for the model" already treats it as a record.
+
+**Which file carries the licence.** A receipt is admitted when every licence statement inside every receipted file agrees with the host page, and at least one file states it. You might expect every file to state its own licence. A strict per-file reading would refuse every MIDI that LilyPond renders, because those carry no licence text; for *The Entertainer* the `.ly` states "Public Domain" and the `.mid` states nothing.
+
+**Ingest refuses before it parses.** Timecode-timed, RIFF-wrapped and unknown-chunk SMFs are refused before the bytes reach `midly`. `midly` 0.5.3 panics on a timecode frame byte of 0x80 when overflow checks are on (measured), and it skips unknown chunks even under `strict`.
+
+**std reaches the law only unnamed.** The law is `#![no_std]` and links std once, as `extern crate std as _;`, for its wasm32 allocator and its trapping panic handler; a test fails the build on any named binding outside test code. A pinned wasm digest needs path remapping, because `sha2`'s panic locations embed the builder's cargo home.
+
+**CC0.** CC0 is a public-domain dedication. It will be admitted as public-domain-equivalent in the next ingest change; until then the predicate refuses it as unknown.
+
+**Restrictions with standard names match exactly; AI wording fails closed.** The licence predicate refuses all rights reserved, no redistribution, non-commercial, no derivatives and share-alike by the names those restrictions are known by, whatever the separators (`CC BY-NC` reads as `cc by nc`). You might expect AI restrictions to be matched the same way. They have no standard wording, and two review rounds each found AI wording that a phrase list admitted. So the AI class refuses any licence text that names the topic, whatever else the text says: AI, training, models, mining, datasets, generative or neural systems, or a listed AI product. A plain licence text has no reason to name it. The cost is that a plain phrase such as "ear training" is refused, and a refusal sends the score to a person. Product names that are also ordinary words or people's names stay off the list, because Claude Debussy's scores are on Mutopia.
+
+**A licence text that prohibits anything does not affirm its licence.** A copyright markup or an evidence quote counts for its licence only if it holds no negating, limiting, lapsing, hedging or prohibiting word. So a public-domain markup that bans some use is refused, even when the use is named in words the AI class does not list.
+
+**A version number is frozen when it reaches main.** Before that it may be refined, but one number never names two different goldens, and every pushed refinement is recorded beside the version. You might expect every change to take a new number. During review that would spend a number on every round. Law version 2 named a golden on a pushed head, so the law that follows version 1 on main is version 3. Predicate version 2 was refined on its branch without moving the golden.
+
+**Still open:** whether *The Entertainer*'s `.mid` matches its `.ly` after the latter's 2016-11 formatting commit (a re-render with LilyPond 2.19.32 settles it); the human clearance path for editions still inside their term; the licence text for the project's own engravings; and whether predicate version 3 adds a class for automated-access terms (scraping, crawling).
