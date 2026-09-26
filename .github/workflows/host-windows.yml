@@ -1,0 +1,76 @@
+# The host's Windows-only code: WinMM MIDI input and the console keyboard.
+#
+# crates/host compiles its MIDI input (src/winmm.rs) and its computer-keyboard
+# fallback (src/console.rs) on Windows only, the platform the host runs on. The
+# Linux jobs in ci.yml never compile those two files, so this job does:
+# clippy with -D warnings over every target of the host, and the host's tests,
+# on windows-latest. Nothing here opens an audio or MIDI device; the runner has
+# none.
+#
+# It runs only when the host, the lockfile, the toolchain or this file
+# changes. The two Windows-only files use nothing outside the host, and a
+# change to the law or the other crates reaches the host's shared code, which
+# ci.yml's Linux job compiles and tests on every such change.
+#
+# Push is limited to main, as in ci.yml; workflow_dispatch runs any branch.
+#
+# Standards compliance (the studio's six workflow standards, scored 0-3):
+# - PIN_PER_STEP 2: the checkout action by commit SHA; the toolchain by
+#   rust-toolchain.toml; dependencies by Cargo.lock under --locked.
+# - ANDON_AUTHORITY 2: clippy's -D warnings and the tests are gates, and the
+#   first failure stops the job.
+# - NAMED_COMPENSATORS: nothing irreversible; the job publishes, tags and
+#   pushes nothing, so there is nothing to undo.
+# - DECOMPOSE_BY_SECRETS 2: a read-only token, credentials not persisted, no
+#   secrets.
+# - UNCERTAINTY_GATED_HUMANS 1. skip: a gate that only passes or fails has no
+#   uncertain output to route to a person; a person merges.
+# - EXTERNAL_VERIFIER 2: no model grades anything; the compiler, clippy and
+#   the tests judge the code.
+name: Host (Windows)
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.lock
+      - rust-toolchain.toml
+      - crates/host/**
+      - .github/workflows/host-windows.yml
+  pull_request:
+    paths:
+      - Cargo.lock
+      - rust-toolchain.toml
+      - crates/host/**
+      - .github/workflows/host-windows.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-windows:
+    name: host (windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # With no argument, rustup installs what rust-toolchain.toml names.
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install --no-self-update
+          rustup show active-toolchain
+          rustc --version
+
+      - name: Clippy, the Windows-only code included
+        run: cargo clippy -p host --all-targets --locked -- -D warnings
+
+      - name: The host's tests
+        run: cargo test -p host --locked
