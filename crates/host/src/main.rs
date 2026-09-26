@@ -1019,7 +1019,9 @@ fn watch_input(started: &mut Started) -> bool {
 /// What stopping an input leaves for the jam's exit status: the failure the
 /// input stopped on, if it stopped on one. `closed` is how closing it went: a
 /// close that fails at teardown comes after the music is over, so it is
-/// printed as a warning and fails nothing.
+/// printed as a warning and fails nothing. Only the MIDI input, which is
+/// Windows-only, closes a port; the rule's test runs everywhere.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn stopped_input(stopped_on: Option<String>, closed: Result<(), String>) -> Option<String> {
     if let Err(e) = closed {
         eprintln!("host: warning: {e}");
