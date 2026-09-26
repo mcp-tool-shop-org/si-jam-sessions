@@ -4,15 +4,26 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use provenance::{Media, Receipt, Supplied, Tier};
 use score_model::IngestedScore;
 use sha2::{Digest, Sha256};
 
 use crate::grade::{self, Verdict};
-use crate::refusal::Refusal;
+use crate::refusal::{IngestRefusal, Refusal};
 use crate::score::LawScore;
 use crate::snapshot;
 use crate::take::TakeNote;
+use crate::wire;
 use crate::{HORIZON_QUANTA, MAX_SAMPLE};
+
+/// Where an ingested score came from: the tier the licence predicate admitted
+/// it into, and the SHA-256 of its receipt's canonical encoding. The receipt
+/// records every file's SHA-256, so the digest also names the files.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Provenance {
+    pub tier: Tier,
+    pub receipt_digest: [u8; 32],
+}
 
 /// The law's whole state.
 ///
@@ -38,17 +49,93 @@ pub struct Law {
     /// Strictly increasing in [`TakeNote::key`].
     take: Vec<TakeNote>,
     steps: u64,
+    /// `None` for a score loaded as bytes ([`Law::load`]), which no receipt
+    /// admitted; the snapshot says so.
+    provenance: Option<Provenance>,
 }
 
 impl Law {
     /// Loads a score and stops the transport: an empty take, zero steps.
     /// See [`LawScore::from_ingested`] for what is refused.
+    ///
+    /// No receipt comes with the score, so no licence predicate has admitted
+    /// it, and the snapshot records it as unreceipted. [`Law::ingest`] is the
+    /// verb that admits a score.
     pub fn load(score: &IngestedScore) -> Result<Self, Refusal> {
         Ok(Law {
             score: LawScore::from_ingested(score)?,
             take: Vec::new(),
             steps: 0,
+            provenance: None,
         })
+    }
+
+    /// The ingest verb: a receipt and every file it receipts, in the
+    /// [`wire`] container layout, become a loaded score, or a refusal that
+    /// names the layer that stopped them. The transport is stopped: an empty
+    /// take, zero steps.
+    ///
+    /// The layers run in this order, and the first refusal is returned:
+    /// 1. the container's bytes decode ([`wire::decode_container`]);
+    /// 2. the receipt loads from its JSON (`provenance::Receipt::from_json`);
+    /// 3. the licence predicate admits the score (`provenance::admit`): every
+    ///    receipted file is supplied once with its SHA-256 and size, the
+    ///    composition, the arrangement and the source edition pass, and the
+    ///    files' own licence statements agree with the host page;
+    /// 4. the receipt lists exactly one SMF file;
+    /// 5. the SMF reader reads it (`ingest::ingest_smf`);
+    /// 6. the law rescales it to PPQ 3360 and places it on the sample clock
+    ///    ([`LawScore::from_ingested`]).
+    ///
+    /// The admitted tier and the receipt's digest are kept, and the snapshot
+    /// commits them.
+    pub fn ingest(container: &[u8]) -> Result<Self, IngestRefusal> {
+        let container = wire::decode_container(container).map_err(IngestRefusal::Law)?;
+        let receipt = Receipt::from_json(container.receipt)
+            .map_err(|e| IngestRefusal::Licence(provenance::Refusal::Receipt(e)))?;
+        let mut supplied = Vec::new();
+        supplied
+            .try_reserve_exact(container.files.len())
+            .map_err(|_| IngestRefusal::Law(Refusal::OutOfMemory))?;
+        supplied.extend(container.files.iter().map(|f| Supplied {
+            name: f.name,
+            bytes: f.bytes,
+        }));
+        let admitted = provenance::admit(&receipt, &supplied).map_err(IngestRefusal::Licence)?;
+
+        let mut smf_files = receipt.files.iter().filter(|f| f.media == Media::Smf);
+        let (Some(smf), None) = (smf_files.next(), smf_files.next()) else {
+            let count = receipt
+                .files
+                .iter()
+                .filter(|f| f.media == Media::Smf)
+                .count();
+            return Err(IngestRefusal::SmfCount { count });
+        };
+        // The predicate has checked that every receipted file was supplied, so
+        // this cannot miss; a miss is refused as the predicate would refuse it.
+        let bytes = container.file(&smf.name).ok_or_else(|| {
+            IngestRefusal::Licence(provenance::Refusal::MissingFile {
+                name: smf.name.clone(),
+            })
+        })?;
+        let score = ingest::ingest_smf(bytes).map_err(IngestRefusal::Smf)?;
+        let score = LawScore::from_ingested(&score).map_err(IngestRefusal::Law)?;
+        Ok(Law {
+            score,
+            take: Vec::new(),
+            steps: 0,
+            provenance: Some(Provenance {
+                tier: admitted.tier,
+                receipt_digest: admitted.receipt_digest,
+            }),
+        })
+    }
+
+    /// Where the score came from: `Some` when [`Law::ingest`] admitted it,
+    /// `None` when it was loaded as bytes.
+    pub fn provenance(&self) -> Option<&Provenance> {
+        self.provenance.as_ref()
     }
 
     /// The score in law form.
@@ -205,17 +292,23 @@ impl Law {
         grade::rows(&self.verdicts()?)
     }
 
-    /// The canonical snapshot: the pins, the score in law ticks with its
-    /// sample positions, the tempo map, the take, the verdicts and the rows,
-    /// as explicit little-endian bytes in a declared order (see
-    /// [`crate::SNAPSHOT_FORMAT`]).
+    /// The canonical snapshot: the pins, where the score came from, the score
+    /// in law ticks with its sample positions, the tempo map, the take, the
+    /// verdicts and the rows, as explicit little-endian bytes in a declared
+    /// order (see [`crate::SNAPSHOT_FORMAT`]).
     ///
     /// The transport position is not in it: the snapshot is the graded record,
     /// the same however many quanta the host stepped to reach it.
     pub fn snapshot_bytes(&self) -> Result<Vec<u8>, Refusal> {
         let verdicts = self.verdicts()?;
         let rows = grade::rows(&verdicts)?;
-        snapshot::encode(&self.score, &self.take, &verdicts, &rows)
+        snapshot::encode(
+            &self.score,
+            self.provenance.as_ref(),
+            &self.take,
+            &verdicts,
+            &rows,
+        )
     }
 
     /// SHA-256 of [`Law::snapshot_bytes`].
@@ -514,14 +607,32 @@ mod tests {
             QUANTUM_SAMPLES,
             HORIZON_QUANTA,
             crate::GATE_SAMPLES,
+            provenance::PREDICATE_VERSION,
+            u32::from(provenance::RULES_YEAR),
+            u32::from(provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR),
+            u32::from(provenance::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR),
+            u32::from(provenance::LAST_OUT_OF_TERM_EDITION_YEAR),
         ] {
             header.extend_from_slice(&word.to_le_bytes());
         }
+        assert_eq!(header.len(), 56);
         assert_eq!(&bytes[..header.len()], header.as_slice());
-        assert_eq!(&bytes[8..12], &[1, 0, 0, 0]);
+        assert_eq!(&bytes[8..12], &[2, 0, 0, 0], "snapshot format 2");
+        assert_eq!(&bytes[12..16], &[3, 0, 0, 0], "law version 3");
         assert_eq!(&bytes[16..20], &[0x20, 0x0D, 0, 0], "3360 little-endian");
         assert_eq!(&bytes[20..24], &[0x80, 0xBB, 0, 0], "48000 little-endian");
-        assert_eq!(&bytes[36..40], b"TMPO");
+        assert_eq!(&bytes[36..40], &[2, 0, 0, 0], "predicate version 2");
+        assert_eq!(&bytes[40..44], &[0xEA, 0x07, 0, 0], "rules year 2026");
+        assert_eq!(&bytes[44..48], &[0x8A, 0x07, 0, 0], "US cut-off 1930");
+        assert_eq!(&bytes[48..52], &[0xA3, 0x07, 0, 0], "EU cut-off 1955");
+        assert_eq!(&bytes[52..56], &[0xD0, 0x07, 0, 0], "edition cut-off 2000");
+        assert_eq!(&bytes[56..60], b"PROV");
+        assert_eq!(
+            &bytes[60..64],
+            &[0, 0, 0, 0],
+            "a score loaded as bytes has no receipt"
+        );
+        assert_eq!(&bytes[64..68], b"TMPO");
     }
 
     #[test]

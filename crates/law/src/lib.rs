@@ -1,11 +1,14 @@
 //! The law of si-jam-sessions.
 //!
-//! The law holds a score, its tempo map and a played take as integers. It steps
-//! one quantum at a time whether or not anything is proposed, admits a take
-//! note or refuses it with a reason, grades every take note against the score
-//! note it cites, and hashes a canonical snapshot of what it holds. It is built
-//! as one `wasm32-unknown-unknown` cdylib with a raw C ABI ([`abi`]); the rlib
-//! is the same code for native tests and a native harness.
+//! The law holds a score, its tempo map and a played take as integers. It
+//! ingests a score only through the licence predicate ([`Law::ingest`]): a
+//! receipt and every file it receipts come in, the predicate admits the score
+//! or refuses it, and the SMF reader reads it. It steps one quantum at a time
+//! whether or not anything is proposed, admits a take note or refuses it with
+//! a reason, grades every take note against the score note it cites, and
+//! hashes a canonical snapshot of what it holds. It is built as one
+//! `wasm32-unknown-unknown` cdylib with a raw C ABI ([`abi`]); the rlib is the
+//! same code for native tests and a native harness.
 //!
 //! Everything the law hashes is an integer. There is no float anywhere in this
 //! crate (`tests/no_float.rs` fails if one appears, and Clippy's
@@ -47,6 +50,14 @@ extern crate std as _;
 
 pub mod abi;
 mod grade;
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::indexing_slicing,
+    clippy::unwrap_used
+)]
+mod ingest_tests;
 mod law;
 mod refusal;
 mod score;
@@ -56,8 +67,8 @@ mod time;
 pub mod wire;
 
 pub use grade::{CitedKind, Verdict};
-pub use law::Law;
-pub use refusal::{Event, Refusal, WireFault};
+pub use law::{Law, Provenance};
+pub use refusal::{Event, IngestRefusal, Refusal, WireFault};
 pub use score::{LawMeter, LawNote, LawScore, LawTempo};
 pub use snapshot::{SNAPSHOT_FORMAT, SNAPSHOT_MAGIC};
 pub use take::{ScoreNoteId, TakeNote};
@@ -65,7 +76,37 @@ pub use time::{TempoMap, rescale_tick};
 
 /// The law version. Every snapshot carries it; any change to what the law
 /// computes or hashes bumps it.
-pub const LAW_VERSION: u32 = 1;
+///
+/// - 1: integer time, the take, grading and the snapshot (slice 1's law core).
+/// - 2: the ingest verb. The receipt, the licence predicate and the SMF reader
+///   became part of the law, and the snapshot records the receipt it admitted
+///   and carries the predicate's version and cut-off years in its header. It
+///   ran licence predicate version 1 and never reached `main`; its golden hash
+///   was `f12b07b0…`.
+/// - 3: the same law under licence predicate version 2 (see
+///   `provenance::PREDICATE_VERSION`: negated licence text does not affirm,
+///   AI wording is matched as whole words, other restriction phrases from the
+///   start of a word). The SMF reader's two track-count refusals have codes
+///   of their own.
+///
+/// The predicate's rules are the law's. Its version and its date cut-offs are
+/// pinned below against this version: moving any of them fails the build here
+/// until this version moves with them, in the same commit.
+pub const LAW_VERSION: u32 = 3;
+
+// The licence predicate this law version admits scores under. provenance's
+// cut-offs move every January (`RULES_YEAR`), and a moved cut-off can change
+// which scores are admitted, so each move is a law-version bump: change these
+// expectations and LAW_VERSION together. The snapshot header carries the same
+// values, so a changed one also moves every hash.
+const _: () = {
+    assert!(LAW_VERSION == 3);
+    assert!(provenance::PREDICATE_VERSION == 2);
+    assert!(provenance::RULES_YEAR == 2026);
+    assert!(provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR == 1930);
+    assert!(provenance::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR == 1955);
+    assert!(provenance::LAST_OUT_OF_TERM_EDITION_YEAR == 2000);
+};
 
 /// Ticks per quarter note: 3,360 = 2⁵·3·5·7.
 ///

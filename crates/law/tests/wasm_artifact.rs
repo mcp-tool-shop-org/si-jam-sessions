@@ -172,6 +172,7 @@ fn the_release_wasm_exports_the_c_abi() {
         "law_version",
         "law_alloc",
         "law_free",
+        "law_ingest",
         "law_load_score",
         "law_admit_take",
         "law_step",

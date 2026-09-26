@@ -3,7 +3,10 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use provenance::Tier;
+
 use crate::grade::Verdict;
+use crate::law::Provenance;
 use crate::refusal::Refusal;
 use crate::score::LawScore;
 use crate::take::TakeNote;
@@ -19,7 +22,15 @@ pub const SNAPSHOT_MAGIC: [u8; 8] = *b"SIJAMLAW";
 ///
 /// ```text
 /// header  "SIJAMLAW"; format u32; law version u32;
-///         PPQ u32; sample rate u32; Q u32; H u32; gate u32
+///         PPQ u32; sample rate u32; Q u32; H u32; gate u32;
+///         licence predicate version u32; rules year u32;
+///         US last public-domain publication year u32;
+///         EU last public-domain death year u32;
+///         last out-of-term edition year u32
+/// "PROV"  no record for a score loaded as bytes, one for an ingested score:
+///         tier u8 (public domain 1, own engraving 2, CC-BY-4.0 3);
+///         receipt digest, 32 bytes (SHA-256 of the canonical receipt);
+///         credit-ledger id: byte length u32; UTF-8 (empty unless tier 3)
 /// "TMPO"  per tempo change, by tick:
 ///         tick u64; us_per_quarter u32; start_sample u64
 /// "METR"  per meter change, by tick:
@@ -39,10 +50,14 @@ pub const SNAPSHOT_MAGIC: [u8; 8] = *b"SIJAMLAW";
 /// ```
 ///
 /// Ticks are law ticks at PPQ 3360. The header carries every pin, so changing
-/// PPQ, the rate, Q, H or the gate moves every hash, as does a new law
-/// version. The rows are hashed too: a change to a row's wording is a change
-/// to a label.
-pub const SNAPSHOT_FORMAT: u32 = 1;
+/// PPQ, the rate, Q, H, the gate, the licence predicate's version or any of
+/// its cut-off years moves every hash, as does a new law version. The receipt
+/// digest is hashed, so any change to a receipt, including to a file it
+/// receipts, moves the hash of every score ingested under it. The rows are
+/// hashed too: a change to a row's wording is a change to a label.
+///
+/// Format 2 added the predicate's pins to the header and the "PROV" section.
+pub const SNAPSHOT_FORMAT: u32 = 2;
 
 struct Out {
     bytes: Vec<u8>,
@@ -83,8 +98,41 @@ impl Out {
     }
 }
 
+/// The pins the header carries, in order after the magic.
+pub(crate) const HEADER_PINS: [u32; 12] = [
+    SNAPSHOT_FORMAT,
+    LAW_VERSION,
+    PPQ,
+    SAMPLE_RATE,
+    QUANTUM_SAMPLES,
+    HORIZON_QUANTA,
+    GATE_SAMPLES,
+    provenance::PREDICATE_VERSION,
+    widen(provenance::RULES_YEAR),
+    widen(provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR),
+    widen(provenance::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR),
+    widen(provenance::LAST_OUT_OF_TERM_EDITION_YEAR),
+];
+
+const fn widen(year: u16) -> u32 {
+    // `u32::from` is not const; this widening cannot lose a bit.
+    #[allow(clippy::as_conversions)]
+    let wide = year as u32;
+    wide
+}
+
+/// The tier's code in the "PROV" record.
+fn tier_code(tier: &Tier) -> u8 {
+    match tier {
+        Tier::PublicDomain => 1,
+        Tier::OwnEngraving => 2,
+        Tier::CcBy40 { .. } => 3,
+    }
+}
+
 pub(crate) fn encode(
     score: &LawScore,
+    provenance: Option<&Provenance>,
     take: &[TakeNote],
     verdicts: &[Verdict],
     rows: &[String],
@@ -92,16 +140,20 @@ pub(crate) fn encode(
     let mut out = Out { bytes: Vec::new() };
 
     out.put(&SNAPSHOT_MAGIC)?;
-    for pin in [
-        SNAPSHOT_FORMAT,
-        LAW_VERSION,
-        PPQ,
-        SAMPLE_RATE,
-        QUANTUM_SAMPLES,
-        HORIZON_QUANTA,
-        GATE_SAMPLES,
-    ] {
+    for pin in HEADER_PINS {
         out.u32(pin)?;
+    }
+
+    out.section(b"PROV", usize::from(provenance.is_some()))?;
+    if let Some(p) = provenance {
+        out.u8(tier_code(&p.tier))?;
+        out.put(&p.receipt_digest)?;
+        let ledger = match &p.tier {
+            Tier::CcBy40 { credit_ledger_id } => credit_ledger_id.as_bytes(),
+            Tier::PublicDomain | Tier::OwnEngraving => &[],
+        };
+        out.u32(u32::try_from(ledger.len()).map_err(|_| Refusal::Overflow)?)?;
+        out.put(ledger)?;
     }
 
     out.section(b"TMPO", score.tempo().len())?;
@@ -223,7 +275,10 @@ mod tests {
         let bytes = law.snapshot_bytes().unwrap();
         let u32_at = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
 
-        let mut at = 8 + 7 * 4;
+        let mut at = 8 + 12 * 4;
+        assert_eq!(&bytes[at..at + 4], b"PROV");
+        assert_eq!(u32_at(at + 4), 0, "a score loaded as bytes has no receipt");
+        at += 8;
         for (tag, record) in [
             (b"TMPO", 20),
             (b"METR", 10),

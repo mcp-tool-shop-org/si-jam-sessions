@@ -1,26 +1,39 @@
-//! The bytes a host passes in: an ingested score, and a take.
+//! The bytes a host passes in: a container for the ingest verb, an ingested
+//! score, and a take.
 //!
-//! Both layouts are explicit little-endian, versioned and exact. A decoder
+//! Every layout is explicit little-endian, versioned and exact. A decoder
 //! refuses a wrong magic, a wrong version, a truncation, and any byte after the
-//! layout. It checks each count against the bytes that remain before it
-//! allocates anything for it, so the host's buffer bounds every allocation.
+//! layout. It checks each count and length against the bytes that remain
+//! before it allocates anything for it, so the host's buffer bounds every
+//! allocation.
 //!
 //! ```text
-//! score  "SJSC"; version u32 = 1; source_ppq u16;
-//!        tempo count u32, then per change: tick u64; us_per_quarter u32
-//!        meter count u32, then per change: tick u64; numerator u8; denominator_pow2 u8
-//!        note count u32, then per note: start_tick u64; pitch u8; track u16;
-//!            channel u8; end_tick u64; velocity u8
-//! take   "SJTK"; version u32 = 1;
-//!        note count u32, then per note: onset_sample u64; pitch u8; velocity u8;
-//!            cites tag u8 (0 an addition, 1 a citation); cites u32 (0 when tag is 0)
+//! container  "SJIN"; version u32 = 1;
+//!            receipt length u32, then the receipt's bytes (its JSON, as committed);
+//!            file count u32, then per file, names strictly increasing in byte order:
+//!                name length u32, then the name (UTF-8, not empty);
+//!                content length u32, then the file's bytes
+//! score      "SJSC"; version u32 = 1; source_ppq u16;
+//!            tempo count u32, then per change: tick u64; us_per_quarter u32
+//!            meter count u32, then per change: tick u64; numerator u8; denominator_pow2 u8
+//!            note count u32, then per note: start_tick u64; pitch u8; track u16;
+//!                channel u8; end_tick u64; velocity u8
+//! take       "SJTK"; version u32 = 1;
+//!            note count u32, then per note: onset_sample u64; pitch u8; velocity u8;
+//!                cites tag u8 (0 an addition, 1 a citation); cites u32 (0 when tag is 0)
 //! ```
 //!
+//! The container is what the ingest verb reads ([`crate::Law::ingest`]): a
+//! receipt and every file it receipts, each file under its name in the
+//! receipt. Names must strictly increase, so a set of files has exactly one
+//! container and no name appears twice. Which name is which file, and whether
+//! the set is the receipt's, is the licence predicate's to check.
+//!
 //! Decoding checks the layout only. What the values mean (sorted events, a
-//! velocity in range, a citation that names a score note, the commit horizon)
-//! is checked by the law, on the same path a native caller takes. The encoders
-//! are here so a native harness can hand the wasm law exactly the bytes it
-//! would decode.
+//! velocity in range, a citation that names a score note, the commit horizon,
+//! a receipt that admits its files) is checked by the law, on the same path a
+//! native caller takes. The encoders are here so a native harness can hand the
+//! wasm law exactly the bytes it would decode.
 
 use alloc::vec::Vec;
 
@@ -29,17 +42,50 @@ use score_model::{IngestedNote, IngestedScore, MeterChange, TempoChange};
 use crate::refusal::{Refusal, WireFault};
 use crate::take::{ScoreNoteId, TakeNote};
 
+/// The first four bytes of a container for the ingest verb.
+pub const CONTAINER_MAGIC: [u8; 4] = *b"SJIN";
 /// The first four bytes of a score.
 pub const SCORE_MAGIC: [u8; 4] = *b"SJSC";
 /// The first four bytes of a take.
 pub const TAKE_MAGIC: [u8; 4] = *b"SJTK";
-/// The wire version both layouts carry.
+/// The wire version every layout carries.
 pub const WIRE_VERSION: u32 = 1;
 
+/// The fewest bytes a file of a container takes: its two lengths.
+const FILE_RECORD: usize = 8;
 const TEMPO_RECORD: usize = 12;
 const METER_RECORD: usize = 10;
 const NOTE_RECORD: usize = 21;
 const TAKE_RECORD: usize = 15;
+
+/// A container, decoded: the receipt's bytes and each file under its name,
+/// all borrowed from the host's buffer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Container<'a> {
+    /// The receipt, as its JSON bytes.
+    pub receipt: &'a [u8],
+    /// The files, names strictly increasing in byte order.
+    pub files: Vec<ContainerFile<'a>>,
+}
+
+/// One file of a container.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContainerFile<'a> {
+    /// The file's name in the receipt: UTF-8, not empty.
+    pub name: &'a str,
+    pub bytes: &'a [u8],
+}
+
+impl<'a> Container<'a> {
+    /// The bytes of the file with this name, if the container holds one.
+    pub fn file(&self, name: &str) -> Option<&'a [u8]> {
+        self.files
+            .binary_search_by(|f| f.name.cmp(name))
+            .ok()
+            .and_then(|i| self.files.get(i))
+            .map(|f| f.bytes)
+    }
+}
 
 struct Reader<'a> {
     bytes: &'a [u8],
@@ -83,6 +129,12 @@ impl<'a> Reader<'a> {
         Ok(u64::from_le_bytes(self.array()?))
     }
 
+    /// A `u32` length, then that many bytes, borrowed.
+    fn blob(&mut self) -> Result<&'a [u8], Refusal> {
+        let len = usize::try_from(self.u32()?).map_err(|_| Refusal::Overflow)?;
+        self.take(len)
+    }
+
     fn header(&mut self, magic: &[u8; 4]) -> Result<(), Refusal> {
         let at_magic = self.fault(WireFault::Magic);
         if self.array::<4>()? != *magic {
@@ -118,6 +170,38 @@ impl<'a> Reader<'a> {
             Err(self.fault(WireFault::Trailing))
         }
     }
+}
+
+/// Decodes a container. The receipt and the files are not yet read;
+/// [`crate::Law::ingest`] reads them.
+pub fn decode_container(bytes: &[u8]) -> Result<Container<'_>, Refusal> {
+    let mut r = Reader { bytes, at: 0 };
+    r.header(&CONTAINER_MAGIC)?;
+    let receipt = r.blob()?;
+    let (count, mut files) = r.records::<ContainerFile<'_>>(FILE_RECORD)?;
+    for _ in 0..count {
+        let at_name = r.at;
+        let name = core::str::from_utf8(r.blob()?)
+            .ok()
+            .filter(|name| !name.is_empty())
+            .ok_or(Refusal::Wire {
+                fault: WireFault::FileName,
+                offset: at_name,
+            })?;
+        if files.last().is_some_and(|f| f.name >= name) {
+            return Err(Refusal::Wire {
+                fault: WireFault::FileOrder,
+                offset: at_name,
+            });
+        }
+        let content = r.blob()?;
+        files.push(ContainerFile {
+            name,
+            bytes: content,
+        });
+    }
+    r.finish()?;
+    Ok(Container { receipt, files })
 }
 
 /// Decodes a score. The result is not yet validated; [`crate::Law::load`]
@@ -201,6 +285,46 @@ fn put(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), Refusal> {
     Ok(())
 }
 
+/// Encodes a container in the layout [`decode_container`] reads. The files
+/// are written sorted by name; two files with one name are refused, as the
+/// decoder would refuse them.
+pub fn encode_container(receipt: &[u8], files: &[ContainerFile<'_>]) -> Result<Vec<u8>, Refusal> {
+    let mut sorted = Vec::new();
+    sorted
+        .try_reserve_exact(files.len())
+        .map_err(|_| Refusal::OutOfMemory)?;
+    sorted.extend_from_slice(files);
+    sorted.sort_unstable_by(|a, b| a.name.cmp(b.name));
+    let mut out = Vec::new();
+    put(&mut out, &CONTAINER_MAGIC)?;
+    put(&mut out, &WIRE_VERSION.to_le_bytes())?;
+    put(&mut out, &count(receipt.len(), Refusal::Overflow)?)?;
+    put(&mut out, receipt)?;
+    put(&mut out, &count(sorted.len(), Refusal::Overflow)?)?;
+    let mut previous: Option<&str> = None;
+    for f in &sorted {
+        let at = out.len();
+        if f.name.is_empty() {
+            return Err(Refusal::Wire {
+                fault: WireFault::FileName,
+                offset: at,
+            });
+        }
+        if previous.is_some_and(|p| p == f.name) {
+            return Err(Refusal::Wire {
+                fault: WireFault::FileOrder,
+                offset: at,
+            });
+        }
+        put(&mut out, &count(f.name.len(), Refusal::Overflow)?)?;
+        put(&mut out, f.name.as_bytes())?;
+        put(&mut out, &count(f.bytes.len(), Refusal::Overflow)?)?;
+        put(&mut out, f.bytes)?;
+        previous = Some(f.name);
+    }
+    Ok(out)
+}
+
 /// Encodes a score in the layout [`decode_score`] reads.
 pub fn encode_score(score: &IngestedScore) -> Result<Vec<u8>, Refusal> {
     let mut out = Vec::new();
@@ -258,6 +382,7 @@ pub fn encode_take(take: &[TakeNote]) -> Result<Vec<u8>, Refusal> {
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
+    clippy::as_conversions,
     clippy::indexing_slicing,
     clippy::unwrap_used
 )]
@@ -339,6 +464,141 @@ mod tests {
         assert_eq!(
             decode_take(&bytes).map(|_| ()),
             wire(WireFault::Truncated, 12)
+        );
+    }
+
+    fn files() -> vec::Vec<ContainerFile<'static>> {
+        vec![
+            ContainerFile {
+                name: "b.mid",
+                bytes: b"\x00\x01",
+            },
+            ContainerFile {
+                name: "a.ly",
+                bytes: b"ly",
+            },
+        ]
+    }
+
+    /// A container written in the order given, not sorted: what a careless
+    /// host could send.
+    fn raw(receipt: &[u8], files: &[(&[u8], &[u8])]) -> vec::Vec<u8> {
+        let mut out = vec::Vec::new();
+        out.extend_from_slice(b"SJIN");
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&(receipt.len() as u32).to_le_bytes());
+        out.extend_from_slice(receipt);
+        out.extend_from_slice(&(files.len() as u32).to_le_bytes());
+        for (name, bytes) in files {
+            out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+            out.extend_from_slice(name);
+            out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+            out.extend_from_slice(bytes);
+        }
+        out
+    }
+
+    #[test]
+    fn a_container_round_trips_with_its_files_sorted_by_name() {
+        let bytes = encode_container(b"{}", &files()).unwrap();
+        assert_eq!(
+            bytes.len(),
+            4 + 4 + (4 + 2) + 4 + (4 + 4 + 4 + 2) + (4 + 5 + 4 + 2)
+        );
+        assert_eq!(
+            bytes,
+            raw(b"{}", &[(b"a.ly", b"ly"), (b"b.mid", b"\x00\x01")]),
+            "the layout, written out"
+        );
+        let c = decode_container(&bytes).unwrap();
+        assert_eq!(c.receipt, b"{}");
+        assert_eq!(c.files, [files()[1], files()[0]], "sorted by name");
+        assert_eq!(c.file("b.mid"), Some(&b"\x00\x01"[..]));
+        assert_eq!(c.file("a.ly"), Some(&b"ly"[..]));
+        assert_eq!(c.file("c"), None);
+        // No files is a layout like any other; the predicate refuses what is
+        // missing.
+        let empty = encode_container(b"", &[]).unwrap();
+        assert_eq!(
+            decode_container(&empty),
+            Ok(Container {
+                receipt: b"",
+                files: vec![]
+            })
+        );
+    }
+
+    #[test]
+    fn a_container_is_refused_at_the_offset_of_its_fault() {
+        let good = encode_container(b"{}", &files()).unwrap();
+        let fault = |bytes: &[u8]| decode_container(bytes).map(|_| ());
+
+        let mut bad = good.clone();
+        bad[0] = b'X';
+        assert_eq!(fault(&bad), wire(WireFault::Magic, 0));
+        let mut bad = good.clone();
+        bad[4] = 2;
+        assert_eq!(fault(&bad), wire(WireFault::Version, 4));
+        let mut bad = good.clone();
+        bad.push(0);
+        assert_eq!(fault(&bad), wire(WireFault::Trailing, good.len()));
+        assert!(matches!(
+            fault(&good[..good.len() - 1]),
+            Err(Refusal::Wire {
+                fault: WireFault::Truncated,
+                ..
+            })
+        ));
+        // A score's bytes are not a container's.
+        assert_eq!(
+            fault(&encode_score(&ingested()).unwrap()),
+            wire(WireFault::Magic, 0)
+        );
+
+        // The first file's name length is at 4 + 4 + 6 + 4 = 18.
+        let first = 18;
+        let mut bad = good.clone();
+        bad[first + 4] = 0xFF;
+        assert_eq!(fault(&bad), wire(WireFault::FileName, first));
+        assert_eq!(
+            fault(&raw(b"{}", &[(b"", b"x")])),
+            wire(WireFault::FileName, first)
+        );
+        // Out of order, and a name twice: refused at the second name.
+        let second = first + 4 + 4 + 4 + 2;
+        assert_eq!(
+            fault(&raw(b"{}", &[(b"b.ly", b"ly"), (b"a.mid", b"\x00\x01")])),
+            wire(WireFault::FileOrder, second)
+        );
+        assert_eq!(
+            fault(&raw(b"{}", &[(b"a.ly", b"ly"), (b"a.ly", b"ly")])),
+            wire(WireFault::FileOrder, second)
+        );
+        // A length past the end.
+        let mut bad = good.clone();
+        bad[8..12].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(fault(&bad), wire(WireFault::Truncated, 12));
+        // Four billion files with no bytes behind them: refused before anything
+        // is allocated for them.
+        let mut bad = raw(b"{}", &[]);
+        bad[14..18].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(fault(&bad), wire(WireFault::Truncated, 18));
+    }
+
+    #[test]
+    fn the_container_encoder_refuses_what_the_decoder_would() {
+        let twice = [files()[0], files()[0]];
+        assert_eq!(
+            encode_container(b"{}", &twice).map(|_| ()),
+            wire(WireFault::FileOrder, 18 + 4 + 5 + 4 + 2)
+        );
+        let unnamed = [ContainerFile {
+            name: "",
+            bytes: b"x",
+        }];
+        assert_eq!(
+            encode_container(b"{}", &unnamed).map(|_| ()),
+            wire(WireFault::FileName, 18)
         );
     }
 
