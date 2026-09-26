@@ -1,6 +1,19 @@
-# The Rust gate: format, lints, tests, the wasm law, licences, and the law's
-# empty import section. Every action is pinned by commit SHA; the toolchain is
-# pinned once, by rust-toolchain.toml.
+# The Rust gate and the golden hash.
+#
+# - rust: format, lints, tests, the wasm law, licences, and the law's empty
+#   import section.
+# - golden (x86_64, arm64): write-golden --check, natively on both
+#   architectures; the x86_64 leg also proves the check fails on a changed pin
+#   and on a take changed by one sample.
+# - wasm: builds the law's wasm once, reproducibly (--locked, the workspace
+#   and the cargo home remapped, no build path left in the bytes), prints its
+#   SHA-256, and writes the engine scripts that embed exactly those bytes.
+# - golden (v8, spidermonkey, javascriptcore): each engine runs the same
+#   script, prints the hash it computed, and must match the committed golden
+#   file; the negative control, one take onset one sample late, must fail.
+#
+# Every action is pinned by commit SHA; the toolchain is pinned once, by
+# rust-toolchain.toml; node and the two engine shells are pinned by version.
 #
 # Push is limited to main so a branch with an open pull request runs once, on
 # the pull_request event; workflow_dispatch runs any branch by hand.
@@ -8,18 +21,24 @@
 # Standards compliance (the studio's six workflow standards, scored 0-3):
 # - PIN_PER_STEP 2: actions by commit SHA; the toolchain by rust-toolchain.toml;
 #   dependencies by Cargo.lock under --locked; cargo-deny by version, checked
-#   against install-action's recorded sha256.
+#   against install-action's recorded sha256; node 24.21.0; jsvu 3.0.5 with
+#   SpiderMonkey 156.0.1 and JavaScriptCore 319571. The law's pins sit in the
+#   snapshot header, and the golden job proves a changed pin moves the golden.
 # - ANDON_AUTHORITY 2: every step is a gate and the first failure stops the
-#   job; nothing downstream of it runs.
+#   job; the engines run only the bytes the wasm job printed, and each check
+#   has a negative control that must fail.
 # - NAMED_COMPENSATORS: this workflow makes no irreversible call. It publishes,
-#   tags and pushes nothing, so there is nothing to undo.
+#   tags and pushes nothing (an artifact expires in 14 days), so there is
+#   nothing to undo.
 # - DECOMPOSE_BY_SECRETS 2: a read-only token, credentials not persisted, no
-#   secrets; the law's wasm is checked to import nothing.
+#   secrets; the law's wasm is checked to import nothing, and each engine hands
+#   it bytes and reads bytes back.
 # - UNCERTAINTY_GATED_HUMANS 1. skip: a gate that only passes or fails has no
 #   uncertain output to route to a person; a person merges, and the workflow
 #   never does.
-# - EXTERNAL_VERIFIER 2: the import section is checked twice, by the Rust
-#   test's own parser and by the JavaScript engine's; no model grades anything.
+# - EXTERNAL_VERIFIER 2: no model grades anything. The import section is
+#   checked by two parsers, and the golden hash by five executions, two native
+#   architectures and three JavaScript engines, each against the committed file.
 name: CI
 
 permissions:
@@ -34,6 +53,8 @@ on:
       - rust-toolchain.toml
       - deny.toml
       - crates/**
+      - scores/**
+      - golden/**
       - .github/workflows/**
   pull_request:
     paths:
@@ -42,6 +63,8 @@ on:
       - rust-toolchain.toml
       - deny.toml
       - crates/**
+      - scores/**
+      - golden/**
       - .github/workflows/**
   workflow_dispatch:
 
@@ -102,3 +125,227 @@ jobs:
             console.log(path, bytes.length, "bytes; imports:", JSON.stringify(imports));
             if (imports.length !== 0) process.exit(1);
           '
+
+  # The golden hash regenerated natively. ARM64 is a lock requirement, not a
+  # courtesy: the law must give the same hash on both architectures.
+  golden-native:
+    name: golden (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install --no-self-update
+          rustup show active-toolchain
+          rustc --version --verbose
+
+      - name: Regenerate the golden and compare it with the committed files
+        run: |
+          echo "machine: $(uname -m)"
+          cargo run --locked -p golden --bin write-golden -- --check
+
+      # Each change below must make write-golden --check exit 1 (a difference),
+      # not 0 and not 2 (a harness failure), and name the line it moved.
+      - name: A changed pin and a one-sample take change each fail the check
+        if: matrix.arch == 'x86_64'
+        run: |
+          set -euo pipefail
+          must_differ() {
+            set +e
+            cargo run --locked -q -p golden --bin write-golden -- --check > check.txt
+            local status=$?
+            set -e
+            cat check.txt
+            if [ "$status" -ne 1 ]; then
+              echo "::error::$1: write-golden --check exited $status, not 1"
+              exit 1
+            fi
+            if ! grep -qF -- "$2" check.txt; then
+              echo "::error::$1: the check did not report: $2"
+              exit 1
+            fi
+          }
+          # H is a pin that no verdict reads; only the snapshot header carries it.
+          sed -i 's/^pub const HORIZON_QUANTA: u32 = 100;$/pub const HORIZON_QUANTA: u32 = 101;/' crates/law/src/lib.rs
+          grep -q '^pub const HORIZON_QUANTA: u32 = 101;$' crates/law/src/lib.rs
+          must_differ "H = 101" "now:       horizon-quanta 101"
+          git checkout -- crates/law/src/lib.rs
+          # Take note 0, on time in the constructed take, one sample later.
+          sed -i 's/            None => (note.onset_sample, note.pitch),/            None => (note.onset_sample + u64::from(index == 0), note.pitch),/' crates/golden/src/take.rs
+          grep -qF 'u64::from(index == 0)' crates/golden/src/take.rs
+          must_differ "take note 0 one sample later" "now:       note 0: onset +1 samples"
+          git checkout -- crates/golden/src/take.rs
+          git diff --exit-code
+          cargo run --locked -q -p golden --bin write-golden -- --check
+
+  # The wasm law, built once. Every engine runs these bytes and no others.
+  wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      wasm: ${{ steps.build.outputs.wasm }}
+      check: ${{ steps.scripts.outputs.check }}
+      control: ${{ steps.scripts.outputs.control }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install --no-self-update
+          rustup show active-toolchain
+          rustc --version --verbose
+
+      # Dependency sources reach the wasm as panic-location paths, so the
+      # workspace and the cargo home are remapped and the bytes do not depend on
+      # where the runner keeps them. The flags travel in CARGO_ENCODED_RUSTFLAGS
+      # (0x1f-separated, so a path with a space stays one flag), for this build
+      # only. The scan fails the job if any build path survived the remap.
+      - name: Build the wasm law reproducibly
+        id: build
+        run: |
+          set -euo pipefail
+          cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+          export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$GITHUB_WORKSPACE=/si-jam-sessions"$'\x1f'"--remap-path-prefix=$cargo_home=/cargo"
+          cargo build --locked -p law --target wasm32-unknown-unknown --release --target-dir target/golden-wasm
+          unset CARGO_ENCODED_RUSTFLAGS
+          wasm=target/golden-wasm/wasm32-unknown-unknown/release/law.wasm
+          for leak in "$GITHUB_WORKSPACE" "$cargo_home" "$HOME" "$(rustc --print sysroot)"; do
+            if grep -aqF -- "$leak" "$wasm"; then
+              echo "::error::the wasm still contains the build path $leak"
+              exit 1
+            fi
+          done
+          mkdir -p dist
+          cp "$wasm" dist/law.wasm
+          digest=$(sha256sum dist/law.wasm | cut -d' ' -f1)
+          echo "law.wasm: $(stat -c %s dist/law.wasm) bytes, sha256 $digest"
+          echo "wasm=$digest" >> "$GITHUB_OUTPUT"
+
+      # The scripts embed dist/law.wasm, the container and the take; engine-js
+      # refuses unless its inputs are the ones the committed golden records.
+      - name: Write the engine scripts
+        id: scripts
+        run: |
+          set -euo pipefail
+          cargo run --locked -q -p golden --bin engine-js -- --wasm dist/law.wasm --out dist/golden.js
+          cargo run --locked -q -p golden --bin engine-js -- --wasm dist/law.wasm --out dist/golden-negative.js --negative-control
+          echo "check=$(sha256sum dist/golden.js | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "control=$(sha256sum dist/golden-negative.js | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          sha256sum dist/*
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: golden-wasm
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  engines:
+    name: golden (${{ matrix.engine }})
+    needs: wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [v8, spidermonkey, javascriptcore]
+    steps:
+      # The golden file, to compare against.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: golden-wasm
+          path: dist
+
+      - name: The bytes the wasm job built
+        env:
+          WASM_SHA256: ${{ needs.wasm.outputs.wasm }}
+          CHECK_SHA256: ${{ needs.wasm.outputs.check }}
+          CONTROL_SHA256: ${{ needs.wasm.outputs.control }}
+        run: |
+          set -euo pipefail
+          echo "$WASM_SHA256  dist/law.wasm" | sha256sum --check
+          echo "$CHECK_SHA256  dist/golden.js" | sha256sum --check
+          echo "$CONTROL_SHA256  dist/golden-negative.js" | sha256sum --check
+
+      - name: Install node (V8)
+        if: matrix.engine == 'v8'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+
+      - name: Install the engine shell
+        if: matrix.engine != 'v8'
+        env:
+          ENGINE_NAME: ${{ matrix.engine }}
+        run: |
+          set -euo pipefail
+          case "$ENGINE_NAME" in
+            spidermonkey) shell=spidermonkey@156.0.1 ;;
+            javascriptcore) shell=javascriptcore@319571 ;;
+          esac
+          npm install -g jsvu@3.0.5
+          jsvu --os=linux64 "$shell"
+          sha256sum "$HOME"/.jsvu/engines/*/*
+
+      - name: Choose the engine's command
+        env:
+          ENGINE_NAME: ${{ matrix.engine }}
+        run: |
+          set -euo pipefail
+          case "$ENGINE_NAME" in
+            v8) engine="$(command -v node)"; echo "node $(node --version), V8 $(node -p process.versions.v8)" ;;
+            spidermonkey) engine="$HOME/.jsvu/bin/spidermonkey-156.0.1" ;;
+            javascriptcore) engine="$HOME/.jsvu/bin/javascriptcore-319571" ;;
+          esac
+          echo "ENGINE=$engine" >> "$GITHUB_ENV"
+          echo "ENGINE_NAME=$ENGINE_NAME" >> "$GITHUB_ENV"
+
+      - name: The engine computes the golden hash
+        run: |
+          set -euo pipefail
+          golden=$(sed -n 's/^golden \([0-9a-f]\{64\}\)$/\1/p' golden/entertainer.golden)
+          test -n "$golden"
+          "$ENGINE" dist/golden.js | tee run.txt
+          computed=$(sed -n 's/^computed \([0-9a-f]\{64\}\)$/\1/p' run.txt)
+          echo "$ENGINE_NAME computed $computed; golden/entertainer.golden has $golden"
+          test "$computed" = "$golden"
+          grep -qx 'golden check passed' run.txt
+
+      # A take with one onset one sample late must fail, with a hash that is
+      # not the golden: the check above can go red.
+      - name: The negative control fails
+        run: |
+          set -euo pipefail
+          golden=$(sed -n 's/^golden \([0-9a-f]\{64\}\)$/\1/p' golden/entertainer.golden)
+          set +e
+          "$ENGINE" dist/golden-negative.js > control.txt 2>&1
+          status=$?
+          set -e
+          cat control.txt
+          computed=$(sed -n 's/^computed \([0-9a-f]\{64\}\)$/\1/p' control.txt)
+          if [ "$status" -eq 0 ]; then
+            echo "::error::the negative control exited 0"
+            exit 1
+          fi
+          test -n "$computed"
+          test "$computed" != "$golden"
+          grep -q 'golden mismatch' control.txt
+          echo "the negative control failed as it must: status $status, computed $computed"
