@@ -1,0 +1,32 @@
+The piano's samples
+
+Piano samples: Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0,
+https://creativecommons.org/licenses/by/3.0/
+
+The host's piano plays the Salamander Grand Piano V3, a Yamaha C5 recorded by
+Alexander Holm, in the FLAC edition FreePats assembled
+(SalamanderGrandPiano-SFZ+FLAC-V3+20200602). The samples are licensed under
+the Creative Commons Attribution 3.0 Unported licence, whose legal code
+follows this notice.
+
+The samples are not part of the host and are not in its repository.
+`host fetch-piano` downloads them from FreePats
+(https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html) into the
+user's own cache, after checking the archive against the SHA-256 the host
+pins. The host decodes them, pitches them between sampled keys by
+resampling, and plays them; it does not alter the files.
+
+What the licence asks, and what the host does:
+- Credit the original author and name the licence with its URI, reasonably
+  to the medium (section 4(b)). The host prints the credit above whenever the
+  piano plays (play, render, jam, preview), and every WAV it renders with the
+  piano carries it in its LIST/INFO chunk, in the ICMT (comment) field.
+- Keep the licence with the work (section 4(a)). This notice and the legal
+  code travel with the host; `host notices` prints them.
+- A performance or a recording made with the samples is an adaptation or a
+  public performance under section 3; the same credit goes with it.
+
+The legal code below is the text the samples' SFZ repository carries
+(https://raw.githubusercontent.com/sfzinstruments/SalamanderGrandPiano/master/LICENSE,
+SHA-256 e6bc9e9c474700b708f568bac9e5a8a9bcb2b1dad53442f5ba449fcb848b8e76, the
+file research/battle-hymn/samples-manifest.json records), unchanged.

@@ -25,9 +25,11 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use law::{LIVE_ALLOWANCE_SAMPLES, QUANTUM_SAMPLES};
+use rtrb::{Consumer, Producer};
 
-use crate::anchor::{AudioClock, MidiClock};
+use crate::anchor::{AudioClock, MidiClock, Reading};
 use crate::bridge::{Law, Refused};
+use crate::event::Monitor;
 
 /// Messages an input could not hand on because a ring was full: presses for
 /// the law thread, and monitor messages for the audio callback. A full ring
@@ -298,6 +300,72 @@ pub fn close_through(law: &mut Law, stop: i64) -> Result<(), Refused> {
         law.step()?;
     }
     Ok(())
+}
+
+/// The law thread's side of a live take: the clocks a press goes through, the
+/// keys the monitor is sounding, the notes the law holds, and every press
+/// passed so far.
+#[derive(Default)]
+pub struct Taker {
+    pub clocks: Clocks,
+    pub held: Held,
+    pub keys: Keys,
+    pub passed: Vec<Passed>,
+}
+
+impl Taker {
+    /// Moves the audio clock's readings in, then passes every press queued
+    /// so far to the law, in the order it was received.
+    pub fn take(
+        &mut self,
+        law: &mut Law,
+        readings: &mut Consumer<Reading>,
+        presses: &mut Consumer<Press>,
+    ) {
+        while let Ok(reading) = readings.pop() {
+            self.clocks.audio.push(reading);
+        }
+        while let Ok(press) = presses.pop() {
+            self.keys.press(&press);
+            let Some(instant) = self.clocks.instant(press.stamp) else {
+                continue;
+            };
+            pass(
+                law,
+                &self.clocks,
+                &mut self.held,
+                press,
+                instant,
+                &mut self.passed,
+            );
+        }
+    }
+
+    /// One pass of a jam's loop over its input: [`Taker::take`], then, when
+    /// `gone` says the input may have gone away, a monitor note-off through
+    /// `hush` for every key still held, since such a key gets no note-off of
+    /// its own.
+    ///
+    /// The presses are taken first. A key that went down just before the
+    /// input went away may still be in the ring; the monitor already sounds
+    /// it, and only once it is taken is it among the keys released. `gone` is
+    /// read before this is called, so every press the input sent before it
+    /// went away is in the ring by then.
+    pub fn step(
+        &mut self,
+        law: &mut Law,
+        readings: &mut Consumer<Reading>,
+        presses: &mut Consumer<Press>,
+        gone: bool,
+        hush: &mut Producer<Monitor>,
+    ) {
+        self.take(law, readings, presses);
+        if gone {
+            for pitch in self.keys.release_all() {
+                let _ = hush.push(Monitor::Off { pitch });
+            }
+        }
+    }
 }
 
 /// Ends every note the law holds at `instant`, when the jam stops, lowest
@@ -660,6 +728,50 @@ mod tests {
                 "note 1: onset 2000 samples, pitch 60, no take note cites it: never played",
             ]
         );
+    }
+
+    /// Issue #7's second finding. A MIDI keyboard is unplugged while the law
+    /// thread has a key's note-on still in the presses ring: the monitor has
+    /// sounded the key, and no note-off will ever come for it. The jam's
+    /// loop, told the input may be gone, releases every key held in the
+    /// monitor, and that key is among them, so its voice does not drone.
+    #[test]
+    fn a_press_queued_when_the_input_goes_away_is_released_in_the_monitor() {
+        use rtrb::RingBuffer;
+
+        let piece = Piece::entertainer(&root()).unwrap();
+        let mut law = Law::acquire();
+        law.ingest(&piece.container).unwrap();
+        while law.steps() < 2_000 {
+            law.step().unwrap();
+        }
+        let (mut readings_in, mut readings) = RingBuffer::new(64);
+        let (mut presses_in, mut presses) = RingBuffer::new(64);
+        let (mut hush, mut released) = RingBuffer::new(64);
+        readings_in
+            .push(Reading {
+                sample: 0,
+                nanos: heard_at(0),
+            })
+            .unwrap();
+        let mut taker = Taker::default();
+        // One key held and taken, and a second still queued when the input
+        // goes away.
+        for pitch in [62, 67] {
+            let (press, _) = key(true, pitch, 1_000);
+            presses_in.push(press).unwrap();
+            if pitch == 62 {
+                taker.step(&mut law, &mut readings, &mut presses, false, &mut hush);
+            }
+        }
+        taker.step(&mut law, &mut readings, &mut presses, true, &mut hush);
+        let mut offs = Vec::new();
+        while let Ok(Monitor::Off { pitch }) = released.pop() {
+            offs.push(pitch);
+        }
+        assert_eq!(offs, [62, 67], "every key the monitor sounds is released");
+        // The law took both note-ons.
+        assert!(taker.held.holds(62) && taker.held.holds(67));
     }
 
     /// The keys held down follow the presses, and releasing them all names

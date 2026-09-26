@@ -6,9 +6,18 @@
 //! `extern "C"` exports the wasm law has ([`bridge`]), so the boundary it uses
 //! is the boundary the golden hashes.
 //!
-//! - [`synth`]: the render, two oscillator voices and a click. The audio
-//!   callback calls it; it allocates nothing, locks nothing and makes no system
-//!   call, and it puts every event on its sample exactly.
+//! - [`synth`]: the render, the score's voice, the take's and a click. The
+//!   audio callback calls it; it allocates nothing, locks nothing and makes no
+//!   system call, and it puts every event on its sample exactly.
+//! - [`piano`], [`sampler`] and [`fetch`]: the score's second voice, a sampled
+//!   grand piano (the Salamander Grand Piano V3, CC BY 3.0). `fetch-piano`
+//!   downloads its samples and checks them against a pinned SHA-256; they are
+//!   decoded into memory before any stream exists, and played with no
+//!   allocation, lock or system call, bit for bit the same on every machine.
+//!   The oscillators stay, and the take, live notes and the click play on
+//!   them either way.
+//! - [`preview`]: a MIDI file rendered on the piano without the law, to
+//!   audition a draft. A preview is not the law's committed frames.
 //! - [`callback`]: the audio callback's body, which calls the synth. Its
 //!   silent pre-roll holds law time at sample 0 until a callback's frames are
 //!   all in the ring, so the device's first fill makes no event late.
@@ -37,16 +46,19 @@
 //!
 //! The studio's six workflow standards, scored 0-3 for the host.
 //!
-//! - **PIN_PER_STEP 2.** cpal 0.18.2, rtrb 0.4.0 and windows 0.62.2 are pinned
-//!   exactly and the lockfile is `--locked`. The rate, the quantum and the
-//!   horizon come from the law crate, never from copies.
+//! - **PIN_PER_STEP 2.** cpal 0.18.2, rtrb 0.4.0, windows 0.62.2, claxon 0.4.3
+//!   and flate2 1.1.10 are pinned exactly and the lockfile is `--locked`. The
+//!   rate, the quantum and the horizon come from the law crate, never from
+//!   copies. The piano's sample archive is pinned by its SHA-256.
 //! - **ANDON_AUTHORITY 2.** A refused law call stops the command with the law's
 //!   code and reason. A device error stops the stream and is reported. Late
 //!   and dropped events are counted and printed, and a render that clips fails
-//!   its test.
+//!   its test. A sample archive that is not the pinned one is deleted and
+//!   nothing is unpacked, and the piano opens only a finished, verified fetch.
 //! - **NAMED_COMPENSATORS.** Nothing here is irreversible: the host writes the
-//!   WAV file it is asked for and publishes nothing, so there is nothing to
-//!   undo.
+//!   WAV file it is asked for and the samples `fetch-piano` downloads into its
+//!   own cache directory, and publishes nothing. Deleting that directory,
+//!   which `fetch-piano` names, undoes the fetch.
 //! - **DECOMPOSE_BY_SECRETS 2.** The law is reached only through its C ABI.
 //!   The real-time code shares two rings and a handful of atomics with the rest,
 //!   and nothing else. No secret is read.
@@ -67,9 +79,15 @@ pub mod callback;
 pub mod console;
 pub mod device;
 pub mod event;
+pub mod fetch;
+#[cfg(test)]
+mod fixture;
 pub mod live;
 pub mod notices;
 pub mod offline;
+pub mod piano;
+pub mod preview;
+pub mod sampler;
 pub mod schedule;
 pub mod score;
 pub mod synth;

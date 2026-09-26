@@ -42,46 +42,106 @@ pub fn events(law: &mut Law, end: u64) -> Result<Vec<Event>, Refused> {
 /// The mono mix of frames `0..end`, rendered `block` frames at a time, and
 /// what the synth counted.
 pub fn render(law: &mut Law, end: u64, block: usize) -> Result<(Vec<f32>, Counts), Refused> {
+    let (out, _, counts) = render_with(law, end, block, Synth::new(0))?;
+    Ok((out, counts))
+}
+
+/// The mix of frames `0..end` rendered by `synth`, `block` frames at a
+/// time: interleaved, with the synth's channels (one, or two with the piano),
+/// which it also returns, and what the synth counted.
+pub fn render_with(
+    law: &mut Law,
+    end: u64,
+    block: usize,
+    mut synth: Box<Synth>,
+) -> Result<(Vec<f32>, usize, Counts), Refused> {
+    let channels = if synth.stereo() { 2 } else { 1 };
     let (mut producer, mut consumer) = RingBuffer::new(RING_EVENTS);
     let mut scheduler = Scheduler::new(0);
-    let mut synth = Synth::new(0);
-    let mut out = vec![0.0f32; usize::try_from(end).unwrap_or(0)];
-    for chunk in out.chunks_mut(block.max(1)) {
+    let frames = usize::try_from(end).unwrap_or(0);
+    let mut out = vec![0.0f32; frames.saturating_mul(channels)];
+    for chunk in out.chunks_mut(block.max(1) * channels) {
         scheduler.pump(law, steps_for(synth.frame(), 0, None), &mut producer)?;
-        synth.render(chunk, 1, &mut consumer, None);
+        synth.render(chunk, channels, &mut consumer, None);
     }
-    Ok((out, synth.counts()))
+    Ok((out, channels, synth.counts()))
 }
 
 /// Writes `samples` as a mono 32-bit float WAV at 48 kHz: the rendered
 /// buffer itself, so sample `n` of the file is law sample `n`.
 pub fn write_wav(out: &mut impl Write, samples: &[f32]) -> io::Result<()> {
-    let data = u32::try_from(samples.len() * 4)
-        .map_err(|_| io::Error::other("the render is longer than a WAV can hold"))?;
-    let riff = data
-        .checked_add(4 + 26 + 12 + 8)
-        .ok_or_else(|| io::Error::other("the render is longer than a WAV can hold"))?;
+    write_wav_with(out, samples, 1, &[])
+}
+
+/// Writes interleaved `samples` of `channels` channels as a 32-bit float WAV
+/// at 48 kHz, so frame `n` of the file is law sample `n`. With `info`, a
+/// `LIST` chunk of type `INFO` follows the audio, one sub-chunk per id and
+/// text, each text NUL-terminated and padded to an even length: the audio's
+/// header stays the 58 bytes it is without one.
+pub fn write_wav_with(
+    out: &mut impl Write,
+    samples: &[f32],
+    channels: u16,
+    info: &[([u8; 4], &str)],
+) -> io::Result<()> {
+    let too_long = || io::Error::other("the render is longer than a WAV can hold");
+    let data = u32::try_from(samples.len() * 4).map_err(|_| too_long())?;
+    let mut list = Vec::new();
+    if !info.is_empty() {
+        list.extend_from_slice(b"INFO");
+        for (id, text) in info {
+            if !text.is_ascii() || text.contains('\0') {
+                return Err(io::Error::other(
+                    "a WAV INFO text must be ASCII without NUL",
+                ));
+            }
+            let size = u32::try_from(text.len() + 1).map_err(|_| too_long())?;
+            list.extend_from_slice(id);
+            list.extend_from_slice(&size.to_le_bytes());
+            list.extend_from_slice(text.as_bytes());
+            list.push(0);
+            if list.len() % 2 == 1 {
+                list.push(0);
+            }
+        }
+    }
+    let list_chunk = if list.is_empty() { 0 } else { 8 + list.len() };
+    let riff = u32::try_from(list_chunk)
+        .ok()
+        .and_then(|l| data.checked_add(4 + 26 + 12 + 8)?.checked_add(l))
+        .ok_or_else(too_long)?;
+    let block = 4 * channels;
     out.write_all(b"RIFF")?;
     out.write_all(&riff.to_le_bytes())?;
     out.write_all(b"WAVE")?;
-    // fmt: 18 bytes, IEEE float, mono, 48 kHz, 4 bytes a frame, 32 bits.
+    // fmt: 18 bytes, IEEE float, the channels, 48 kHz, 4 bytes a sample, 32
+    // bits.
     out.write_all(b"fmt ")?;
     out.write_all(&18u32.to_le_bytes())?;
     out.write_all(&3u16.to_le_bytes())?;
-    out.write_all(&1u16.to_le_bytes())?;
+    out.write_all(&channels.to_le_bytes())?;
     out.write_all(&RATE.to_le_bytes())?;
-    out.write_all(&(RATE * 4).to_le_bytes())?;
-    out.write_all(&4u16.to_le_bytes())?;
+    out.write_all(&(RATE * u32::from(block)).to_le_bytes())?;
+    out.write_all(&block.to_le_bytes())?;
     out.write_all(&32u16.to_le_bytes())?;
     out.write_all(&0u16.to_le_bytes())?;
     // fact: the frame count, which a float WAV carries.
     out.write_all(b"fact")?;
     out.write_all(&4u32.to_le_bytes())?;
-    out.write_all(&(data / 4).to_le_bytes())?;
+    out.write_all(&(data / u32::from(block.max(1))).to_le_bytes())?;
     out.write_all(b"data")?;
     out.write_all(&data.to_le_bytes())?;
     for s in samples {
         out.write_all(&s.to_le_bytes())?;
+    }
+    if !list.is_empty() {
+        out.write_all(b"LIST")?;
+        out.write_all(
+            &u32::try_from(list.len())
+                .map_err(|_| too_long())?
+                .to_le_bytes(),
+        )?;
+        out.write_all(&list)?;
     }
     Ok(())
 }
@@ -110,6 +170,49 @@ mod tests {
         assert_eq!(u32::from_le_bytes(bytes[54..58].try_into().unwrap()), 12);
         assert_eq!(f32::from_le_bytes(bytes[58..62].try_into().unwrap()), 0.5);
         assert_eq!(f32::from_le_bytes(bytes[62..66].try_into().unwrap()), -0.25);
+    }
+
+    /// A stereo WAV with a credit: the same 58-byte header with two channels,
+    /// the frames interleaved, and the LIST/INFO chunk after the audio, which
+    /// the RIFF size counts.
+    #[test]
+    fn a_stereo_wav_carries_its_credit_in_a_list_info_chunk() {
+        let mut bytes = Vec::new();
+        let credit = "Piano samples: an example, CC BY 3.0";
+        write_wav_with(
+            &mut bytes,
+            &[0.5, -0.5, 0.25, -0.25],
+            2,
+            &[(*b"ICMT", credit), (*b"ISFT", "si-jam-sessions host")],
+        )
+        .unwrap();
+        let u16_at = |i: usize| u16::from_le_bytes([bytes[i], bytes[i + 1]]);
+        let u32_at = |i: usize| u32::from_le_bytes(bytes[i..i + 4].try_into().unwrap());
+        assert_eq!(u32_at(4) as usize, bytes.len() - 8, "RIFF size");
+        assert_eq!(u16_at(22), 2, "stereo");
+        assert_eq!(u32_at(28), 48_000 * 8, "byte rate");
+        assert_eq!(u16_at(32), 8, "block align");
+        assert_eq!(u32_at(46), 2, "two frames");
+        assert_eq!(&bytes[50..54], b"data");
+        assert_eq!(u32_at(54), 16);
+        assert_eq!(f32::from_le_bytes(bytes[62..66].try_into().unwrap()), -0.5);
+        let list = 58 + 16;
+        assert_eq!(&bytes[list..list + 4], b"LIST");
+        assert_eq!(u32_at(list + 4) as usize, bytes.len() - list - 8);
+        assert_eq!(&bytes[list + 8..list + 12], b"INFO");
+        assert_eq!(&bytes[list + 12..list + 16], b"ICMT");
+        let size = u32_at(list + 16) as usize;
+        assert_eq!(size, credit.len() + 1);
+        assert_eq!(
+            &bytes[list + 20..list + 20 + credit.len()],
+            credit.as_bytes()
+        );
+        assert_eq!(bytes[list + 20 + credit.len()], 0);
+        let next = list + 20 + size + size % 2;
+        assert_eq!(&bytes[next..next + 4], b"ISFT");
+        assert_eq!(bytes.len() % 2, 0);
+        let e = write_wav_with(&mut Vec::new(), &[], 2, &[(*b"ICMT", "caf\u{e9}")]);
+        assert!(e.is_err(), "INFO text is ASCII");
     }
 }
 
@@ -245,6 +348,43 @@ mod proof {
         assert_eq!(checked, 5);
     }
 
+    /// With the real piano (the directory `SI_JAM_PIANO` names), the whole
+    /// piece renders to the same bits twice, every note started, none late,
+    /// none dropped, none clipped; the SHA-256 is printed, to compare across
+    /// machines. CI's dispatch-only piano job runs it.
+    #[test]
+    #[ignore = "needs the real samples: SI_JAM_PIANO=<dir>"]
+    fn the_real_piano_renders_the_same_bits_twice() {
+        use crate::piano::{Bank, Needs};
+        let dir = std::env::var_os("SI_JAM_PIANO").expect("SI_JAM_PIANO names the samples");
+        let piece = Piece::entertainer(&root()).unwrap();
+        let mut needs = Needs::default();
+        for n in piece.score.notes() {
+            needs.note(n.pitch, n.velocity);
+        }
+        let bank = std::sync::Arc::new(Bank::open(std::path::Path::new(&dir), &needs).unwrap());
+        let end = piece.end + 48_000;
+        let mut runs = Vec::new();
+        for _ in 0..2 {
+            let mut law = Law::acquire();
+            law.ingest(&piece.container).unwrap();
+            law.admit_take(&piece.take).unwrap();
+            let synth = Synth::new(0).with_piano(std::sync::Arc::clone(&bank));
+            let (samples, channels, counts) = render_with(&mut law, end, 480, synth).unwrap();
+            assert_eq!(channels, 2);
+            assert_eq!(
+                (counts.notes, counts.late, counts.dropped),
+                (2 * 2_621, 0, 0)
+            );
+            assert!(samples.iter().all(|s| s.abs() < 1.0), "a sample clipped");
+            let mut bytes = Vec::new();
+            write_wav_with(&mut bytes, &samples, 2, &[(*b"ICMT", crate::piano::CREDIT)]).unwrap();
+            runs.push(golden::run::hex(&golden::run::sha256(&bytes)));
+        }
+        eprintln!("the real piano's render: SHA-256 {}", runs[0]);
+        assert_eq!(runs[0], runs[1]);
+    }
+
     /// The whole piece through the interleaved pipeline, as `render` writes
     /// it: every note and beat is started once, none late and none dropped,
     /// and the mix is the mix of the events rendered in one go.
@@ -271,6 +411,7 @@ mod proof {
                 late: 0,
                 dropped: 0,
                 monitored: 0,
+                outside: 0,
             }
         );
         // In the same blocks, the same samples, bit for bit.

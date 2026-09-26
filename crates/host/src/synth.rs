@@ -1,10 +1,17 @@
-//! The render: two oscillator voices and a click, from committed events.
+//! The render: the score's voice, the take's, and a click, from committed
+//! events.
 //!
 //! [`Synth::render`] is what the audio callback calls, and what the offline
 //! render calls. It allocates nothing, takes no lock and makes no system call:
 //! its voices live in fixed arrays, it pops events from an `rtrb` ring that was
 //! created before the stream (so the ring allocated then), and it does only
-//! arithmetic (`tests/alloc_free.rs` counts the allocations of many calls).
+//! arithmetic (`alloc_free` counts the allocations of many calls).
+//!
+//! The score plays in one of two voices: the oscillator below, or the sampled
+//! grand piano ([`crate::sampler`]) when the synth is made with one
+//! ([`Synth::with_piano`]). The take, live notes and the click stay
+//! oscillators either way, so a late take note is still heard as a second,
+//! reedier voice against the score's.
 //!
 //! # Where a note lands
 //!
@@ -27,12 +34,22 @@
 //!   downbeat.
 //!
 //! The waveform is picture: floats are used freely, and nothing here is hashed.
+//!
+//! # Channels
+//!
+//! The oscillators are one mix, sent to every channel alike. With the piano
+//! the mix is stereo, as the piano was recorded: the oscillators sit in the
+//! middle, the device's first two channels get left and right, a mono device
+//! gets their mean, and any further channel is silent.
 
 use core::f64::consts::TAU;
+use std::sync::Arc;
 
 use rtrb::Consumer;
 
 use crate::event::{Event, Monitor, Voice};
+use crate::piano::Bank;
+use crate::sampler::{Piano, Start};
 
 /// The law's sample rate, which the stream runs at.
 pub const RATE: u32 = law::SAMPLE_RATE;
@@ -190,17 +207,25 @@ pub struct Counts {
     pub beats: u64,
     /// Events that arrived after their onset had been rendered.
     pub late: u64,
-    /// Events dropped because every voice of their kind was sounding.
+    /// Events dropped because every voice of their kind was sounding (or, on
+    /// the piano, because their sample was not loaded).
     pub dropped: u64,
     /// Live notes started by the monitor.
     pub monitored: u64,
+    /// Score notes the piano does not have a key for (below A0 or above C8),
+    /// which are not played.
+    pub outside: u64,
 }
 
-/// The two voices and the click, and the position they have rendered to.
+/// The voices and the click, and the position they have rendered to.
 pub struct Synth {
     notes: [Tone; NOTE_VOICES],
     clicks: [Tone; CLICK_VOICES],
     mix: [f32; BLOCK],
+    /// The piano, when the score plays on it, and its two channels.
+    piano: Option<Box<Piano>>,
+    left: [f32; BLOCK],
+    right: [f32; BLOCK],
     /// The fundamental of every MIDI pitch, in cycles per sample.
     steps: [f64; 128],
     /// The law sample of the next frame to render.
@@ -209,8 +234,9 @@ pub struct Synth {
 }
 
 impl Synth {
-    /// A synth that renders from law sample `frame` on. Everything it needs
-    /// is allocated here, before any stream exists.
+    /// A synth that renders from law sample `frame` on, the score in the
+    /// oscillator voice. Everything it needs is allocated here, before any
+    /// stream exists.
     pub fn new(frame: u64) -> Box<Synth> {
         let mut steps = [0.0f64; 128];
         for (pitch, step) in steps.iter_mut().enumerate() {
@@ -221,10 +247,25 @@ impl Synth {
             notes: [SILENT; NOTE_VOICES],
             clicks: [SILENT; CLICK_VOICES],
             mix: [0.0; BLOCK],
+            piano: None,
+            left: [0.0; BLOCK],
+            right: [0.0; BLOCK],
             steps,
             frame,
             counts: Counts::default(),
         })
+    }
+
+    /// The same synth with the score on the piano, playing from `bank`,
+    /// whose samples were loaded before any stream exists.
+    pub fn with_piano(mut self: Box<Self>, bank: Arc<Bank>) -> Box<Synth> {
+        self.piano = Some(Piano::new(bank));
+        self
+    }
+
+    /// Whether the score plays on the piano, and the mix is stereo.
+    pub fn stereo(&self) -> bool {
+        self.piano.is_some()
     }
 
     /// The law sample of the next frame to render: the frames rendered so
@@ -237,21 +278,23 @@ impl Synth {
         self.counts
     }
 
-    /// Voices sounding now, notes and clicks.
+    /// Voices sounding now, notes, clicks and piano keys.
     pub fn sounding(&self) -> usize {
-        self.notes
+        let tones = self
+            .notes
             .iter()
             .chain(self.clicks.iter())
             .filter(|t| t.active)
-            .count()
+            .count();
+        tones + self.piano.as_ref().map_or(0, |p| p.sounding())
     }
 
     /// Renders `out`, interleaved with `channels` channels, and moves the
     /// position on by its frames. Events whose onset falls in the frames are
     /// popped from `events` and started on their sample; live notes waiting in
-    /// `monitor` start on the first frame. Every channel carries the same mix,
-    /// clipped to [-1, 1]. Trailing samples that do not fill a frame are left
-    /// as they are.
+    /// `monitor` start on the first frame. The mix goes to the channels as the
+    /// module documentation says, clipped to [-1, 1]. Trailing samples that do
+    /// not fill a frame are left as they are.
     pub fn render(
         &mut self,
         out: &mut [f32],
@@ -273,8 +316,22 @@ impl Synth {
             }
             self.pass(n, events);
             let written = out.iter_mut().skip(done * channels).take(n * channels);
+            let stereo = self.piano.is_some();
             for (i, sample) in written.enumerate() {
-                let value = self.mix.get(i / channels).copied().unwrap_or(0.0);
+                let (frame, channel) = (i / channels, i % channels);
+                let mono = self.mix.get(frame).copied().unwrap_or(0.0);
+                let value = if stereo {
+                    let left = mono + self.left.get(frame).copied().unwrap_or(0.0);
+                    let right = mono + self.right.get(frame).copied().unwrap_or(0.0);
+                    match (channels, channel) {
+                        (1, _) => 0.5 * (left + right),
+                        (_, 0) => left,
+                        (_, 1) => right,
+                        _ => 0.0,
+                    }
+                } else {
+                    mono
+                };
                 *sample = value.clamp(-1.0, 1.0);
             }
             done += n;
@@ -304,6 +361,15 @@ impl Synth {
                 tone.render(mix);
             }
         }
+        if let (Some(piano), Some(left), Some(right)) = (
+            self.piano.as_deref_mut(),
+            self.left.get_mut(..n),
+            self.right.get_mut(..n),
+        ) {
+            left.fill(0.0);
+            right.fill(0.0);
+            piano.render(left, right);
+        }
         self.frame = end;
     }
 
@@ -311,6 +377,33 @@ impl Synth {
         let onset = event.onset();
         let late = onset < self.frame;
         let offset = onset.saturating_sub(self.frame) as usize;
+        if let (
+            Event::Note {
+                voice: Voice::Score,
+                pitch,
+                velocity,
+                duration,
+                ..
+            },
+            Some(piano),
+        ) = (event, self.piano.as_deref_mut())
+        {
+            let behind = self.frame.saturating_sub(onset);
+            let counts = &mut self.counts;
+            match piano.start(offset, behind, pitch, velocity, duration) {
+                Start::Played => {
+                    counts.notes = counts.notes.saturating_add(1);
+                    if late {
+                        counts.late = counts.late.saturating_add(1);
+                    }
+                }
+                Start::Dropped | Start::Missing => {
+                    counts.dropped = counts.dropped.saturating_add(1);
+                }
+                Start::Outside => counts.outside = counts.outside.saturating_add(1),
+            }
+            return;
+        }
         let tone = match event {
             Event::Note {
                 voice,
@@ -614,6 +707,91 @@ mod tests {
         assert_ne!(tail[release - 1], 0.0, "the release's last sample");
         assert!(tail[release..].iter().all(|s| *s == 0.0));
         assert_eq!(synth.sounding(), 0);
+    }
+
+    /// A synth whose score plays on a piano of fixture samples for C4 at
+    /// velocity 100.
+    fn with_piano() -> Box<Synth> {
+        use crate::fixture;
+        use crate::piano::{File, Needs};
+        let mut needs = Needs::default();
+        needs.note(60, 100);
+        let bank = Arc::new(fixture::bank(&needs, |file| match file {
+            File::Note { .. } => 4_800,
+            File::Release { .. } => 96,
+        }));
+        Synth::new(0).with_piano(bank)
+    }
+
+    /// Renders `events` from sample 0 through `synth` into `frames` frames
+    /// of `channels` channels.
+    fn through(
+        mut synth: Box<Synth>,
+        events: &[Event],
+        frames: usize,
+        channels: usize,
+    ) -> (Vec<f32>, Counts) {
+        let (mut producer, mut consumer) = RingBuffer::new(events.len().max(1));
+        for e in events {
+            producer.push(*e).unwrap();
+        }
+        let mut out = vec![0.0f32; frames * channels];
+        synth.render(&mut out, channels, &mut consumer, None);
+        (out, synth.counts())
+    }
+
+    /// With the piano, the score plays on it in stereo and the take stays the
+    /// soft square in the middle: left and right go to the first two
+    /// channels, any further channel is silent, and a mono device gets their
+    /// mean.
+    #[test]
+    fn with_the_piano_the_score_plays_on_it_in_stereo() {
+        let score = Event::Note {
+            onset: 10,
+            voice: Voice::Score,
+            pitch: 60,
+            velocity: 100,
+            duration: 2_000,
+        };
+        let events = [score, take_note(10)];
+        let (quad, counts) = through(with_piano(), &events, 3_000, 4);
+        assert_eq!(counts.notes, 2);
+        let frame = |f: usize| &quad[f * 4..f * 4 + 4];
+        assert!(
+            frame(9).iter().all(|s| *s == 0.0),
+            "silent before the onset"
+        );
+        assert_ne!(frame(10)[0], frame(10)[1], "the piano is stereo");
+        assert!((0..3_000).all(|f| frame(f)[2] == 0.0 && frame(f)[3] == 0.0));
+        // The take is the same soft square as without the piano, on both
+        // sides: take the piano alone away and it is what is left.
+        let (piano, _) = through(with_piano(), &[score], 3_000, 2);
+        let (take, _) = through(Synth::new(0), &[take_note(10)], 3_000, 1);
+        for f in 0..3_000 {
+            for side in 0..2 {
+                let left_over = frame(f)[side] - piano[f * 2 + side];
+                assert!((left_over - take[f]).abs() < 1e-6, "{f}/{side}");
+            }
+        }
+        let (mono, _) = through(with_piano(), &events, 3_000, 1);
+        for (f, value) in mono.iter().enumerate() {
+            assert_eq!(*value, 0.5 * (frame(f)[0] + frame(f)[1]), "{f}");
+        }
+    }
+
+    /// A score note off the piano's keyboard is counted and not played.
+    #[test]
+    fn a_score_note_off_the_keyboard_is_counted_not_played() {
+        let score = Event::Note {
+            onset: 0,
+            voice: Voice::Score,
+            pitch: 110,
+            velocity: 100,
+            duration: 2_000,
+        };
+        let (out, counts) = through(with_piano(), &[score], 1_000, 2);
+        assert!(out.iter().all(|s| *s == 0.0));
+        assert_eq!((counts.notes, counts.outside), (0, 1));
     }
 
     #[test]

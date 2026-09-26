@@ -39,6 +39,12 @@
 #   job; an engine whose files differ from its manifest never runs; the
 #   engines run only the bytes the wasm job printed; and each check has a
 #   negative control that must fail, the pin check included.
+#
+# - piano (workflow_dispatch only): the host's piano on its real samples. It
+#   downloads the 742 MB sample set with `host fetch-piano`, which checks it
+#   against the SHA-256 the host pins, so no push or pull request runs it; the
+#   tests above use a synthetic fixture instead. It loads all 16 layers,
+#   reports the memory they take, and renders twice to the same bits.
 # - NAMED_COMPENSATORS: this workflow makes no irreversible call. It publishes,
 #   tags and pushes nothing (an artifact expires in 14 days), so there is
 #   nothing to undo.
@@ -152,6 +158,52 @@ jobs:
             console.log(path, bytes.length, "bytes; imports:", JSON.stringify(imports));
             if (imports.length !== 0) process.exit(1);
           '
+
+  # The piano on its real samples, by hand only (see the header).
+  piano:
+    name: piano (real samples, by hand)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install --no-self-update
+          rustc --version
+
+      - name: Install ALSA's headers for the host
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libasound2-dev
+
+      - name: Build the host
+        run: cargo build -p host --release --locked
+
+      - name: Fetch the piano, checked against the pinned SHA-256
+        run: ./target/release/host fetch-piano --dir "$RUNNER_TEMP/piano"
+
+      # The ignored tests: every layer loads (and how much memory the audio
+      # takes), the whole piece renders to the same bits twice, and the piano
+      # alone prints its SHA-256 to compare with other machines.
+      - name: The real samples' tests, and the most memory they took
+        env:
+          SI_JAM_PIANO: ${{ runner.temp }}/piano
+        run: |
+          set -euo pipefail
+          /usr/bin/time -v cargo test -p host --release --locked -- --ignored --nocapture --test-threads 1 2>&1 | tee real.txt
+          grep -E 'the real|Maximum resident set size|test result' real.txt
+
+      - name: render twice writes the same file
+        run: |
+          set -euo pipefail
+          ./target/release/host render a.wav --voice piano --samples "$RUNNER_TEMP/piano"
+          ./target/release/host render b.wav --voice piano --samples "$RUNNER_TEMP/piano"
+          sha256sum a.wav b.wav
+          cmp a.wav b.wav
 
   # The golden hash regenerated natively. ARM64 is a lock requirement, not a
   # courtesy: the law must give the same hash on both architectures.
