@@ -67,6 +67,13 @@ pub fn render_with(
     Ok((out, channels, synth.counts()))
 }
 
+/// The `LIST`/`INFO` texts `render` writes when the score plays on the piano:
+/// the piano's credit, and the program that rendered it.
+pub const PIANO_INFO: [([u8; 4], &str); 2] = [
+    (*b"ICMT", crate::piano::CREDIT),
+    (*b"ISFT", "si-jam-sessions host"),
+];
+
 /// Writes `samples` as a mono 32-bit float WAV at 48 kHz: the rendered
 /// buffer itself, so sample `n` of the file is law sample `n`.
 pub fn write_wav(out: &mut impl Write, samples: &[f32]) -> io::Result<()> {
@@ -233,8 +240,8 @@ mod tests {
 #[cfg(test)]
 mod proof {
     use super::*;
-    use crate::event::Voice;
-    use crate::score::{Piece, root};
+    use crate::event::{Voice, from_frames};
+    use crate::score::{Name, Piece, root};
     use crate::synth::Synth;
     use golden::take::Perturbation;
     use rtrb::RingBuffer;
@@ -295,11 +302,11 @@ mod proof {
         let piece = Piece::entertainer(&root()).unwrap();
         let mut law = Law::acquire();
         law.ingest(&piece.container).unwrap();
-        law.admit_take(&piece.take).unwrap();
+        law.admit_take(piece.take.as_deref().unwrap()).unwrap();
         let events = events(&mut law, piece.end + 48_000).unwrap();
 
         let mut checked = 0;
-        for drawn in piece.drawn {
+        for drawn in piece.drawn.iter().copied() {
             let score = piece.score.note(drawn.note).unwrap();
             let s = score.onset_sample;
             let t = drawn.perturbation.onset(s).unwrap();
@@ -368,7 +375,7 @@ mod proof {
         for _ in 0..2 {
             let mut law = Law::acquire();
             law.ingest(&piece.container).unwrap();
-            law.admit_take(&piece.take).unwrap();
+            law.admit_take(piece.take.as_deref().unwrap()).unwrap();
             let synth = Synth::new(0).with_piano(std::sync::Arc::clone(&bank));
             let (samples, channels, counts) = render_with(&mut law, end, 480, synth).unwrap();
             assert_eq!(channels, 2);
@@ -385,6 +392,90 @@ mod proof {
         assert_eq!(runs[0], runs[1]);
     }
 
+    /// An exemplar plays exactly its golden's frames: every event the
+    /// scheduler moves through the ring for the whole render, in order, is the
+    /// golden window's, up to the render's last sample. So the golden pins
+    /// what the host plays.
+    #[test]
+    fn an_exemplar_plays_its_goldens_frames() {
+        let root = root();
+        for name in [Name::BattleHymnGlm53, Name::BattleHymnKimiK3] {
+            let piece = Piece::load(&root, name).unwrap();
+            let mut law = Law::acquire();
+            law.ingest(&piece.container).unwrap();
+            let played = events(&mut law, piece.stop()).unwrap();
+            let golden = golden::exemplar::compute_at(&root, name.exemplar().unwrap()).unwrap();
+            let mut expected = Vec::new();
+            from_frames(&golden.frames, &mut expected);
+            expected.retain(|e| e.onset() < piece.stop());
+            assert_eq!(played.len(), expected.len(), "{}", name.id());
+            assert!(
+                played == expected,
+                "{}: the host played other frames",
+                name.id()
+            );
+            let notes = played
+                .iter()
+                .filter(|e| matches!(e, Event::Note { .. }))
+                .count();
+            assert_eq!(notes, piece.score.notes().len());
+        }
+    }
+
+    /// With the real piano (the directory `SI_JAM_PIANO` names), each
+    /// exemplar renders whole, as `render` renders it: every note started on
+    /// the piano, none late, none dropped, none off the keyboard, no click,
+    /// nothing clipped. The SHA-256 of the WAV `render` would write is
+    /// printed, to compare across machines. CI's dispatch-only piano job runs
+    /// it.
+    #[test]
+    #[ignore = "needs the real samples: SI_JAM_PIANO=<dir>"]
+    fn the_real_piano_renders_each_exemplar_whole() {
+        use crate::piano::{Bank, Needs};
+        let dir = std::env::var_os("SI_JAM_PIANO").expect("SI_JAM_PIANO names the samples");
+        for name in [Name::BattleHymnGlm53, Name::BattleHymnKimiK3] {
+            let piece = Piece::load(&root(), name).unwrap();
+            let mut needs = Needs::default();
+            for n in piece.score.notes() {
+                needs.note(n.pitch, n.velocity);
+            }
+            let bank = std::sync::Arc::new(Bank::open(std::path::Path::new(&dir), &needs).unwrap());
+            let mut law = Law::acquire();
+            law.ingest(&piece.container).unwrap();
+            let synth = Synth::new(0).with_piano(bank).without_click();
+            let (samples, channels, counts) =
+                render_with(&mut law, piece.stop(), 480, synth).unwrap();
+            assert_eq!(channels, 2);
+            let notes = piece.score.notes().len() as u64;
+            assert_eq!(
+                (
+                    counts.notes,
+                    counts.beats,
+                    counts.late,
+                    counts.dropped,
+                    counts.outside
+                ),
+                (notes, 0, 0, 0, 0),
+                "{}",
+                name.id()
+            );
+            assert!(
+                samples.iter().all(|s| s.abs() < 1.0),
+                "{}: a sample clipped",
+                name.id()
+            );
+            let mut bytes = Vec::new();
+            write_wav_with(&mut bytes, &samples, 2, &PIANO_INFO).unwrap();
+            eprintln!(
+                "{}: {} frames, {} bytes, SHA-256 {}",
+                name.id(),
+                samples.len() / 2,
+                bytes.len(),
+                golden::run::hex(&golden::run::sha256(&bytes))
+            );
+        }
+    }
+
     /// The whole piece through the interleaved pipeline, as `render` writes
     /// it: every note and beat is started once, none late and none dropped,
     /// and the mix is the mix of the events rendered in one go.
@@ -394,10 +485,10 @@ mod proof {
         let end = piece.end + 48_000;
         let mut law = Law::acquire();
         law.ingest(&piece.container).unwrap();
-        law.admit_take(&piece.take).unwrap();
+        law.admit_take(piece.take.as_deref().unwrap()).unwrap();
         let (rendered, counts) = render(&mut law, end, 480).unwrap();
         law.ingest(&piece.container).unwrap();
-        law.admit_take(&piece.take).unwrap();
+        law.admit_take(piece.take.as_deref().unwrap()).unwrap();
         let events = events(&mut law, end).unwrap();
         let beats = events
             .iter()

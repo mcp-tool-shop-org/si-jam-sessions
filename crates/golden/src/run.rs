@@ -44,6 +44,9 @@ pub fn hex(bytes: &[u8]) -> String {
 /// The files the golden is computed from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Inputs {
+    /// The score's directory, relative to the repository root: [`SCORE_DIR`]
+    /// for the golden, an exemplar's for its golden ([`crate::exemplar`]).
+    pub dir: String,
     /// The receipt's bytes, as committed.
     pub receipt: Vec<u8>,
     /// Every file the receipt lists, by its receipt name, in name order.
@@ -55,17 +58,27 @@ impl Inputs {
     /// lists from beside it. The receipt, not a list here, decides the files,
     /// so every receipted file reaches the law.
     pub fn read(root: &Path) -> Result<Inputs, Error> {
-        let dir = root.join(SCORE_DIR);
-        let receipt = read_file(&dir.join(RECEIPT_FILE))?;
+        Inputs::read_dir(root, SCORE_DIR)
+    }
+
+    /// Reads the receipt from `dir` under `root`, and every file it lists
+    /// from beside it, as [`Inputs::read`] does for [`SCORE_DIR`].
+    pub fn read_dir(root: &Path, dir: &str) -> Result<Inputs, Error> {
+        let path = root.join(dir);
+        let receipt = read_file(&path.join(RECEIPT_FILE))?;
         let parsed = Receipt::from_json(&receipt)
-            .map_err(|e| Error::new(format!("{SCORE_DIR}/{RECEIPT_FILE} does not load: {e:?}")))?;
+            .map_err(|e| Error::new(format!("{dir}/{RECEIPT_FILE} does not load: {e:?}")))?;
         let mut files = Vec::new();
         // Receipt names are plain file names (no separators), so each is a
         // file inside `dir`.
         for f in &parsed.files {
-            files.push((f.name.clone(), read_file(&dir.join(&f.name))?));
+            files.push((f.name.clone(), read_file(&path.join(&f.name))?));
         }
-        Ok(Inputs { receipt, files })
+        Ok(Inputs {
+            dir: dir.to_owned(),
+            receipt,
+            files,
+        })
     }
 
     /// The container the law's ingest verb reads.
@@ -82,12 +95,10 @@ impl Inputs {
     /// Each input as the golden file names it: its path from the root, its
     /// size and its SHA-256. The receipt first, then the files by name.
     pub fn records(&self) -> Vec<Record> {
-        let mut out = vec![Record::of(
-            format!("{SCORE_DIR}/{RECEIPT_FILE}"),
-            &self.receipt,
-        )];
+        let dir = &self.dir;
+        let mut out = vec![Record::of(format!("{dir}/{RECEIPT_FILE}"), &self.receipt)];
         for (name, bytes) in &self.files {
-            out.push(Record::of(format!("{SCORE_DIR}/{name}"), bytes));
+            out.push(Record::of(format!("{dir}/{name}"), bytes));
         }
         out
     }
@@ -329,7 +340,7 @@ struct AbiRun {
 }
 
 /// The law's C ABI shares one state per process, so runs take turns.
-static TURN: Mutex<()> = Mutex::new(());
+pub(crate) static TURN: Mutex<()> = Mutex::new(());
 
 fn abi_run(container: &[u8], take: &[u8], steps: u64) -> Result<AbiRun, Error> {
     let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -362,7 +373,7 @@ fn abi_run(container: &[u8], take: &[u8], steps: u64) -> Result<AbiRun, Error> {
 
 /// Copies `bytes` into a buffer from `law_alloc`, calls `verb` on it, and
 /// frees it, as a JavaScript host does.
-fn pass(
+pub(crate) fn pass(
     bytes: &[u8],
     verb: unsafe extern "C" fn(*const u8, u32) -> u32,
     what: &str,
@@ -389,7 +400,7 @@ fn pass(
     Ok(())
 }
 
-fn snapshot_hash() -> Result<[u8; 32], Error> {
+pub(crate) fn snapshot_hash() -> Result<[u8; 32], Error> {
     let status = abi::law_snapshot();
     if status != 0 {
         return Err(refusal("law_snapshot", status));
@@ -400,7 +411,7 @@ fn snapshot_hash() -> Result<[u8; 32], Error> {
 }
 
 /// Copies `len` bytes out of the law's buffer at `ptr`.
-fn read_out(ptr: *const u8, len: u32) -> Vec<u8> {
+pub(crate) fn read_out(ptr: *const u8, len: u32) -> Vec<u8> {
     let Ok(len) = usize::try_from(len) else {
         return Vec::new();
     };
@@ -413,7 +424,7 @@ fn read_out(ptr: *const u8, len: u32) -> Vec<u8> {
     unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec()
 }
 
-fn refusal(what: &str, status: u32) -> Error {
+pub(crate) fn refusal(what: &str, status: u32) -> Error {
     let reason = read_out(abi::law_refusal_ptr(), abi::law_refusal_len());
     Error::new(format!(
         "{what} refused with status {status}: {}",
@@ -421,7 +432,7 @@ fn refusal(what: &str, status: u32) -> Error {
     ))
 }
 
-fn tier_label(tier: &Tier) -> String {
+pub(crate) fn tier_label(tier: &Tier) -> String {
     match tier {
         Tier::PublicDomain => String::from("public-domain"),
         Tier::OwnEngraving => String::from("own-engraving"),
@@ -673,8 +684,17 @@ pub fn difference(path: &'static str, committed: &str, regenerated: &str) -> Opt
 /// Regenerates the golden from the committed inputs and compares it with the
 /// committed files. Empty when regenerating would change nothing.
 pub fn check(root: &Path, golden: &Golden) -> Vec<Difference> {
+    check_files(root, golden.files())
+}
+
+/// Compares each committed file under `root` with its regenerated text.
+/// Empty when regenerating would change none of them.
+pub fn check_files(
+    root: &Path,
+    files: impl IntoIterator<Item = (&'static str, String)>,
+) -> Vec<Difference> {
     let mut out = Vec::new();
-    for (path, text) in golden.files() {
+    for (path, text) in files {
         match fs::read(root.join(path)) {
             Err(_) => out.push(Difference {
                 path,

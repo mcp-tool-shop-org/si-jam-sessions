@@ -642,3 +642,84 @@ fn the_battle_hymn_fixture_is_ingested_as_an_own_engraving() {
     assert_eq!(&bytes[65..97], &digest);
     assert_eq!(&bytes[97..101], &[0, 0, 0, 0], "no credit-ledger id");
 }
+
+// --- The exemplars ----------------------------------------------------------
+
+/// Each exemplar's receipt, LilyPond file and MIDI file, as committed.
+const GLM: [&[u8]; 3] = [
+    include_bytes!("../../../scores/battle-hymn-glm-5.3/receipt.json"),
+    include_bytes!("../../../scores/battle-hymn-glm-5.3/battle-hymn-glm-5.3.ly"),
+    include_bytes!("../../../scores/battle-hymn-glm-5.3/battle-hymn-glm-5.3.mid"),
+];
+const KIMI: [&[u8]; 3] = [
+    include_bytes!("../../../scores/battle-hymn-kimi-k3/receipt.json"),
+    include_bytes!("../../../scores/battle-hymn-kimi-k3/battle-hymn-kimi-k3.ly"),
+    include_bytes!("../../../scores/battle-hymn-kimi-k3/battle-hymn-kimi-k3.mid"),
+];
+
+/// The ingest verb admits both exemplars, the two arrangements of the Battle Hymn in
+/// `scores/`, as this project's own engravings, under law version 5 and licence predicate
+/// version 3: the snapshot's header carries both versions, and its PROV record the
+/// own-engraving tier and the receipt's digest. Each score holds every note its MIDI file
+/// plays: 1,720 for glm-5.3 and 1,924 for kimi-k3, the counts `host preview` played from
+/// the same files without the law.
+#[test]
+fn the_battle_hymn_exemplars_are_ingested_as_own_engravings() {
+    for (model, [receipt, ly, mid], notes) in [("glm-5.3", GLM, 1_720), ("kimi-k3", KIMI, 1_924)] {
+        let ly_name = format!("battle-hymn-{model}.ly");
+        let mid_name = format!("battle-hymn-{model}.mid");
+        let law = Law::ingest(&container(receipt, &[(&ly_name, ly), (&mid_name, mid)])).unwrap();
+        let digest = provenance::Receipt::from_json(receipt).unwrap().digest();
+        assert_eq!(
+            law.provenance(),
+            Some(&Provenance {
+                tier: Tier::OwnEngraving,
+                receipt_digest: digest,
+            }),
+            "{model}"
+        );
+        assert_eq!(law.score().notes().len(), notes, "{model}");
+        let bytes = law.snapshot_bytes().unwrap();
+        assert_eq!(&bytes[..8], b"SIJAMLAW");
+        assert_eq!(
+            &bytes[12..16],
+            &5u32.to_le_bytes(),
+            "{model}: law version 5"
+        );
+        assert_eq!(
+            &bytes[36..40],
+            &3u32.to_le_bytes(),
+            "{model}: predicate version 3"
+        );
+        assert_eq!(&bytes[56..60], b"PROV");
+        assert_eq!(&bytes[60..64], &[1, 0, 0, 0], "{model}: one record");
+        assert_eq!(bytes[64], 2, "{model}: tier 2, own engraving");
+        assert_eq!(&bytes[65..97], &digest, "{model}");
+        assert_eq!(
+            &bytes[97..101],
+            &[0, 0, 0, 0],
+            "{model}: no credit-ledger id"
+        );
+    }
+}
+
+/// Each exemplar's files are its own: the law refuses a container that hands it one
+/// exemplar's receipt with the other's files, by the first file whose size differs.
+#[test]
+fn an_exemplar_receipt_refuses_the_other_exemplars_files() {
+    let [receipt, _, _] = GLM;
+    let [_, ly, mid] = KIMI;
+    let r = refusal(&container(
+        receipt,
+        &[
+            ("battle-hymn-glm-5.3.ly", ly),
+            ("battle-hymn-glm-5.3.mid", mid),
+        ],
+    ));
+    assert_eq!(
+        r,
+        IngestRefusal::Licence(provenance::Refusal::SizeMismatch {
+            name: String::from("battle-hymn-glm-5.3.ly")
+        })
+    );
+}

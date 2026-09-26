@@ -5,8 +5,10 @@
 #   need no audio device: its render, scheduling and clock maths are pure, and
 #   cpal is built and linked against ALSA but never opens a device.
 # - golden (x86_64, arm64): write-golden --check, natively on both
-#   architectures; the x86_64 leg also proves the check fails on a changed pin
-#   and on a take changed by one sample.
+#   architectures, for the golden and for each exemplar's golden (the frames
+#   the law commits when the arrangement plays, and its snapshot's hash); the
+#   x86_64 leg also proves the check fails on a changed pin, on a take changed
+#   by one sample, and on one exemplar frame changed.
 # - wasm: builds the law's wasm once, reproducibly (--locked, the workspace
 #   and the cargo home remapped, no build path left in the bytes), prints its
 #   SHA-256, and writes the engine scripts that embed exactly those bytes.
@@ -237,7 +239,7 @@ jobs:
 
       # Each change below must make write-golden --check exit 1 (a difference),
       # not 0 and not 2 (a harness failure), and name the line it moved.
-      - name: A changed pin and a one-sample take change each fail the check
+      - name: A changed pin, a one-sample take change and a changed exemplar frame each fail the check
         if: matrix.arch == 'x86_64'
         run: |
           set -euo pipefail
@@ -266,6 +268,11 @@ jobs:
           grep -qF 'u64::from(index == 0)' crates/golden/src/take.rs
           must_differ "take note 0 one sample later" "now:       note 0: onset +1 samples"
           git checkout -- crates/golden/src/take.rs
+          # An exemplar's first note, committed at velocity 90, recorded as 190.
+          sed -i '2s/ velocity 90 / velocity 190 /' golden/battle-hymn-glm-5.3.frames
+          grep -qx '0 note 0 pitch 34 velocity 190 length 37894' golden/battle-hymn-glm-5.3.frames
+          must_differ "an exemplar frame changed" "regenerating would change golden/battle-hymn-glm-5.3.frames (1 lines differ)"
+          git checkout -- golden/battle-hymn-glm-5.3.frames
           git diff --exit-code
           cargo run --locked -q -p golden --bin write-golden -- --check
 

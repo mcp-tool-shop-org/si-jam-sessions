@@ -59,7 +59,7 @@ impl AudioClock {
         }
     }
 
-    /// A callback's reading. The oldest of the last [`READINGS`] is dropped.
+    /// A callback's reading. The oldest of the last `READINGS` is dropped.
     pub fn push(&mut self, reading: Reading) {
         if self.len > 0 {
             self.newest = (self.newest + 1) % READINGS;

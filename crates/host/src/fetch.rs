@@ -299,7 +299,7 @@ pub fn sha256_file(path: &Path) -> Result<String, String> {
 }
 
 /// Unpacks a gzipped tar into `into` and returns the regular files it wrote.
-/// Every entry must be a regular file or a directory under [`TOP`]; see the
+/// Every entry must be a regular file or a directory under `TOP`; see the
 /// module documentation for what is refused.
 pub fn unpack(archive: impl Read, into: &Path) -> Result<usize, String> {
     let mut tar = GzDecoder::new(BufReader::with_capacity(1 << 20, archive));

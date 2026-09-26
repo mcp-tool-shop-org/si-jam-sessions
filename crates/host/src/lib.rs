@@ -33,6 +33,11 @@
 //!   on the stream clock, a MIDI message on WinMM's; both become a law sample
 //!   through the same audio clock, which is re-anchored on every callback.
 //! - [`offline`]: the same pipeline without a device, for `render`.
+//! - [`score`]: the pieces, by the name `--piece` takes: the two exemplars,
+//!   the Battle Hymn as glm-5.3 (the default) and as kimi-k3 arranged it,
+//!   which play with no take, and *The Entertainer* with its constructed take.
+//! - [`notes`]: the notes the law commits for a piece, as compact JSON for a
+//!   page to draw, read through the C ABI, never from the MIDI file.
 //! - [`device`], and `winmm` and `console` on Windows: the thin shells around
 //!   cpal, WinMM MIDI input and the Windows console. They are not exercised in
 //!   CI, which has no audio or MIDI device.
@@ -83,6 +88,7 @@ pub mod fetch;
 #[cfg(test)]
 mod fixture;
 pub mod live;
+pub mod notes;
 pub mod notices;
 pub mod offline;
 pub mod piano;
