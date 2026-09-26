@@ -328,6 +328,27 @@ mod tests {
         );
     }
 
+    /// The fitted rate, not only the re-anchoring. A device 300 ppm fast with
+    /// exact readings: the line through the last readings is the device's own,
+    /// so the clock is right to the sample 50 ms past the newest reading. At
+    /// 48 kHz exactly, re-anchored on the same readings' mean, it would be
+    /// about 10 samples out there (300 ppm of the 0.7 s from their middle).
+    #[test]
+    fn the_fitted_rate_follows_a_fast_device_to_the_sample() {
+        let (readings, truth) = device(SECOND, 300.0, 0.0, 60);
+        let mut clock = AudioClock::new();
+        let mut worst = 0.0f64;
+        for (i, r) in readings.iter().enumerate() {
+            clock.push(*r);
+            if i > READINGS && i % 50 == 0 {
+                let ns = r.nanos + 50_000_000;
+                let error = clock.sample_at(ns).unwrap() as f64 - truth(ns);
+                worst = worst.max(error.abs());
+            }
+        }
+        assert!(worst <= 1.0, "worst error {worst} samples");
+    }
+
     /// WinMM stamps a MIDI message in whole milliseconds since midiInStart;
     /// the message reaches the host up to 2 ms later. The earliest arrivals
     /// pin the offset between the two clocks to within a millisecond.
