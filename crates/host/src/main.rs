@@ -25,9 +25,7 @@ use host::bridge::{Law, Refused};
 use host::callback::{Callback, Shared};
 use host::device::{self, Output, Playing};
 use host::event::{Event, Monitor};
-use host::live::{
-    Clocks, Dropped, Held, Keys, Passed, Press, close_through, delivery, pass, release_all,
-};
+use host::live::{Dropped, Passed, Press, Taker, close_through, delivery, release_all};
 use host::schedule::{Scheduler, steps_for};
 use host::score::{Piece, clock, root};
 use host::synth::Synth;
@@ -315,16 +313,12 @@ fn open(
 impl Session {
     /// Steps the law ([`steps_for`]): to the sample heard now when `heard` is
     /// given, to the callback's position otherwise, and always far enough that
-    /// the horizon covers the next two callbacks of the largest size seen.
+    /// the horizon covers the next two callbacks ([`Shared::lookahead`]).
     /// Then fills the ring, and tells the callback how far it is complete.
     fn pump(&mut self, law: &mut Law, heard: Option<i64>) -> Result<(), String> {
         let shared = &self.playing.shared;
         let frame = shared.frames.load(Ordering::Acquire);
-        let lookahead = shared
-            .largest_buffer
-            .load(Ordering::Relaxed)
-            .saturating_mul(2);
-        let target = steps_for(frame, lookahead, heard);
+        let target = steps_for(frame, shared.lookahead(), heard);
         let pumped = self
             .scheduler
             .pump(law, target, &mut self.events)
@@ -469,14 +463,15 @@ fn counted(session: &Session) -> String {
     let s = &session.playing.shared;
     format!(
         "{} notes and {} beats started, {} live notes heard back, {} late, {} dropped; the \
-         first callback asked for {} frames, the largest that rendered law time for {}, and {} \
-         frames of silence came before law sample 0",
+         first callback asked for {} frames, the one that started law time for {}, the largest \
+         after it for {}, and {} frames of silence came before law sample 0",
         s.notes.load(Ordering::Relaxed),
         s.beats.load(Ordering::Relaxed),
         s.monitored.load(Ordering::Relaxed),
         s.late.load(Ordering::Relaxed),
         s.dropped.load(Ordering::Relaxed),
         s.first_buffer.load(Ordering::Relaxed),
+        s.starting_buffer.load(Ordering::Relaxed),
         s.largest_buffer.load(Ordering::Relaxed),
         s.preroll_frames.load(Ordering::Relaxed)
     )
@@ -714,6 +709,17 @@ fn watch_input(started: &mut Started) -> bool {
     }
 }
 
+/// What stopping an input leaves for the jam's exit status: the failure the
+/// input stopped on, if it stopped on one. `closed` is how closing it went: a
+/// close that fails at teardown comes after the music is over, so it is
+/// printed as a warning and fails nothing.
+fn stopped_input(stopped_on: Option<String>, closed: Result<(), String>) -> Option<String> {
+    if let Err(e) = closed {
+        eprintln!("host: warning: {e}");
+    }
+    stopped_on
+}
+
 /// Stops the input, and reports what it said on the way: WinMM's invalid
 /// messages and what full rings dropped. Returns the input's failure, if it
 /// stopped on one: then the jam exits 1.
@@ -725,7 +731,7 @@ fn finish_input(started: Started, dropped: &Dropped) -> Option<String> {
             if errors > 0 {
                 println!("WinMM reported {errors} invalid MIDI messages (MIM_ERROR).");
             }
-            midi.port.close().err()
+            stopped_input(None, midi.port.close())
         }
         #[cfg(windows)]
         Started::Keyboard(keys) => match keys.join() {
@@ -747,29 +753,6 @@ fn finish_input(started: Started, dropped: &Dropped) -> Option<String> {
         eprintln!("host: {e}");
     }
     failure
-}
-
-/// Moves the readings into the audio clock and passes every press to the
-/// law, in the order they were received.
-fn take_presses(
-    session: &mut Session,
-    presses: &mut Consumer<Press>,
-    clocks: &mut Clocks,
-    held: &mut Held,
-    keys: &mut Keys,
-    law: &mut Law,
-    passed: &mut Vec<Passed>,
-) {
-    while let Ok(reading) = session.readings.pop() {
-        clocks.audio.push(reading);
-    }
-    while let Ok(press) = presses.pop() {
-        keys.press(&press);
-        let Some(instant) = clocks.instant(press.stamp) else {
-            continue;
-        };
-        pass(law, clocks, held, press, instant, passed);
-    }
 }
 
 fn jam(o: &Options) -> Result<(), String> {
@@ -799,10 +782,7 @@ fn jam(o: &Options) -> Result<(), String> {
         clock(piece.end)
     );
 
-    let mut clocks = Clocks::default();
-    let mut held = Held::default();
-    let mut keys = Keys::default();
-    let mut passed: Vec<Passed> = Vec::new();
+    let mut taker = Taker::default();
     let end = piece.end + 48_000;
     let mut failed = None;
     let mut latency = Latency::default();
@@ -811,32 +791,29 @@ fn jam(o: &Options) -> Result<(), String> {
     while !stop.load(Ordering::Relaxed) {
         latency.watch(&output, &session);
         startup.watch(&session);
-        if watched.elapsed() >= Duration::from_millis(500) {
+        // Whether the input may have gone away is read before the presses
+        // are taken, so every press it sent first is in the ring by then; a
+        // key held on it gets no note-off, and `step` releases its monitor
+        // voice after taking the presses.
+        let gone = watched.elapsed() >= Duration::from_millis(500) && {
             watched = std::time::Instant::now();
-            if watch_input(&mut started) {
-                // A key held on an input that went away gets no note-off:
-                // release its monitor voice from here.
-                for pitch in keys.release_all() {
-                    let _ = hush_in.push(Monitor::Off { pitch });
-                }
-            }
-        }
+            watch_input(&mut started)
+        };
         let frame = session.playing.shared.frames.load(Ordering::Acquire);
         if frame >= end {
             break;
         }
         // Presses first, at the playhead they were played under; then the
         // law steps to the sample heard now.
-        take_presses(
-            &mut session,
-            &mut presses,
-            &mut clocks,
-            &mut held,
-            &mut keys,
+        taker.step(
             &mut law,
-            &mut passed,
+            &mut session.readings,
+            &mut presses,
+            gone,
+            &mut hush_in,
         );
-        let heard = clocks
+        let heard = taker
+            .clocks
             .audio
             .sample_at(device::nanos(session.playing.stream.now()));
         if let Err(e) = session.pump(&mut law, heard) {
@@ -848,24 +825,22 @@ fn jam(o: &Options) -> Result<(), String> {
     stop.store(true, Ordering::SeqCst);
     let input_failed = finish_input(started, &dropped);
     // Presses still queued pass now, and notes still held end now.
-    take_presses(
-        &mut session,
-        &mut presses,
-        &mut clocks,
-        &mut held,
-        &mut keys,
-        &mut law,
-        &mut passed,
-    );
+    taker.take(&mut law, &mut session.readings, &mut presses);
     let now = device::nanos(session.playing.stream.now());
-    release_all(&mut law, &clocks, &mut held, now, &mut passed);
+    release_all(
+        &mut law,
+        &taker.clocks,
+        &mut taker.held,
+        now,
+        &mut taker.passed,
+    );
     let _ = session.playing.stream.pause();
     // The law's transport runs on alone until every score note before the
     // stop has closed, so every row of the jam is final.
-    let stopped_at = clocks.audio.sample_at(now).unwrap_or(0);
+    let stopped_at = taker.clocks.audio.sample_at(now).unwrap_or(0);
     let closed = close_through(&mut law, stopped_at).map_err(refused);
     println!("{}", counted(&session));
-    let report = closed.and_then(|()| verdicts(&mut law, &passed));
+    let report = closed.and_then(|()| verdicts(&mut law, &taker.passed));
     host::outcome(report, device_error(&session).or(failed).or(input_failed))
 }
 
@@ -1020,4 +995,24 @@ fn console_jitter(playing: &Playing) {
 #[cfg(not(windows))]
 fn console_jitter(_playing: &Playing) {
     println!("Console key path: the keyboard fallback is built for Windows only");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #7's third finding. A MIDI port that will not close when the
+    /// jam is over does not fail the jam: the music finished, and the close
+    /// error is printed as a warning. An input that stopped on a failure of
+    /// its own still fails it.
+    #[test]
+    fn a_close_error_at_teardown_does_not_fail_a_clean_jam() {
+        let close = || Err(String::from("the MIDI port did not close (WinMM error 5)"));
+        assert_eq!(stopped_input(None, close()), None);
+        assert_eq!(stopped_input(None, Ok(())), None);
+        assert_eq!(
+            stopped_input(Some(String::from("the keyboard stopped")), close()),
+            Some(String::from("the keyboard stopped"))
+        );
+    }
 }

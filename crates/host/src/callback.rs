@@ -67,14 +67,45 @@ pub struct Shared {
     /// cpal predicts.
     pub latency_nanos: AtomicU64,
     pub callbacks: AtomicU64,
-    /// The largest callback that rendered law time, in frames: the pre-roll's
-    /// silent callbacks are not counted.
+    /// The frames of the callback that started law time. It stands in for the
+    /// lookahead until a later callback has rendered law time
+    /// ([`Shared::lookahead`]).
+    pub starting_buffer: AtomicU64,
+    /// The largest callback that rendered law time after the one that started
+    /// it, in frames: the pre-roll's silent callbacks and the starting callback
+    /// are not counted.
     pub largest_buffer: AtomicU64,
     pub notes: AtomicU64,
     pub beats: AtomicU64,
     pub late: AtomicU64,
     pub dropped: AtomicU64,
     pub monitored: AtomicU64,
+}
+
+impl Shared {
+    /// The frames the next callbacks may ask for before the law thread pumps
+    /// again, which [`crate::schedule::steps_for`] keeps the committed horizon
+    /// ahead of: two of the largest callbacks that rendered law time after the
+    /// one that started it, or two of the starting callback until one has.
+    ///
+    /// The starting callback is a one-off: a device's first callback fills its
+    /// whole buffer, and later ones ask for a period. Held as the lookahead for
+    /// the whole jam, a covered first fill of a few thousand frames keeps the
+    /// playhead that far ahead of the ear, and a key played up to 80 ms late
+    /// can reach the law after its score note has closed (issue #7). Left out
+    /// entirely, it leaves the law stepped only to the ring's first cover, and
+    /// a device asked for half its buffer at a time (4,800 frames, then 2,400
+    /// a callback) renders its second callback past that cover. So the
+    /// starting callback counts only until the next callback has rendered.
+    pub fn lookahead(&self) -> u64 {
+        let largest = self.largest_buffer.load(Ordering::Relaxed);
+        let frames = if largest == 0 {
+            self.starting_buffer.load(Ordering::Relaxed)
+        } else {
+            largest
+        };
+        frames.saturating_mul(2)
+    }
 }
 
 /// Everything the audio callback owns: the synth, and its ends of the rings.
@@ -148,10 +179,12 @@ impl Callback {
             s.first_buffer.store(frames, Ordering::Relaxed);
         }
 
+        let mut starting = false;
         if !self.started {
             let end = self.synth.frame().saturating_add(frames);
             if end <= s.covered.load(Ordering::Acquire) || self.silent >= self.cap {
                 self.started = true;
+                starting = true;
                 s.started.store(true, Ordering::Release);
             } else {
                 data.fill(0.0);
@@ -163,8 +196,14 @@ impl Callback {
 
         // Only a callback that renders law time sets the lookahead a jam steps
         // the law with: the pre-roll's one-off first fill would hold the
-        // playhead that far ahead of the ear for the rest of the jam.
-        s.largest_buffer.fetch_max(frames, Ordering::Relaxed);
+        // playhead that far ahead of the ear for the rest of the jam. The
+        // callback that starts law time stands in until the next one renders
+        // ([`Shared::lookahead`]).
+        if starting {
+            s.starting_buffer.store(frames, Ordering::Relaxed);
+        } else {
+            s.largest_buffer.fetch_max(frames, Ordering::Relaxed);
+        }
         if let Some(hush) = self.hush.as_mut() {
             while let Ok(heard) = hush.pop() {
                 self.synth.hear(heard);
@@ -434,9 +473,9 @@ mod tests {
     /// 10 ms, and each is heard 146.8 ms later (the 5,520 frames still in the
     /// buffer, then 31.8 ms of output). After each callback the law thread
     /// takes the keys pressed so far, then steps the law on the heard clock,
-    /// with the lookahead of two of the largest callbacks that rendered law
-    /// time. Keys pressed exactly when score notes are heard grade as matches:
-    /// the one-off first fill must not hold the playhead ahead of the ear.
+    /// with the lookahead `jam` uses ([`Shared::lookahead`]). Keys pressed
+    /// exactly when score notes are heard grade as matches: the one-off first
+    /// fill must not hold the playhead ahead of the ear.
     #[test]
     fn a_first_fill_past_the_cover_does_not_hold_the_playhead_ahead() {
         use crate::anchor::Reading;
@@ -504,12 +543,8 @@ mod tests {
                 pass(&mut law, &clocks, &mut held, press, instant, &mut log);
                 next += 1;
             }
-            let lookahead = shared
-                .largest_buffer
-                .load(Ordering::Relaxed)
-                .saturating_mul(2);
             let frame = shared.frames.load(Ordering::Acquire);
-            let target = steps_for(frame, lookahead, clocks.audio.sample_at(now));
+            let target = steps_for(frame, shared.lookahead(), clocks.audio.sample_at(now));
             let pumped = scheduler.pump(&mut law, target, &mut events).unwrap();
             shared.covered.store(pumped.covered, Ordering::Release);
         }
@@ -536,5 +571,172 @@ mod tests {
         assert_eq!(shared.largest_buffer.load(Ordering::Relaxed), 480);
         assert_eq!(shared.first_buffer.load(Ordering::Relaxed), 6_000);
         assert_eq!(shared.late.load(Ordering::Relaxed), 0);
+    }
+
+    /// What a simulated jam leaves: the rows of the score notes a key cited,
+    /// each note-on's lag, what the synth counted late, and the device's
+    /// first callback.
+    struct Jammed {
+        rows: Vec<String>,
+        lags: Vec<i64>,
+        late: u64,
+        first: u64,
+    }
+
+    /// A jam as `jam` runs it, on a device whose buffer is `buffer` frames.
+    /// Its first callback fills the whole buffer, which the ring covers, so
+    /// law time starts with it. Each later callback asks for `period` frames
+    /// once that much has played, so its first frame is heard `buffer -
+    /// period` frames, then 31.8 ms (1,526 samples) of output, after the
+    /// callback. The law thread runs once a millisecond, as `jam`'s loop does:
+    /// it moves the readings into the audio clock, passes the keys pressed so
+    /// far, then steps the law on the heard clock with the lookahead `jam`
+    /// uses. `keys` are (law sample, pitch): each key goes down when that
+    /// sample is heard and comes up 4,000 samples later. The jam runs until law
+    /// time reaches `end`, and the law's transport runs on through the stop.
+    fn jam(buffer: u64, period: u64, keys: &[(u64, u8)], end: u64) -> Jammed {
+        use crate::live::{Clocks, Held, Press, Stamp, close_through, pass};
+
+        const NS: u64 = 1_000_000_000;
+        const OUTPUT: u64 = 1_526;
+        let mut law = Law::acquire();
+        law.load_score(&dense()).unwrap();
+        let (mut events, events_out) = RingBuffer::new(crate::RING_EVENTS);
+        let (readings_in, mut readings) = RingBuffer::new(4_096);
+        let shared = Arc::new(Shared::default());
+        let mut scheduler = Scheduler::new(0);
+        let pumped = scheduler.pump(&mut law, 1, &mut events).unwrap();
+        shared.covered.store(pumped.covered, Ordering::Release);
+        assert!(buffer <= pumped.covered, "the ring covers the first fill");
+        let mut callback = Callback::new(
+            Synth::new(0),
+            events_out,
+            None,
+            readings_in,
+            Arc::clone(&shared),
+            true,
+        );
+        // Callback 0 fills the empty device at `start`; frame f is heard at
+        // start + (f + OUTPUT) / 48 kHz.
+        let start = NS;
+        let heard_at = |sample: u64| start + (sample + OUTPUT) * NS / 48_000;
+        let mut presses: Vec<(u64, bool, u8)> = keys
+            .iter()
+            .flat_map(|&(at, pitch)| {
+                [
+                    (heard_at(at), true, pitch),
+                    (heard_at(at + 4_000), false, pitch),
+                ]
+            })
+            .collect();
+        presses.sort();
+
+        let mut clocks = Clocks::default();
+        let mut held = Held::default();
+        let mut log = Vec::new();
+        let mut next = 0;
+        let mut calls = 0u64;
+        let mut now = start;
+        while shared.frames.load(Ordering::Acquire) < end {
+            // Callback 0 at `start`, callback k once k periods have played.
+            let due = start + calls * period * NS / 48_000;
+            if now >= due {
+                let frame = shared.frames.load(Ordering::Acquire);
+                let size = if calls == 0 { buffer } else { period };
+                let mut data = vec![0.0f32; size as usize];
+                callback.run(&mut data, 1, heard_at(frame), None);
+                calls += 1;
+            }
+            while let Ok(r) = readings.pop() {
+                clocks.audio.push(r);
+            }
+            while next < presses.len() && presses[next].0 <= now {
+                let (instant, down, pitch) = presses[next];
+                let press = Press {
+                    down,
+                    pitch,
+                    velocity: 100,
+                    stamp: Stamp::Stream { nanos: instant },
+                };
+                pass(&mut law, &clocks, &mut held, press, instant, &mut log);
+                next += 1;
+            }
+            let frame = shared.frames.load(Ordering::Acquire);
+            let target = steps_for(frame, shared.lookahead(), clocks.audio.sample_at(now));
+            let pumped = scheduler.pump(&mut law, target, &mut events).unwrap();
+            shared.covered.store(pumped.covered, Ordering::Release);
+            now += NS / 1_000;
+        }
+        assert_eq!(next, presses.len(), "every key was pressed and released");
+        close_through(&mut law, clocks.audio.sample_at(now).unwrap()).unwrap();
+        let rows = law
+            .record()
+            .unwrap()
+            .rows
+            .lines()
+            .filter(|r| !r.ends_with("never played"))
+            .map(String::from)
+            .collect();
+        let lags = log
+            .iter()
+            .filter(|p| p.down)
+            .filter_map(|p| p.lag)
+            .collect();
+        Jammed {
+            rows,
+            lags,
+            late: shared.late.load(Ordering::Relaxed),
+            first: shared.first_buffer.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Issue #7's test. A device whose 3,000-frame first fill the ring covers,
+    /// then 480-frame callbacks, each heard 84.3 ms later (2,520 frames still
+    /// in the buffer, then 31.8 ms of output). Keys pressed 45 to 80 ms after
+    /// their score notes are heard, up to the law's reach, grade late, each
+    /// by exactly how late it was played: the one-off first fill does not hold
+    /// the playhead ahead of the ear, so no score note closes before the key
+    /// that answers it is handed over.
+    #[test]
+    fn a_covered_first_fill_does_not_hold_the_playhead_ahead() {
+        // Every tenth score note from the second tenth of a second, played
+        // 45, 50, ..., 80 ms late: 2,160 to 3,840 samples.
+        let keys: Vec<(u64, u8)> = (1..=8u64)
+            .map(|j| {
+                let i = 10 * j;
+                (i * 480 + (40 + 5 * j) * 48, 48 + (i % 36) as u8)
+            })
+            .collect();
+        let jammed = jam(3_000, 480, &keys, 60_000);
+        assert_eq!(jammed.first, 3_000);
+        assert_eq!(jammed.late, 0);
+        assert_eq!(jammed.rows.len(), 8, "{:#?}", jammed.rows);
+        for (j, row) in (1..=8u64).zip(&jammed.rows) {
+            let late = (40 + 5 * j) * 48;
+            assert!(
+                row.starts_with(&format!("note {}: onset +{late} samples", 10 * j))
+                    && row.ends_with(": late"),
+                "{row}\n{:#?}\nlags {:?}",
+                jammed.rows,
+                jammed.lags
+            );
+        }
+        assert!(
+            jammed.lags.iter().all(|&lag| lag < 4_800),
+            "{:?}",
+            jammed.lags
+        );
+    }
+
+    /// A device whose first fill the ring covers and whose later callbacks are
+    /// half of it: a 4,800-frame buffer asked for 2,400 frames at a time. The
+    /// second callback reaches past what the ring covered at the start, so the
+    /// law must have stepped far enough for it before it comes, and no event is
+    /// late anywhere in the jam.
+    #[test]
+    fn callbacks_of_half_a_covered_fill_are_still_covered() {
+        let jammed = jam(4_800, 2_400, &[], 60_000);
+        assert_eq!(jammed.first, 4_800);
+        assert_eq!(jammed.late, 0);
     }
 }
