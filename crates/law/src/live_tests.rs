@@ -644,12 +644,15 @@ fn a_proposal_in_a_live_take_cannot_cite_a_closed_score_note() {
 }
 
 /// Rows that close at one point come score notes first, then additions: a
-/// score note and an addition played at the same sample close together.
+/// score note and an addition played at the same sample close together. The
+/// addition here is first in the take (pitch 50 before 60 at one onset), so
+/// the order is the rule's, not the take's.
 #[test]
 fn at_one_close_point_a_score_notes_row_comes_before_an_addition() {
     let mut law = law_of(&[(96_000, 60)]);
     assert_eq!(cites(&mut law, 96_000, 60), Some(0));
-    assert_eq!(cites(&mut law, 96_000, 90), None);
+    assert_eq!(cites(&mut law, 96_000, 50), None, "note 0 is cited");
+    assert_eq!(law.take()[0].pitch, 50);
     assert_eq!(closed_words(&mut law), ["match", "addition"]);
 }
 
