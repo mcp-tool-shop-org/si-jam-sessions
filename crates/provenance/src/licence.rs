@@ -22,17 +22,23 @@
 //!   share-alike. Those names are standard (`CC BY-NC`, `NoDerivatives`), so the match is
 //!   precise, and no stem of theirs refuses plain text.
 //! - **The AI class, looked for first, fails closed on its topic.** AI restrictions are
-//!   free prose with no standard wording, so no phrase list keeps up with them. A plain
-//!   licence text has no reason to name AI, training, models, mining, datasets, generative
-//!   or neural systems, and a refusal only sends the score to a person. So a text that
-//!   names the topic is refused, whatever else it says. "No stem refuses plain text" does
-//!   not hold for this class: "ear training" is refused by design.
+//!   free prose with no standard wording. A plain licence text has no reason to name AI,
+//!   training, models, mining, datasets, generative or neural systems, or an AI product,
+//!   and a refusal only sends the score to a person.
+//!   - A text that names the topic through the listed vocabulary is refused as
+//!     AI-restricted, whatever else it says. "No stem refuses plain text" does not hold
+//!     for this class: "ear training" is refused by design.
+//!   - The vocabulary is closed. The crate's Known limits list what it leaves out.
+//!   - A text that prohibits or limits anything no longer affirms its licence (see
+//!     [`negates`]). So a prohibition phrased outside the vocabulary is still refused, but
+//!     not named AI-restricted: "Claude use is prohibited" is refused as a text that does
+//!     not affirm.
 //!
 //! The rule is on [`REFUSAL_PHRASES`].
 //!
 //! **A text must affirm, not merely mention.** Where a text may hold the licence alongside
 //! other text (a copyright markup, an evidence quote), it counts only if [`negates`] finds
-//! no negating, limiting, lapsing or hedging word and no question mark.
+//! no negating, limiting, prohibiting, lapsing or hedging word and no question mark.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -100,9 +106,10 @@ struct Phrases {
 ///
 /// The two policies (see the module documentation):
 /// - The standard-phrase classes list the names their restrictions are known by.
-/// - The AI class lists its topic: AI's short tokens, and every form of train, model,
-///   mining, dataset, generative, neural and deep learning. So it refuses any text that
-///   names the topic, including plain text such as "ear training" and "model trains".
+/// - The AI class lists its topic: AI's short tokens, the names of AI products that are
+///   no ordinary word, and every form of train, model, mining, dataset, generative, neural
+///   and deep learning. So it refuses any text that names the topic through this closed
+///   vocabulary, including plain text such as "ear training" and "model trains".
 ///
 /// The matching rule, closed, for both:
 /// - **Words.** A text is read as its words (see [`as_words`]): every run of characters
@@ -131,6 +138,16 @@ const REFUSAL_PHRASES: &[Phrases] = &[
             "tdm",
             "llm",
             "llms",
+            "ml",
+            // AI products whose names are no ordinary word (Known limits lists those left
+            // out). `openai` is whole words only, so `openair` stays plain.
+            "openai",
+            "midjourney",
+            "copilot",
+            "stable diffusion",
+            "dall e",
+            "suno",
+            "udio",
             // The topic, in its forms.
             "train",
             "trains",
@@ -161,6 +178,9 @@ const REFUSAL_PHRASES: &[Phrases] = &[
             "artificially intelligen",
             "machine learn",
             "neural net",
+            // No English word starts with these: `gpt` finds `gpt4` and `gpt4o`.
+            "chatgpt",
+            "gpt",
         ],
     },
     Phrases {
@@ -195,8 +215,10 @@ const REFUSAL_PHRASES: &[Phrases] = &[
     },
 ];
 
-/// Words that negate, limit, lapse or hedge what a text says, matched as whole words.
-/// The list is broad on purpose: a text that trips it is refused, never admitted.
+/// Words that negate, limit, prohibit, lapse or hedge what a text says, matched as whole
+/// words. The list is broad on purpose: a text that trips it is refused, never admitted.
+/// It holds no `reserved` or `required`, because CC texts say "some rights reserved" and
+/// "attribution required".
 const NEGATING_WORDS: &[&str] = &[
     // Negation.
     "not",
@@ -216,7 +238,34 @@ const NEGATING_WORDS: &[&str] = &[
     "unless",
     "until",
     "only",
+    "solely",
+    "exclusively",
     "but",
+    // Prohibition: a text that prohibits anything no longer affirms its licence.
+    "prohibit",
+    "prohibits",
+    "prohibited",
+    "prohibiting",
+    "prohibition",
+    "prohibitions",
+    "forbid",
+    "forbids",
+    "forbidden",
+    "forbidding",
+    "ban",
+    "bans",
+    "banned",
+    "banning",
+    "restrict",
+    "restricts",
+    "restricted",
+    "restricting",
+    "restriction",
+    "restrictions",
+    "disallow",
+    "disallows",
+    "disallowed",
+    "disallowing",
     // Lapse.
     "formerly",
     "previously",
@@ -284,7 +333,8 @@ pub fn restriction_in(text: &str) -> Option<LicenceRefusal> {
         .map(|p| p.class)
 }
 
-/// True if a normalised text negates, limits, lapses, hedges or questions what it says.
+/// True if a normalised text negates, limits, prohibits, lapses, hedges or questions what
+/// it says.
 ///
 /// The rule, closed and documented: the text holds a question mark; or one of
 /// [`NEGATING_WORDS`] as a whole word; or a contraction ending in *n't*, seen as a lone
@@ -767,20 +817,83 @@ mod tests {
         );
     }
 
+    /// AI products name the topic. The third external review found "ChatGPT use is
+    /// prohibited", "OpenAI", "GPT-4" and "no ML" passing the AI class at `8c4444d`.
+    #[test]
+    fn ai_products_are_ai_wording() {
+        let cases = [
+            "chatgpt use is prohibited",
+            "openai use is prohibited",
+            "gpt-4 use is prohibited",
+            "no ml",
+            "chatgpt",
+            "chatgpt-4o",
+            "gpt",
+            "gpt4o",
+            "gpts",
+            "openai",
+            "ml",
+            "midjourney",
+            "copilot",
+            "stable diffusion",
+            "dall-e",
+            "dall\u{b7}e",
+            "suno",
+            "udio",
+        ];
+        let wrong: Vec<String> = cases
+            .iter()
+            .filter(|text| restriction_in(text) != Some(LicenceRefusal::AiRestricted))
+            .map(|text| alloc::format!("{text:?} gives {:?}", restriction_in(text)))
+            .collect();
+        assert!(
+            wrong.is_empty(),
+            "{} of {} wrong: {wrong:#?}",
+            wrong.len(),
+            cases.len()
+        );
+    }
+
+    /// Known limit: AI products whose names are also ordinary words or people's names are
+    /// left out of the vocabulary. Claude Debussy's scores belong to this corpus. `openai`
+    /// is whole words only, so `openair` is plain, and `ml` only as a word of its own.
+    #[test]
+    fn names_left_out_of_the_ai_vocabulary_are_known_limits() {
+        for text in [
+            "claude",
+            "clair de lune, claude debussy",
+            "gemini",
+            "llama",
+            "bard",
+            "grok",
+            "mistral",
+            "openair",
+            "html",
+            "xml",
+            "co-pilot",
+            "stable",
+            "diffusion",
+        ] {
+            assert_eq!(restriction_in(text), None, "{text}");
+        }
+    }
+
     /// Known limit: automated-access terms (scraping, crawling) are not a refusal class in
-    /// version 2. No phrase names them; only a negating word in the same text refuses it,
-    /// by the negation rule.
+    /// version 2. No phrase names them. A prohibiting or negating word in the same text
+    /// refuses it by the negation rule, not by a class of its own.
     #[test]
     fn automated_access_terms_are_not_a_class_in_version_2() {
         for text in [
             "scraping is prohibited",
             "crawling and scraping are forbidden",
+            "no scraping",
         ] {
             assert_eq!(restriction_in(text), None, "{text}");
-            assert!(!negates(text), "{text}");
+            assert!(negates(text), "{text}");
         }
-        assert_eq!(restriction_in("no scraping"), None);
-        assert!(negates("no scraping"));
+        // A limit phrased without a prohibiting or negating word passes.
+        assert_eq!(restriction_in("scraping requires written permission"), None);
+        assert!(!negates("scraping requires written permission"));
     }
 
     #[test]
@@ -800,8 +913,44 @@ mod tests {
             "it isn\u{2019}t public domain",
             "we can't say",
             "it ain't so",
+            // A text that prohibits anything no longer affirms its licence.
+            "public domain. chatgpt use is prohibited",
+            "public domain. claude use is prohibited",
+            "commercial use prohibited",
+            "public domain for study solely",
+            "exclusively for performance",
         ] {
             assert!(negates(text), "{text}");
+        }
+        for word in [
+            "prohibit",
+            "prohibits",
+            "prohibited",
+            "prohibiting",
+            "prohibition",
+            "prohibitions",
+            "forbid",
+            "forbids",
+            "forbidden",
+            "forbidding",
+            "ban",
+            "bans",
+            "banned",
+            "banning",
+            "restrict",
+            "restricts",
+            "restricted",
+            "restricting",
+            "restriction",
+            "restrictions",
+            "disallow",
+            "disallows",
+            "disallowed",
+            "disallowing",
+            "solely",
+            "exclusively",
+        ] {
+            assert!(negates(&alloc::format!("public domain, {word}")), "{word}");
         }
         for text in [
             // The Entertainer's own markup text, normalised.
@@ -816,6 +965,12 @@ mod tests {
             "know",
             "button",
             "a t by itself",
+            "unrestricted use",
+            "a banner",
+            "urban",
+            // CC texts say these, and they limit nothing the licence does not.
+            "some rights reserved",
+            "attribution required",
         ] {
             assert!(!negates(text), "{text}");
         }

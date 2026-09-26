@@ -1189,6 +1189,81 @@ fn a_licence_text_that_names_the_ai_topic_is_refused() {
     assert!(wrong.is_empty(), "{} of 3 wrong: {wrong:#?}", wrong.len());
 }
 
+/// The third external review, at `8c4444d`: a public-domain markup that bans only an AI
+/// product passed. The product names are AI wording now. A text that prohibits anything
+/// no longer affirms its licence, so a prohibition outside the vocabulary is refused too,
+/// though not named AI-restricted.
+#[test]
+fn ai_products_and_prohibitions_in_a_licence_text_are_refused() {
+    let ai = Refusal::Licence(LicenceRefusal::AiRestricted);
+    let mismatch = Refusal::InFileLicenceMismatch {
+        name: named(LY_NAME),
+    };
+    let markup = |text: &str| {
+        let mut f = Fixture::new();
+        f.ly_header(&format!(
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"Placed in the public domain. {text}\" }}\n"
+        ));
+        f
+    };
+    let terms_quote = |text: &str| {
+        let mut f = Fixture::new();
+        f.evidence_mut("terms").quotes = vec![format!("Dedicated to the public domain. {text}")];
+        f
+    };
+    let cases = [
+        (
+            "ChatGPT use is prohibited",
+            markup("ChatGPT use is prohibited"),
+            ai.clone(),
+        ),
+        (
+            "OpenAI use is prohibited",
+            markup("OpenAI use is prohibited"),
+            ai.clone(),
+        ),
+        (
+            "GPT-4 use is prohibited",
+            markup("GPT-4 use is prohibited"),
+            ai.clone(),
+        ),
+        ("no ML", markup("no ML"), ai.clone()),
+        (
+            "terms: ChatGPT use is prohibited",
+            terms_quote("ChatGPT use is prohibited."),
+            ai.clone(),
+        ),
+        (
+            "Claude use is prohibited",
+            markup("Claude use is prohibited"),
+            mismatch.clone(),
+        ),
+        (
+            "commercial use prohibited",
+            markup("commercial use prohibited"),
+            mismatch.clone(),
+        ),
+        (
+            "terms: commercial use prohibited",
+            terms_quote("Commercial use prohibited."),
+            Refusal::QuoteNegated { what: "terms" },
+        ),
+    ];
+    let mut wrong = Vec::new();
+    for (place, f, want) in &cases {
+        let got = f.admit().map(|a| a.tier);
+        if got != Err(want.clone()) {
+            wrong.push(format!("{place}: {got:?}, not {want:?}"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{} of {} wrong: {wrong:#?}",
+        wrong.len(),
+        cases.len()
+    );
+}
+
 #[test]
 fn some_file_must_state_the_licence_outright() {
     // No statement anywhere.
