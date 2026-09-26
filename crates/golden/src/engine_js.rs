@@ -8,16 +8,25 @@
 //! under node). The script drives the law's C ABI in the same order the
 //! native harness does (see [`crate::run::compute`]):
 //!
-//! 1. it checks its decoder against RFC 4648's test vectors, and the decoded
-//!    lengths against the ones generated here;
-//! 2. it instantiates the wasm with no imports, and checks the law version;
-//! 3. `law_ingest(container)`, `law_admit_take(take)`, `law_snapshot`;
-//! 4. `law_step` the golden's number of times, and `law_snapshot` again;
-//! 5. it prints the computed hash and the golden's, and throws unless the two
+//! 1. it checks its decoder against RFC 4648's test vectors, its SHA-256
+//!    against FIPS 180's, and the decoded lengths against the ones generated
+//!    here;
+//! 2. it hashes the exact bytes it is about to compile, requires the
+//!    generator's SHA-256, and prints it as `wasm-sha256`;
+//! 3. it instantiates the wasm with no imports, and checks the law version;
+//! 4. `law_ingest(container)`, `law_admit_take(take)`, `law_snapshot`;
+//! 5. `law_step` the golden's number of times, and `law_snapshot` again;
+//! 6. it prints the law version, the steps, the snapshot's length and the
+//!    computed hash, all read from the instance, and throws unless the two
 //!    snapshots and the golden are one hash.
 //!
-//! An uncaught exception exits every engine with a non-zero status. CI also
-//! compares the printed hash with the golden file itself.
+//! An uncaught exception exits every engine with a non-zero status. CI does
+//! not take the script's word for it: it compares the printed hash with the
+//! golden file itself, `wasm-sha256` with the artifact's own digest, and the
+//! law version and snapshot length with the golden file's. A shell that only
+//! printed the expected lines would still have to produce the SHA-256 of
+//! the artifact, and CI runs no shell whose files are not pinned
+//! (`.github/engines/`).
 //!
 //! Generation is deterministic: the output depends only on its inputs, never
 //! on a clock, a path or the host.
@@ -132,6 +141,78 @@ const TEMPLATE: &str = r#"// si-jam-sessions: the golden check, run by a JavaScr
     }
   }
 
+  // SHA-256 (FIPS 180-4), in 32-bit integer operations only. The constants
+  // were derived with exact integer arithmetic (the fractional parts of the
+  // cube roots of the first 64 primes, and of the square roots of the first
+  // 8), and the self-test below checks FIPS 180's examples.
+  var K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+  function sha256(bytes) {
+    var n = bytes.length;
+    var blocks = Math.floor((n + 8) / 64) + 1;
+    var m = new Uint8Array(blocks * 64);
+    m.set(bytes);
+    m[n] = 0x80;
+    // The message length in bits, big-endian in the last eight bytes.
+    var high = Math.floor(n / 0x20000000);
+    var low = (n % 0x20000000) * 8;
+    var end = blocks * 64;
+    for (var i = 0; i < 4; i++) {
+      m[end - 8 + i] = (high >>> (24 - 8 * i)) & 255;
+      m[end - 4 + i] = (low >>> (24 - 8 * i)) & 255;
+    }
+    var hs = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var w = new Int32Array(64);
+    for (var off = 0; off < end; off += 64) {
+      var r;
+      for (r = 0; r < 16; r++) {
+        var j = off + 4 * r;
+        w[r] = (m[j] << 24) | (m[j + 1] << 16) | (m[j + 2] << 8) | m[j + 3];
+      }
+      for (r = 16; r < 64; r++) {
+        var x = w[r - 15], y = w[r - 2];
+        w[r] = (w[r - 16] + (rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3)) + w[r - 7] +
+                (rotr(y, 17) ^ rotr(y, 19) ^ (y >>> 10))) | 0;
+      }
+      var a = hs[0], b = hs[1], c = hs[2], d = hs[3], e = hs[4], f = hs[5], g = hs[6], h = hs[7];
+      for (r = 0; r < 64; r++) {
+        var t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[r] + w[r]) | 0;
+        var t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      hs[0] = (hs[0] + a) | 0; hs[1] = (hs[1] + b) | 0; hs[2] = (hs[2] + c) | 0; hs[3] = (hs[3] + d) | 0;
+      hs[4] = (hs[4] + e) | 0; hs[5] = (hs[5] + f) | 0; hs[6] = (hs[6] + g) | 0; hs[7] = (hs[7] + h) | 0;
+    }
+    var out = "";
+    for (var q = 0; q < 8; q++) out += ("0000000" + (hs[q] >>> 0).toString(16)).slice(-8);
+    return out;
+  }
+  function bytesOf(text) {
+    var b = new Uint8Array(text.length);
+    for (var i = 0; i < text.length; i++) b[i] = text.charCodeAt(i);
+    return b;
+  }
+  var DIGESTS = [
+    ["", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],
+    ["abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+    ["abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+     "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"]
+  ];
+  for (var u = 0; u < DIGESTS.length; u++) {
+    if (sha256(bytesOf(DIGESTS[u][0])) !== DIGESTS[u][1]) {
+      throw new Error("sha256 self-test failed on '" + DIGESTS[u][0] + "'");
+    }
+  }
+
   var wasm = decode("@WASM@");
   var container = decode("@CONTAINER@");
   var take = decode("@TAKE@");
@@ -141,7 +222,15 @@ const TEMPLATE: &str = r#"// si-jam-sessions: the golden check, run by a JavaScr
     throw new Error("the decoded lengths are not the generator's");
   }
 
+  // The SHA-256 of the very bytes compiled below. CI compares it with the
+  // artifact's own digest, so the lines this script prints are tied to that
+  // artifact and not only to this script's text.
+  var wasmSha256 = sha256(wasm);
+  if (wasmSha256 !== "@WASM_SHA256@") {
+    throw new Error("the decoded wasm has sha256 " + wasmSha256 + ", not the generator's");
+  }
   var law = new WebAssembly.Instance(new WebAssembly.Module(wasm), {}).exports;
+  say("wasm-sha256 " + wasmSha256);
   // Any call may grow linear memory, which detaches a view, so each read
   // takes a fresh one.
   function memory() { return new Uint8Array(law.memory.buffer); }
@@ -250,7 +339,7 @@ mod tests {
             container: b"SJIN",
             take: b"SJTK\x01",
             steps: 252_917,
-            law_version: 2,
+            law_version: 99,
             golden: [0xAB; 32],
         }
     }
@@ -278,10 +367,99 @@ mod tests {
         );
         assert!(js.contains("var steps = 252917;"));
         assert!(js.contains(&format!("var golden = \"{}\";", "ab".repeat(32))));
-        assert!(js.contains("law.law_version() !== 2"));
+        assert!(js.contains("law.law_version() !== 99"));
         assert!(js.contains("The check: it must print the golden hash and pass."));
         let control = render(&script(Role::NegativeControl));
         assert!(control.contains("A negative control"));
+    }
+
+    /// The first `count` primes.
+    fn primes(count: usize) -> Vec<u128> {
+        let mut out: Vec<u128> = Vec::new();
+        let mut k = 2u128;
+        while out.len() < count {
+            if out
+                .iter()
+                .take_while(|&&p| p * p <= k)
+                .all(|&p| !k.is_multiple_of(p))
+            {
+                out.push(k);
+            }
+            k += 1;
+        }
+        out
+    }
+
+    /// The integer cube root: the largest `r` with `r^3 <= n`.
+    fn icbrt(n: u128) -> u128 {
+        let (mut lo, mut hi) = (0u128, 1u128 << 43);
+        while lo < hi {
+            let mid = (lo + hi).div_ceil(2);
+            if mid.checked_pow(3).is_some_and(|c| c <= n) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        lo
+    }
+
+    /// The script's SHA-256 constants, derived here with exact integer roots
+    /// (FIPS 180-4, 4.2.2 and 5.3.3), and its self-test digests, checked with
+    /// the Rust `sha2` crate: the JavaScript is checked without a JavaScript
+    /// engine, and again by its own self-test inside each one.
+    #[test]
+    fn the_scripts_sha256_constants_and_vectors_are_right() {
+        let p = primes(64);
+        let k: Vec<String> = p
+            .iter()
+            .map(|&p| format!("0x{:08x}", icbrt(p << 96) & 0xFFFF_FFFF))
+            .collect();
+        for row in k.chunks(8) {
+            assert!(TEMPLATE.contains(&row.join(", ")), "a K row: {row:?}");
+        }
+        assert_eq!(k[0], "0x428a2f98");
+        assert_eq!(k[63], "0xc67178f2");
+        let h: Vec<String> = p[..8]
+            .iter()
+            .map(|&p| format!("0x{:08x}", (p << 64).isqrt() & 0xFFFF_FFFF))
+            .collect();
+        assert!(TEMPLATE.contains(&format!("var hs = [{}];", h.join(", "))));
+        for (text, digest) in [
+            (
+                "",
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ),
+            (
+                "abc",
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ),
+            (
+                "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+                "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+            ),
+        ] {
+            assert_eq!(
+                crate::run::hex(&crate::run::sha256(text.as_bytes())),
+                digest
+            );
+            assert!(TEMPLATE.contains(digest), "the self-test holds {digest}");
+        }
+    }
+
+    /// The script hashes the bytes it hands to `WebAssembly.Module`, requires
+    /// the generator's digest, and prints it for CI to compare with the
+    /// artifact.
+    #[test]
+    fn the_script_proves_which_wasm_it_instantiated() {
+        let js = render(&script(Role::Check));
+        let digest = crate::run::hex(&crate::run::sha256(b"\0asm\x01\0\0\0"));
+        assert!(js.contains(&format!("if (wasmSha256 !== \"{digest}\")")));
+        assert!(js.contains("say(\"wasm-sha256 \" + wasmSha256);"));
+        let hashed = TEMPLATE.find("var wasmSha256 = sha256(wasm);").unwrap();
+        let compiled = TEMPLATE.find("new WebAssembly.Module(wasm)").unwrap();
+        assert!(hashed < compiled, "hashed before it is compiled");
+        assert_eq!(TEMPLATE.matches("new WebAssembly.Module(").count(), 1);
     }
 
     #[test]
