@@ -14,7 +14,7 @@
 //! reads it in microseconds, as midir does (KB recipe 1536). The callback does
 //! no more than it must: it reads the stream clock for the message's arrival
 //! (cpal's `Stream::now`, which on WASAPI is `QueryPerformanceCounter`), then
-//! [`deliver`] starts or releases the monitor voice and hands the press to the
+//! `deliver` starts or releases the monitor voice and hands the press to the
 //! law thread, through two `rtrb` rings made before the port opened. It calls
 //! no multimedia function, allocates nothing and takes no lock; a full ring
 //! drops the message rather than wait. WinMM's invalid-message notice,

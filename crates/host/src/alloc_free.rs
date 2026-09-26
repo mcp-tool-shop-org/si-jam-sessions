@@ -94,7 +94,7 @@ mod tests {
         let events: Vec<Event> = {
             let mut law = Law::acquire();
             law.ingest(&piece.container).unwrap();
-            law.admit_take(&piece.take).unwrap();
+            law.admit_take(piece.take.as_deref().unwrap()).unwrap();
             offline::events(&mut law, 48_000 * 30).unwrap()
         };
         assert!(events.len() > 500, "{}", events.len());
@@ -186,7 +186,7 @@ mod tests {
         let events: Vec<Event> = {
             let mut law = Law::acquire();
             law.ingest(&piece.container).unwrap();
-            law.admit_take(&piece.take).unwrap();
+            law.admit_take(piece.take.as_deref().unwrap()).unwrap();
             offline::events(&mut law, 48_000 * 30).unwrap()
         };
         let mut needs = Needs::default();

@@ -2,9 +2,10 @@
 //!
 //! ```text
 //! cargo run -p host --release -- devices
-//! cargo run -p host --release -- play [--output <index|name>] [--mute] [--voice piano|osc] [--samples <dir>]
-//! cargo run -p host --release -- render <out.wav> [--voice piano|osc] [--samples <dir>]
-//! cargo run -p host --release -- jam [--output <index|name>] [--midi <index|name> | --keyboard] [--mute] [--voice piano|osc] [--samples <dir>]
+//! cargo run -p host --release -- play [--piece <name>] [--output <index|name>] [--mute] [--voice piano|osc] [--samples <dir>]
+//! cargo run -p host --release -- render <out.wav> [--piece <name>] [--voice piano|osc] [--samples <dir>]
+//! cargo run -p host --release -- jam [--piece <name>] [--output <index|name>] [--midi <index|name> | --keyboard] [--mute] [--voice piano|osc] [--samples <dir>]
+//! cargo run -p host --release -- notes <out.json> [--piece <name>]
 //! cargo run -p host --release -- jitter [--output <index|name>]
 //! cargo run -p host --release -- fetch-piano [--dir <dir>] [--archive <file>] [--keep-archive]
 //! cargo run -p host --release -- preview <in.mid> <out.wav> [--samples <dir>]
@@ -31,20 +32,25 @@ use host::event::{Event, Monitor};
 use host::live::{Dropped, Passed, Press, Taker, close_through, delivery, release_all};
 use host::piano::{self, Bank, Needs};
 use host::schedule::{Scheduler, steps_for};
-use host::score::{Piece, clock, root};
+use host::score::{Name, Piece, clock, root};
 use host::synth::Synth;
-use host::{RING_EVENTS, fetch, offline, preview};
+use host::{RING_EVENTS, fetch, notes, offline, preview};
 use rtrb::{Consumer, Producer, RingBuffer};
 
 const USAGE: &str = "usage:
   host devices                  list the audio outputs and the MIDI inputs
-  host play [--output X] [--mute] [--voice piano|osc] [--samples DIR]
-                                play The Entertainer's constructed take against the score and the click;
+  host play [--piece P] [--output X] [--mute] [--voice piano|osc] [--samples DIR]
+                                play the piece: a Battle Hymn arrangement is the score alone; The
+                                Entertainer is its constructed take against the score and the click;
                                 --mute renders and counts everything and sends the device silence
-  host render <out.wav> [--voice piano|osc] [--samples DIR]
+  host render <out.wav> [--piece P] [--voice piano|osc] [--samples DIR]
                                 render the same mix to a WAV file, with no device
-  host jam [--output X] [--midi X | --keyboard] [--mute] [--voice piano|osc] [--samples DIR]
+  host jam [--piece P] [--output X] [--midi X | --keyboard] [--mute] [--voice piano|osc] [--samples DIR]
                                 play the score and the click, take a live take, print its verdicts
+  host notes <out.json> [--piece P]
+                                write the notes the law commits for the piece's score as compact
+                                JSON: onset and length in samples at 48 kHz, pitch, velocity and
+                                MIDI track, and the beats
   host jitter [--output X]      measure the audio clock's readings and the console's key path
   host fetch-piano [--dir DIR] [--archive FILE] [--keep-archive]
                                 download the piano's samples (742 MB, CC BY 3.0) into the per-user
@@ -53,6 +59,9 @@ const USAGE: &str = "usage:
                                 a PREVIEW: render a MIDI file straight through the piano, without the
                                 law, to audition a draft; it is not the law's committed frames
   host notices                  print the licences of the crates and the samples the host uses
+P is the piece: battle-hymn-glm-5.3 (the default) or battle-hymn-kimi-k3, Battle Hymn of the
+Republic as each model arranged it, or entertainer, The Entertainer. The click sounds against a
+take: The Entertainer's constructed take in play and render, and your live take in jam.
 X is an index from `host devices` or part of a name.
 --voice is the score's voice: the piano when fetch-piano has put its samples in the per-user cache
 (or in the DIR --samples names), the oscillator otherwise. The take, your live notes and the click
@@ -64,8 +73,9 @@ fn main() -> ExitCode {
         Some((command, rest)) => match command.as_str() {
             "devices" => options(rest, Accepts::NONE, 0).and_then(|_| devices()),
             "play" => options(rest, Accepts::PLAY, 0).and_then(|o| play(&o)),
-            "render" => options(rest, Accepts::VOICE, 1).and_then(|o| render(&o)),
+            "render" => options(rest, Accepts::RENDER, 1).and_then(|o| render(&o)),
             "jam" => options(rest, Accepts::JAM, 0).and_then(|o| jam(&o)),
+            "notes" => options(rest, Accepts::NOTES, 1).and_then(|o| write_notes(&o)),
             "jitter" => options(rest, Accepts::OUTPUT, 0).and_then(|o| jitter(&o)),
             "fetch-piano" => options(rest, Accepts::FETCH, 0).and_then(|o| fetch_piano(&o)),
             "preview" => options(rest, Accepts::SAMPLES, 2).and_then(|o| preview(&o)),
@@ -96,6 +106,7 @@ enum VoiceChoice {
 
 #[derive(Debug, Default)]
 struct Options {
+    piece: Option<Name>,
     output: Option<String>,
     midi: Option<String>,
     keyboard: bool,
@@ -109,9 +120,18 @@ struct Options {
     positional: Vec<String>,
 }
 
+impl Options {
+    /// The piece `--piece` named, or the default.
+    fn piece(&self) -> Name {
+        self.piece.unwrap_or(Name::DEFAULT)
+    }
+}
+
 /// The options a command takes.
 #[derive(Clone, Copy, Debug)]
 struct Accepts {
+    /// `--piece`.
+    piece: bool,
     output: bool,
     /// `--midi` and `--keyboard`.
     live: bool,
@@ -124,6 +144,7 @@ struct Accepts {
 
 impl Accepts {
     const NONE: Accepts = Accepts {
+        piece: false,
         output: false,
         live: false,
         mute: false,
@@ -143,10 +164,14 @@ impl Accepts {
         voice: true,
         ..Accepts::SAMPLES
     };
+    const RENDER: Accepts = Accepts {
+        piece: true,
+        ..Accepts::VOICE
+    };
     const PLAY: Accepts = Accepts {
         output: true,
         mute: true,
-        ..Accepts::VOICE
+        ..Accepts::RENDER
     };
     const JAM: Accepts = Accepts {
         live: true,
@@ -154,6 +179,10 @@ impl Accepts {
     };
     const FETCH: Accepts = Accepts {
         fetch: true,
+        ..Accepts::NONE
+    };
+    const NOTES: Accepts = Accepts {
+        piece: true,
         ..Accepts::NONE
     };
 }
@@ -169,6 +198,13 @@ fn options(rest: &[String], accepts: Accepts, positional: usize) -> Result<Optio
                 .ok_or_else(|| format!("{arg} needs a value"))
         };
         match arg.as_str() {
+            "--piece" if accepts.piece && o.piece.is_none() => {
+                let name = value()?;
+                o.piece = Some(Name::parse(&name).ok_or_else(|| {
+                    let names: Vec<&str> = Name::ALL.iter().map(|n| n.id()).collect();
+                    format!("--piece is {}, not \"{name}\"", names.join(", "))
+                })?);
+            }
             "--output" if accepts.output && o.output.is_none() => o.output = Some(value()?),
             "--midi" if accepts.live && o.midi.is_none() => o.midi = Some(value()?),
             "--keyboard" if accepts.live && !o.keyboard => o.keyboard = true,
@@ -263,11 +299,31 @@ fn load_piano(dir: &Path, needs: &Needs) -> Result<Arc<Bank>, String> {
 }
 
 /// The synth a command plays through: the score on the piano when there is
-/// one.
-fn synth_for(piano: Option<&Arc<Bank>>) -> Box<Synth> {
-    match piano {
+/// one, and the click only when `click` says ([`click`]).
+fn synth_for(piano: Option<&Arc<Bank>>, click: bool) -> Box<Synth> {
+    let synth = match piano {
         Some(bank) => Synth::new(0).with_piano(Arc::clone(bank)),
         None => Synth::new(0),
+    };
+    if click { synth } else { synth.without_click() }
+}
+
+/// Whether the click sounds: against a take, the piece's constructed take or
+/// the live take of a jam. A piece with no take, played or rendered, is the
+/// score alone.
+fn click(piece: &Piece, jam: bool) -> bool {
+    jam || piece.take.is_some()
+}
+
+/// What `play` and `render` play, for their reports.
+fn playing(piece: &Piece, piano: bool) -> String {
+    let voice = if piano { "the piano" } else { "the oscillator" };
+    match piece.take {
+        Some(_) => format!(
+            "{}'s constructed take, the score on {voice} and the click",
+            piece.name.title()
+        ),
+        None => format!("{}, the score alone on {voice}", piece.name.title()),
     }
 }
 
@@ -352,9 +408,13 @@ fn score_voice(piano: bool) -> &'static str {
     if piano { "the piano" } else { "the pure one" }
 }
 
-/// Prints where to listen, for `play` and `render`, in time order.
+/// Prints where to listen, for `play` and `render`, in time order: the notes
+/// the seed drew, when the piece has a constructed take.
 fn guide(piece: &Piece, piano: bool) {
-    let mut drawn = piece.drawn;
+    if piece.drawn.is_empty() {
+        return;
+    }
+    let mut drawn = piece.drawn.clone();
     drawn.sort_by_key(|d| piece.score.note(d.note).map_or(0, |n| n.onset_sample));
     println!(
         "Where to listen (the take is the reedy voice, the score {}):",
@@ -396,10 +456,14 @@ fn guide(piece: &Piece, piano: bool) {
     }
 }
 
-/// The law's rows for the five drawn notes.
+/// The law's rows for the five drawn notes, when the piece has a
+/// constructed take.
 fn drawn_rows(piece: &Piece, rows: &str) {
+    if piece.drawn.is_empty() {
+        return;
+    }
     println!("The law's verdicts for them:");
-    for d in piece.drawn {
+    for d in &piece.drawn {
         let prefix = format!("note {}: ", d.note.0);
         if let Some(row) = rows.lines().find(|r| r.starts_with(&prefix)) {
             println!("  {row}");
@@ -414,20 +478,19 @@ fn score_notes(piece: &Piece) -> impl Iterator<Item = (u8, u8)> + '_ {
 
 fn render(o: &Options) -> Result<(), String> {
     let path = o.positional.first().map_or("", String::as_str);
-    let piece = Piece::entertainer(&root())?;
+    let piece = Piece::load(&root(), o.piece())?;
     let piano = piano_for(o, score_notes(&piece))?;
     let mut law = Law::acquire();
     law.ingest(&piece.container).map_err(refused)?;
-    law.admit_take(&piece.take).map_err(refused)?;
-    let end = piece.end + 48_000;
-    let synth = synth_for(piano.as_ref());
+    if let Some(take) = &piece.take {
+        law.admit_take(take).map_err(refused)?;
+    }
+    let end = piece.stop();
+    let synth = synth_for(piano.as_ref(), click(&piece, false));
     let (samples, channels, counts) =
         offline::render_with(&mut law, end, 480, synth).map_err(refused)?;
     let info: &[([u8; 4], &str)] = if piano.is_some() {
-        &[
-            (*b"ICMT", piano::CREDIT),
-            (*b"ISFT", "si-jam-sessions host"),
-        ]
+        &offline::PIANO_INFO
     } else {
         &[]
     };
@@ -438,14 +501,10 @@ fn render(o: &Options) -> Result<(), String> {
     let record = law.record().map_err(refused)?;
     let frames = samples.len() / channels.max(1);
     println!(
-        "Rendered {frames} frames ({}) of The Entertainer's constructed take, the score on {} \
-         and the click to {path}: {} 32-bit float at 48 kHz; frame n of the file is law sample n.",
+        "Rendered {frames} frames ({}) of {}, to {path}: {} 32-bit float at 48 kHz; frame n of \
+         the file is law sample n.",
         clock(frames as u64),
-        if piano.is_some() {
-            "the piano"
-        } else {
-            "the oscillator"
-        },
+        playing(&piece, piano.is_some()),
         if channels == 2 { "stereo" } else { "mono" }
     );
     println!(
@@ -462,6 +521,28 @@ fn render(o: &Options) -> Result<(), String> {
     }
     guide(&piece, piano.is_some());
     drawn_rows(&piece, &record.rows);
+    Ok(())
+}
+
+/// `notes`: the notes the law commits for the piece's score, as compact JSON
+/// ([`notes`]), read through the law's C ABI and never from the MIDI file.
+fn write_notes(o: &Options) -> Result<(), String> {
+    let path = o.positional.first().map_or("", String::as_str);
+    let piece = Piece::load(&root(), o.piece())?;
+    let mut law = Law::acquire();
+    let read = notes::read(&mut law, &piece).map_err(refused)?;
+    let json = read.json();
+    std::fs::write(path, &json).map_err(|e| format!("{path}: {e}"))?;
+    println!(
+        "Wrote the {} notes and {} beats the law commits for {} to {path}: {} bytes of JSON, \
+         SHA-256 {}. The law's snapshot of the score hashes to {}.",
+        read.notes.len(),
+        read.beats.len(),
+        piece.name.title(),
+        json.len(),
+        sha256_hex(json.as_bytes()),
+        golden::run::hex(&read.golden)
+    );
     Ok(())
 }
 
@@ -565,13 +646,15 @@ struct Session {
 }
 
 /// Opens `output` and starts its stream, the score on the piano when `piano`
-/// holds its samples, which were loaded before this is called.
+/// holds its samples, which were loaded before this is called, and the click
+/// when `click` says.
 fn open(
     output: &Output,
     law: &mut Law,
     monitor: Option<(Consumer<Monitor>, Consumer<Monitor>)>,
     mute: bool,
     piano: Option<&Arc<Bank>>,
+    click: bool,
 ) -> Result<Session, String> {
     // Every ring is made before the stream: rtrb allocates only in
     // RingBuffer::new.
@@ -586,7 +669,7 @@ fn open(
         .pump(law, steps_for(0, 0, None), &mut events)
         .map_err(refused)?;
     shared.covered.store(pumped.covered, Ordering::Release);
-    let synth = synth_for(piano);
+    let synth = synth_for(piano, click);
     let callback = match monitor {
         None => Callback::new(
             synth,
@@ -783,21 +866,28 @@ fn counted(session: &Session) -> String {
 }
 
 fn play(o: &Options) -> Result<(), String> {
-    let piece = Piece::entertainer(&root())?;
+    let piece = Piece::load(&root(), o.piece())?;
     let output = device::choose_output(o.output.as_deref())?;
     // Every sample is in memory before the stream exists.
     let piano = piano_for(o, score_notes(&piece))?;
     let mut law = Law::acquire();
     law.ingest(&piece.container).map_err(refused)?;
-    law.admit_take(&piece.take).map_err(refused)?;
-    let mut session = open(&output, &mut law, None, o.mute, piano.as_ref())?;
+    if let Some(take) = &piece.take {
+        law.admit_take(take).map_err(refused)?;
+    }
+    let clicks = click(&piece, false);
+    let mut session = open(&output, &mut law, None, o.mute, piano.as_ref(), clicks)?;
     describe(&output, &session);
     guide(&piece, piano.is_some());
     let muted = if o.mute { ", muted" } else { "" };
-    println!("Playing {}{muted}; press Enter to stop.", clock(piece.end));
+    println!(
+        "Playing {} ({}){muted}; press Enter to stop.",
+        playing(&piece, piano.is_some()),
+        clock(piece.end)
+    );
     let stop = stop_flag(&session);
     stop_on_enter(Arc::clone(&stop));
-    let end = piece.end + 48_000;
+    let end = piece.stop();
     let mut failed = None;
     let mut latency = Latency::default();
     let mut startup = Startup::default();
@@ -1065,7 +1155,7 @@ fn finish_input(started: Started, dropped: &Dropped) -> Option<String> {
 }
 
 fn jam(o: &Options) -> Result<(), String> {
-    let piece = Piece::entertainer(&root())?;
+    let piece = Piece::load(&root(), o.piece())?;
     let input = choose_input(o)?;
     let output = device::choose_output(o.output.as_deref())?;
     // Every sample is in memory before the stream exists.
@@ -1081,6 +1171,7 @@ fn jam(o: &Options) -> Result<(), String> {
         Some((monitor_out, hush_out)),
         o.mute,
         piano.as_ref(),
+        click(&piece, true),
     )?;
     describe(&output, &session);
     let stop = stop_flag(&session);
@@ -1094,8 +1185,9 @@ fn jam(o: &Options) -> Result<(), String> {
         Arc::clone(&dropped),
     )?;
     println!(
-        "Play along with the score ({}) and the click; your notes sound in the reedy voice. The \
-         score ends at {}.",
+        "Play along with {} ({}) and the click; your notes sound in the reedy voice. The score \
+         ends at {}.",
+        piece.name.title(),
         if piano.is_some() {
             "the piano"
         } else {
@@ -1105,7 +1197,7 @@ fn jam(o: &Options) -> Result<(), String> {
     );
 
     let mut taker = Taker::default();
-    let end = piece.end + 48_000;
+    let end = piece.stop();
     let mut failed = None;
     let mut latency = Latency::default();
     let mut startup = Startup::default();
@@ -1336,5 +1428,86 @@ mod tests {
             stopped_input(Some(String::from("the keyboard stopped")), close()),
             Some(String::from("the keyboard stopped"))
         );
+    }
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| String::from(*s)).collect()
+    }
+
+    /// `play`, `render`, `jam` and `notes` take `--piece`, and with none they
+    /// play the Battle Hymn as glm-5.3 arranged it. A name that is not a
+    /// piece is refused with the names that are, and the commands that play
+    /// no piece refuse the option.
+    #[test]
+    fn the_playing_commands_take_a_piece_and_open_on_the_battle_hymn() {
+        for (accepts, positional) in [
+            (Accepts::PLAY, &[][..]),
+            (Accepts::RENDER, &["out.wav"][..]),
+            (Accepts::JAM, &[][..]),
+            (Accepts::NOTES, &["out.json"][..]),
+        ] {
+            let n = positional.len();
+            let none = options(&args(positional), accepts, n).unwrap();
+            assert_eq!(none.piece, None);
+            assert_eq!(none.piece(), Name::BattleHymnGlm53);
+            for name in Name::ALL {
+                let mut list = positional.to_vec();
+                list.extend(["--piece", name.id()]);
+                let o = options(&args(&list), accepts, n).unwrap();
+                assert_eq!(o.piece(), name);
+            }
+            let mut list = positional.to_vec();
+            list.extend(["--piece", "battle-hymn"]);
+            let e = options(&args(&list), accepts, n).unwrap_err();
+            for name in Name::ALL {
+                assert!(e.contains(name.id()), "{e}");
+            }
+            let mut twice = positional.to_vec();
+            twice.extend(["--piece", "entertainer", "--piece", "entertainer"]);
+            assert!(options(&args(&twice), accepts, n).is_err());
+        }
+        for (accepts, positional) in [
+            (Accepts::NONE, &[][..]),
+            (Accepts::OUTPUT, &[][..]),
+            (Accepts::SAMPLES, &["in.mid", "out.wav"][..]),
+            (Accepts::FETCH, &[][..]),
+        ] {
+            let mut list = positional.to_vec();
+            list.extend(["--piece", "entertainer"]);
+            assert!(options(&args(&list), accepts, positional.len()).is_err());
+        }
+    }
+
+    /// The help names every piece and the default, and gives `--piece` to
+    /// each command that plays one.
+    #[test]
+    fn the_help_names_the_pieces_and_the_default() {
+        for name in Name::ALL {
+            assert!(USAGE.contains(name.id()), "{}", name.id());
+        }
+        assert!(USAGE.contains("battle-hymn-glm-5.3 (the default)"));
+        for command in [
+            "host play [--piece P]",
+            "host render <out.wav> [--piece P]",
+            "host jam [--piece P]",
+            "host notes <out.json> [--piece P]",
+        ] {
+            assert!(USAGE.contains(command), "{command}");
+        }
+        assert!(!USAGE.contains("play The Entertainer's constructed take against"));
+    }
+
+    /// The click sounds against a take: The Entertainer's constructed take,
+    /// and a live take in `jam`. A Battle Hymn played or rendered is the
+    /// performance alone.
+    #[test]
+    fn the_click_sounds_against_a_take() {
+        let root = root();
+        let entertainer = Piece::load(&root, Name::Entertainer).unwrap();
+        let hymn = Piece::load(&root, Name::BattleHymnGlm53).unwrap();
+        assert!(click(&entertainer, false));
+        assert!(!click(&hymn, false));
+        assert!(click(&hymn, true));
+        assert!(click(&entertainer, true));
     }
 }

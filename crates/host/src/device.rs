@@ -232,7 +232,7 @@ pub fn start(
     })
 }
 
-/// A stream instant in nanoseconds, the unit of every [`Reading`].
+/// A stream instant in nanoseconds, the unit of every [`Reading`](crate::anchor::Reading).
 pub fn nanos(instant: cpal::StreamInstant) -> u64 {
     u64::try_from(instant.as_nanos()).unwrap_or(u64::MAX)
 }

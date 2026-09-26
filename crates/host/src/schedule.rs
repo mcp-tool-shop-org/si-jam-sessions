@@ -146,7 +146,7 @@ mod tests {
     /// law's Rust API: what the ring must carry, in order.
     fn expected(piece: &Piece, last_quantum: u64) -> Vec<Event> {
         let mut law = law::Law::ingest(&piece.container).unwrap();
-        law.admit(&law::wire::decode_take(&piece.take).unwrap())
+        law.admit(&law::wire::decode_take(piece.take.as_deref().unwrap()).unwrap())
             .unwrap();
         while law
             .committed_horizon()
@@ -169,7 +169,7 @@ mod tests {
         let piece = Piece::entertainer(&crate::score::root()).unwrap();
         let mut law = Law::acquire();
         law.ingest(&piece.container).unwrap();
-        law.admit_take(&piece.take).unwrap();
+        law.admit_take(piece.take.as_deref().unwrap()).unwrap();
         let (mut producer, mut consumer) = RingBuffer::new(capacity);
         let mut scheduler = Scheduler::new(0);
         let (mut taken, mut late, mut most_pending) = (Vec::new(), 0, 0);
@@ -240,7 +240,7 @@ mod tests {
         let piece = Piece::entertainer(&crate::score::root()).unwrap();
         let mut law = Law::acquire();
         law.ingest(&piece.container).unwrap();
-        law.admit_take(&piece.take).unwrap();
+        law.admit_take(piece.take.as_deref().unwrap()).unwrap();
         let (mut producer, mut consumer) = RingBuffer::new(crate::RING_EVENTS);
         let mut scheduler = Scheduler::new(0);
         let pumped = scheduler.pump(&mut law, 1, &mut producer).unwrap();
@@ -298,7 +298,7 @@ mod tests {
         for (latency, block) in [(2_582u64, 1_056u64), (8_948, 1_124)] {
             let mut law = Law::acquire();
             law.ingest(&piece.container).unwrap();
-            law.admit_take(&piece.take).unwrap();
+            law.admit_take(piece.take.as_deref().unwrap()).unwrap();
             let (mut producer, mut consumer) = RingBuffer::new(crate::RING_EVENTS);
             let mut scheduler = Scheduler::new(0);
             let (mut taken, mut late, mut lead) = (Vec::new(), 0, 0i64);

@@ -228,6 +228,8 @@ pub struct Synth {
     right: [f32; BLOCK],
     /// The fundamental of every MIDI pitch, in cycles per sample.
     steps: [f64; 128],
+    /// Whether a beat sounds the click ([`Synth::without_click`]).
+    click: bool,
     /// The law sample of the next frame to render.
     frame: u64,
     counts: Counts,
@@ -251,6 +253,7 @@ impl Synth {
             left: [0.0; BLOCK],
             right: [0.0; BLOCK],
             steps,
+            click: true,
             frame,
             counts: Counts::default(),
         })
@@ -260,6 +263,14 @@ impl Synth {
     /// whose samples were loaded before any stream exists.
     pub fn with_piano(mut self: Box<Self>, bank: Arc<Bank>) -> Box<Synth> {
         self.piano = Some(Piano::new(bank));
+        self
+    }
+
+    /// The same synth with no click: a beat is taken from the ring and
+    /// neither sounds nor counts. A piece played with no take is the score
+    /// alone.
+    pub fn without_click(mut self: Box<Self>) -> Box<Synth> {
+        self.click = false;
         self
     }
 
@@ -374,6 +385,9 @@ impl Synth {
     }
 
     fn start(&mut self, event: Event) {
+        if !self.click && matches!(event, Event::Beat { .. }) {
+            return;
+        }
         let onset = event.onset();
         let late = onset < self.frame;
         let offset = onset.saturating_sub(self.frame) as usize;
@@ -589,6 +603,27 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Without the click, a beat is silent and uncounted, and a note beside
+    /// it sounds exactly as it does with the click.
+    #[test]
+    fn a_synth_without_the_click_plays_no_beat() {
+        let events = [beat(0), score_note(0), beat(3_000), take_note(3_000)];
+        let (mut producer, mut consumer) = RingBuffer::new(events.len());
+        for e in events {
+            producer.push(e).unwrap();
+        }
+        let mut quiet = Synth::new(0).without_click();
+        let mut out = vec![0.0f32; 6_000];
+        quiet.render(&mut out, 1, &mut consumer, None);
+        assert_eq!(quiet.counts().beats, 0);
+        assert_eq!(quiet.counts().notes, 2);
+        let (notes_only, _) = render(0, 6_000, 6_000, &[score_note(0), take_note(3_000)]);
+        assert!(out == notes_only, "the beats changed the mix");
+        let (with_click, counts) = render(0, 6_000, 6_000, &events);
+        assert_eq!(counts.beats, 2);
+        assert!(with_click != notes_only, "the click is heard by default");
     }
 
     /// The same, for a synth that starts partway through the piece.
