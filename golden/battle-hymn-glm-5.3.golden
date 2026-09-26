@@ -16,11 +16,11 @@ sample-rate 48000
 quantum-samples 48
 horizon-quanta 100
 gate-samples 1920
-input scores/battle-hymn-glm-5.3/receipt.json 18480 4ed8ad4e2c62a658805dcac7f764fce256f4995742ea3277cba58091d1bbae2e
+input scores/battle-hymn-glm-5.3/receipt.json 18711 06da057f588890106ceda65e7fa85912121e7600a4f7cef8dc847b2841a13504
 input scores/battle-hymn-glm-5.3/battle-hymn-glm-5.3.ly 13307 d6b02f4fa4e025e594bba47cc4984148f899e16a0ebdb04fc354335c8ec86ca9
 input scores/battle-hymn-glm-5.3/battle-hymn-glm-5.3.mid 14780 1374a986e88eb93eec4ac8de9a6e423091d2a434f3159fa1f6fab025d2aad985
-container 46644 30399fdd67552906bb017ff3007457a1d26f7edd15b4c348a065695200e92ad6
-receipt-digest 71cf4bd1c08d649c236a4df167c6760a4b280af904d2a5d0981b7b3dadf41c7a
+container 46875 bc6202c48ca3ec5dcc497258f499c171b84843929f9bff592697dce122716b33
+receipt-digest ee5a82dfc077829c0303daef54c1039d6d7b3149b0f768cdf429ee8d260569d8
 tier own-engraving
 score-notes 1720
 score-end 14451739
@@ -31,4 +31,4 @@ frame-notes 1720 beats 373
 frames-wire 48026 c725c82c1e9d6e5dbef020b38118506d18438f1694e573f8bd8b811be8dc53f1
 frames 96119 9ee9d604049c5491a9cfa37758011c4342d8e127764624ffac95ba8601431b0c
 snapshot 252308
-golden 90a8028760536c6b34c9d46367c6a2f08950665d03b36b71bff0466df40e9b27
+golden 1c0789b11d61914879dd39630b763f44d2955955d1d97cef42c695e0fdd6ad24

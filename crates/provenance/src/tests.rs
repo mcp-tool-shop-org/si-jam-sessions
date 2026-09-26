@@ -2181,7 +2181,7 @@ const KIMI_MID: &[u8] =
 /// SHA-256 of each exemplar receipt's canonical encoding: regression pins on the receipts
 /// and the encoding together, cross-checked against an independent encoder written from the
 /// layout in `canonical.rs`.
-const GLM_DIGEST: &str = "71cf4bd1c08d649c236a4df167c6760a4b280af904d2a5d0981b7b3dadf41c7a";
+const GLM_DIGEST: &str = "ee5a82dfc077829c0303daef54c1039d6d7b3149b0f768cdf429ee8d260569d8";
 const KIMI_DIGEST: &str = "d044ffa49ce26ae3268e8a743ba737dd3d05e93fa7a9106afd203d100e9e4793";
 
 /// One exemplar: the model that generated it, its receipt's bytes and digest, and its two
