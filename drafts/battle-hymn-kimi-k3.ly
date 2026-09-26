@@ -1,4 +1,5 @@
 \version "2.24.0"
+\language "english"
 
 \header {
   title = "Battle Hymn of the Republic"
