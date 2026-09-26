@@ -14,7 +14,9 @@
 //! evidence quotes that hold the page licence and the terms, and each licence statement a
 //! file makes about itself. A phrase found in any of them refuses the score by its class,
 //! even when the page licence is on the admitted list. AI wording is the first class
-//! looked for.
+//! looked for, and matches only as whole words. Every other class matches from the start
+//! of a word, so a stem finds its inflections: `noncommercial` refuses `noncommercially`.
+//! The rule is on [`REFUSAL_PHRASES`].
 //!
 //! **A text must affirm, not merely mention.** Where a text may hold the licence alongside
 //! other text (a copyright markup, an evidence quote), it counts only if [`negates`] finds
@@ -71,12 +73,34 @@ const ADMITTED: &[(&str, AdmittedClass)] = &[
     ("cc-by-4.0", AdmittedClass::CcBy40),
 ];
 
+/// How a refusal class's phrases are looked for in a normalised text. In both modes a
+/// phrase must start a word: at the start of the text, or after a character that is not an
+/// ASCII letter or digit.
+#[derive(Clone, Copy)]
+enum Matching {
+    /// The phrase must also end a word (see [`contains_phrase`]). AI wording needs this:
+    /// its short forms sit inside common words (`ai` in `domain` and `maintainer`) and start
+    /// others (`ai` in `aim`, `air` and `aisle`).
+    WholeWords,
+    /// The phrase is a stem and may end inside a word (see [`contains_stem`]), so it finds
+    /// the stem's inflections: `noncommercial` finds `noncommercially`, and `noderiv` finds
+    /// `noderivs`, `noderivative` and `noderivatives`. A longer word can only add
+    /// refusals, and over-refusal is the safe direction.
+    WordStart,
+}
+
 /// Phrases that name a refusal, in precedence order: the first class with a phrase in the
-/// text is the reason given. Each phrase must occur as whole words (see
-/// [`contains_phrase`]) in normalised text, so `ai` does not match inside `maintainer`.
-const REFUSAL_PHRASES: &[(LicenceRefusal, &[&str])] = &[
+/// text is the reason given. Phrases are looked for in normalised text, as the class's
+/// [`Matching`] says. The rule, closed:
+/// - AI wording matches as whole words only.
+/// - Every other class matches from the start of a word, and its phrases are stems.
+///
+/// A phrase that starts inside a word matches in neither mode: `piano derivatives` holds
+/// `no deriv` only inside `piano`.
+const REFUSAL_PHRASES: &[(LicenceRefusal, Matching, &[&str])] = &[
     (
         LicenceRefusal::AiRestricted,
+        Matching::WholeWords,
         &[
             "ai",
             "a.i.",
@@ -103,19 +127,25 @@ const REFUSAL_PHRASES: &[(LicenceRefusal, &[&str])] = &[
             "to train",
         ],
     ),
-    (LicenceRefusal::AllRightsReserved, &["all rights reserved"]),
+    (
+        LicenceRefusal::AllRightsReserved,
+        Matching::WordStart,
+        &["all rights reserved"],
+    ),
     (
         LicenceRefusal::NoRedistribution,
+        Matching::WordStart,
         &[
-            "no redistribution",
-            "not for redistribution",
-            "may not be redistributed",
-            "do not redistribute",
+            "no redistribut",
+            "not for redistribut",
+            "may not be redistribut",
+            "do not redistribut",
             "personal use only",
         ],
     ),
     (
         LicenceRefusal::NonCommercial,
+        Matching::WordStart,
         &[
             "noncommercial",
             "non-commercial",
@@ -128,18 +158,12 @@ const REFUSAL_PHRASES: &[(LicenceRefusal, &[&str])] = &[
     ),
     (
         LicenceRefusal::NoDerivatives,
-        &[
-            "noderivs",
-            "noderivatives",
-            "no derivatives",
-            "no-derivatives",
-            "no derivative works",
-            "cc by-nd",
-            "cc-by-nd",
-        ],
+        Matching::WordStart,
+        &["noderiv", "no-deriv", "no deriv", "cc by-nd", "cc-by-nd"],
     ),
     (
         LicenceRefusal::ShareAlike,
+        Matching::WordStart,
         &[
             "sharealike",
             "share-alike",
@@ -226,12 +250,18 @@ pub fn admitted_class(normalised: &str) -> Option<AdmittedClass> {
         .map(|&(_, class)| class)
 }
 
-/// The first refusal class, in precedence order, with a phrase in the normalised text.
+/// The first refusal class, in precedence order, with a phrase in the normalised text,
+/// each class matched as [`REFUSAL_PHRASES`] documents.
 pub fn restriction_in(normalised: &str) -> Option<LicenceRefusal> {
     REFUSAL_PHRASES
         .iter()
-        .find(|(_, phrases)| phrases.iter().any(|p| contains_phrase(normalised, p)))
-        .map(|&(class, _)| class)
+        .find(|&&(_, matching, phrases)| {
+            phrases.iter().any(|p| match matching {
+                Matching::WholeWords => contains_phrase(normalised, p),
+                Matching::WordStart => contains_stem(normalised, p),
+            })
+        })
+        .map(|&(class, _, _)| class)
 }
 
 /// True if a normalised text negates, limits, lapses, hedges or questions what it says.
@@ -287,6 +317,24 @@ pub fn contains_phrase(text: &str, phrase: &str) -> bool {
         let open = start == 0 || !bytes[start - 1].is_ascii_alphanumeric();
         let close = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
         if open && close {
+            return true;
+        }
+        // Advance by one character, staying on a char boundary.
+        from = start + text[start..].chars().next().map_or(1, char::len_utf8);
+    }
+    false
+}
+
+/// True if `stem` occurs in `text` at the start of a word: at the text's start, or after a
+/// character that is not an ASCII letter or digit. Unlike [`contains_phrase`], it may end
+/// inside a word, so `noncommercial` is found in `noncommercially`. Both are normalised
+/// texts.
+pub fn contains_stem(text: &str, stem: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut from = 0;
+    while let Some(i) = text[from..].find(stem) {
+        let start = from + i;
+        if start == 0 || !bytes[start - 1].is_ascii_alphanumeric() {
             return true;
         }
         // Advance by one character, staying on a char boundary.
@@ -406,8 +454,10 @@ mod tests {
     }
 
     #[test]
-    fn restriction_phrases_match_whole_words_only() {
-        // `ai` inside a word, and restriction words inside longer words, match nothing.
+    fn a_restriction_phrase_never_matches_from_inside_a_word() {
+        // `ai` inside a word, and restriction words inside longer words, match nothing. Nor
+        // does a stem that starts inside a word: `piano derivatives` holds `no deriv` only
+        // inside `piano`, and `casino commercials` holds `no commercial` inside `casino`.
         for text in [
             "maintained by chris sawer",
             "said the typesetter",
@@ -415,6 +465,8 @@ mod tests {
             "attribution",
             "trained ear",
             "commercially printed",
+            "piano derivatives",
+            "casino commercials",
         ] {
             assert_eq!(restriction_in(text), None, "{text}");
         }
@@ -427,6 +479,80 @@ mod tests {
             restriction_in("cc-by-sa-4.0"),
             Some(LicenceRefusal::ShareAlike)
         );
+    }
+
+    /// Every class but AI wording matches from the start of a word, so a stem finds its
+    /// inflections. The first two texts are the markups found admitted as public domain
+    /// at `fead502`, normalised.
+    #[test]
+    fn restrictions_other_than_ai_match_from_the_start_of_a_word() {
+        use LicenceRefusal::*;
+        let cases = [
+            ("public domain. free to use noncommercially.", NonCommercial),
+            ("public domain, attribution-noderivative", NoDerivatives),
+            ("noncommercially", NonCommercial),
+            ("non-commercially", NonCommercial),
+            ("non commercially", NonCommercial),
+            ("non-commercial use", NonCommercial),
+            // "NonCommercial", "NoDerivatives", "NoDerivative" and "ShareAlike", normalised.
+            ("noncommercial", NonCommercial),
+            ("noderivatives", NoDerivatives),
+            ("noderivative", NoDerivatives),
+            ("sharealike", ShareAlike),
+            ("noderivs", NoDerivatives),
+            ("no-derivs", NoDerivatives),
+            ("no-derivative", NoDerivatives),
+            ("no derivative", NoDerivatives),
+            ("no derivs", NoDerivatives),
+            ("share-alike", ShareAlike),
+            ("share alike", ShareAlike),
+            ("all rights reserved", AllRightsReserved),
+            ("no redistribution", NoRedistribution),
+            ("not for redistributing", NoRedistribution),
+        ];
+        let wrong: Vec<String> = cases
+            .iter()
+            .filter(|&&(text, class)| restriction_in(text) != Some(class))
+            .map(|&(text, class)| {
+                alloc::format!("{text:?} gives {:?}, not {class:?}", restriction_in(text))
+            })
+            .collect();
+        assert!(
+            wrong.is_empty(),
+            "{} of {} wrong: {wrong:#?}",
+            wrong.len(),
+            cases.len()
+        );
+    }
+
+    /// AI wording keeps whole-word matching. Its short forms sit inside common words (`ai`
+    /// in `domain`, `maintainer` and `said`) and start others (`aim`, `air`, `aisle`), and
+    /// none of those is AI wording.
+    #[test]
+    fn domain_does_not_trip_the_ai_class() {
+        for text in [
+            "domain",
+            "public domain",
+            "placed in the public domain by the typesetter",
+            "maintainer: chris sawer",
+            "said",
+            "aim",
+            "air",
+            "aid",
+            "aisle",
+            "tdma",
+            "trained",
+            "training",
+        ] {
+            assert_eq!(restriction_in(text), None, "{text}");
+        }
+        for text in ["ai", "a.i.", "no ai training", "public domain; not for ai"] {
+            assert_eq!(
+                restriction_in(text),
+                Some(LicenceRefusal::AiRestricted),
+                "{text}"
+            );
+        }
     }
 
     #[test]
@@ -485,6 +611,27 @@ mod tests {
         assert!(!contains_phrase("republic domains", "public domain"));
         assert!(!contains_phrase("publicdomain", "public domain"));
         assert!(contains_phrase("é public domain é", "public domain"));
+    }
+
+    #[test]
+    fn stems_match_from_the_start_of_a_word() {
+        assert!(contains_stem("noncommercially", "noncommercial"));
+        assert!(contains_stem(
+            "free to use noncommercially.",
+            "noncommercial"
+        ));
+        assert!(contains_stem("attribution-noderivative", "noderiv"));
+        assert!(contains_stem("(noderivs)", "noderiv"));
+        assert!(contains_stem("noderiv", "noderiv"));
+        // Only from the start of a word.
+        assert!(!contains_stem("anoncommercial", "noncommercial"));
+        assert!(!contains_stem("piano derivatives", "no deriv"));
+        // A later occurrence at the start of a word is still found.
+        assert!(contains_stem(
+            "piano derivatives, no derivatives",
+            "no deriv"
+        ));
+        assert!(!contains_stem("", "noderiv"));
     }
 
     #[test]

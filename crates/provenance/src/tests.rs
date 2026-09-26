@@ -1002,6 +1002,74 @@ fn ai_restrictions_are_refused_wherever_they_are_read() {
     assert_eq!(f.refused(), ai, "smf text event");
 }
 
+/// The whole-word regression found at `fead502`: a markup whose only restriction word was
+/// inflected agreed with the page licence, and was admitted. Every class but AI wording
+/// now matches from the start of a word, so each of these is refused by its class,
+/// wherever it is read.
+#[test]
+fn an_inflected_restriction_is_refused_by_its_class() {
+    use LicenceRefusal::*;
+    let markups = [
+        ("Public Domain. Free to use noncommercially.", NonCommercial),
+        ("Public Domain, Attribution-NoDerivative", NoDerivatives),
+        ("Public Domain, noncommercially", NonCommercial),
+        ("Public Domain, non-commercial use", NonCommercial),
+        ("Public Domain, NonCommercial", NonCommercial),
+        ("Public Domain, NoDerivatives", NoDerivatives),
+        ("Public Domain, no-derivs", NoDerivatives),
+        ("Public Domain, NoDerivative", NoDerivatives),
+        ("Public Domain, ShareAlike", ShareAlike),
+        ("Public Domain, share-alike", ShareAlike),
+        ("Public Domain, all rights reserved", AllRightsReserved),
+    ];
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture, class: LicenceRefusal| {
+        let got = f.admit().map(|a| a.tier);
+        if got != Err(Refusal::Licence(class)) {
+            wrong.push(format!("{place}: {got:?}, not {class:?}"));
+        }
+    };
+    for (markup, class) in markups {
+        let mut f = Fixture::new();
+        f.ly_header(&format!(
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"{markup}\" }}\n"
+        ));
+        check(markup, f, class);
+    }
+    // The terms quote, around a clean terms text.
+    let mut f = Fixture::new();
+    f.evidence_mut("terms").quotes = vec![named(
+        "Dedicated to the public domain. Use it noncommercially.",
+    )];
+    check("terms quote", f, NonCommercial);
+    // A text event in the MIDI file.
+    let mut f = Fixture::new();
+    f.mid = smf_with(&[(0x01, b"Free to use noncommercially")], 1);
+    f.refresh();
+    check("smf text event", f, NonCommercial);
+    let total = markups.len() + 2;
+    assert!(
+        wrong.is_empty(),
+        "{} of {total} wrong: {wrong:#?}",
+        wrong.len()
+    );
+}
+
+/// Word-start matching must not reach the admitted texts: a plain "Public Domain" in the
+/// licence string and in the markup, and the real Entertainer, whose digest is unchanged.
+#[test]
+fn plain_public_domain_and_the_entertainer_are_still_admitted() {
+    let mut f = Fixture::new();
+    f.ly_header("  license = \"Public Domain\"\n  copyright = \\markup { \"Public Domain\" }\n");
+    assert_eq!(f.admit().map(|a| a.tier), Ok(Tier::PublicDomain));
+
+    let receipt = real();
+    assert_eq!(hex(&receipt.digest()), REAL_DIGEST);
+    let admitted = admit(&receipt, &real_supplied()).expect("the Entertainer is admitted");
+    assert_eq!(admitted.tier, Tier::PublicDomain);
+    assert_eq!(hex(&admitted.receipt_digest), REAL_DIGEST);
+}
+
 #[test]
 fn some_file_must_state_the_licence_outright() {
     // No statement anywhere.

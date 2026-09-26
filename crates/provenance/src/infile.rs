@@ -198,8 +198,9 @@ fn plain_smf(bytes: &[u8]) -> Result<u16, Unreadable> {
 /// True if SMF text bytes are a licence statement. They mention copyright or a licence:
 /// one of `copyright`, `(c)`, `licen`, `public domain`, `creative commons`,
 /// `rights reserved` (ASCII, any case), or a copyright sign (U+00A9 in UTF-8, or byte
-/// `A9` in text that is not UTF-8). Or they hold a restriction phrase as whole words
-/// (`licence::restriction_in`), which is how a ban on AI use in a text event is read.
+/// `A9` in text that is not UTF-8). Or they hold a restriction phrase
+/// (`licence::restriction_in`: AI wording as whole words, the other classes from the start
+/// of a word), which is how a ban on AI use in a text event is read.
 pub fn smf_marker(raw: &[u8]) -> bool {
     const MARKERS: &[&[u8]] = &[
         b"copyright",
