@@ -1,0 +1,14 @@
+[package]
+name = "ingest"
+version = "0.1.0"
+description = "Standard MIDI File bytes to the integer score the si-jam-sessions law reads."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+score-model = { path = "../score-model" }
+# Unlicense. `strict` makes a malformed file an error instead of a silently shortened one.
+midly = { version = "=0.5.3", default-features = false, features = ["alloc", "strict"] }
