@@ -65,9 +65,14 @@ pub enum IngestError {
     SmpteOffset { track: u16, tick: u64 },
     /// Format 2: independent sequences.
     SequentialFormat,
-    /// More tracks than a `u16` can index.
+    /// More tracks than a `u16` can index. No file reaches this: an SMF header declares at
+    /// most `u16::MAX` tracks and midly's strict parser holds the file to its declaration,
+    /// so the last index is `u16::MAX - 1`. It stays a refusal because the law refuses
+    /// rather than truncates.
     TooManyTracks,
-    /// A track's ticks do not fit a `u64`.
+    /// A track's ticks do not fit a `u64`. No file reaches this either: a delta is at most
+    /// 2^28 - 1 and a track chunk holds fewer than 2^32 bytes, so a track's last tick is
+    /// below 2^60.
     TickOverflow { track: u16 },
     /// Two tracks set different tempos on one tick.
     ConflictingTempo { tick: u64 },
@@ -120,7 +125,7 @@ pub fn ingest_smf(bytes: &[u8]) -> Result<IngestedScore, IngestError> {
     let mut meter: BTreeMap<u64, (u8, u8)> = BTreeMap::new();
     let mut notes: Vec<IngestedNote> = Vec::new();
     for (index, events) in smf.tracks.iter().enumerate() {
-        let track = u16::try_from(index).map_err(|_| IngestError::TooManyTracks)?;
+        let track = track_index(index)?;
         let found = read_track(track, events, &mut notes)?;
         merge(&mut tempo, found.tempo, |tick| {
             IngestError::ConflictingTempo { tick }
@@ -187,9 +192,16 @@ struct TrackMaps {
     meter: BTreeMap<u64, (u8, u8)>,
 }
 
-/// Keys per channel, and so the number of (channel, pitch) slots per track.
-const KEYS: usize = 128;
-const SLOTS: usize = 16 * KEYS;
+/// A track's position in the file, as score-model's `u16`, or a named refusal.
+fn track_index(index: usize) -> Result<u16, IngestError> {
+    u16::try_from(index).map_err(|_| IngestError::TooManyTracks)
+}
+
+/// The absolute tick after an event's delta, or a named refusal.
+fn advance(tick: u64, delta: u32, track: u16) -> Result<u64, IngestError> {
+    tick.checked_add(u64::from(delta))
+        .ok_or(IngestError::TickOverflow { track })
+}
 
 fn read_track(
     track: u16,
@@ -200,13 +212,13 @@ fn read_track(
         tempo: BTreeMap::new(),
         meter: BTreeMap::new(),
     };
-    // For each (channel, pitch): the notes sounding on it, oldest first, as (start, velocity).
-    let mut sounding: Vec<VecDeque<(u64, u8)>> = (0..SLOTS).map(|_| VecDeque::new()).collect();
+    // For each (channel, pitch) struck in this track: the notes sounding on it, oldest
+    // first, as (start, velocity). Entries appear only when a key is struck, so a track
+    // costs what it holds, not 16 × 128 slots.
+    let mut sounding: BTreeMap<(u8, u8), VecDeque<(u64, u8)>> = BTreeMap::new();
     let mut tick: u64 = 0;
     for event in events {
-        tick = tick
-            .checked_add(u64::from(event.delta.as_int()))
-            .ok_or(IngestError::TickOverflow { track })?;
+        tick = advance(tick, event.delta.as_int(), track)?;
         match event.kind {
             TrackEventKind::Midi { channel, message } => {
                 let channel = channel.as_int();
@@ -215,12 +227,17 @@ fn read_track(
                     MidiMessage::NoteOff { key, .. } => (key.as_int(), 0),
                     _ => continue,
                 };
-                let slot = &mut sounding[usize::from(channel) * KEYS + usize::from(key)];
                 if velocity > 0 {
-                    slot.push_back((tick, velocity));
+                    sounding
+                        .entry((channel, key))
+                        .or_default()
+                        .push_back((tick, velocity));
                     continue;
                 }
-                let Some((start_tick, velocity)) = slot.pop_front() else {
+                let released = sounding
+                    .get_mut(&(channel, key))
+                    .and_then(VecDeque::pop_front);
+                let Some((start_tick, velocity)) = released else {
                     return Err(IngestError::OrphanNoteOff {
                         track,
                         channel,
@@ -260,15 +277,13 @@ fn read_track(
     // Report the earliest-starting unfinished note; ties go to the lowest (channel, pitch).
     let unfinished = sounding
         .iter()
-        .enumerate()
-        .filter_map(|(slot, queue)| queue.front().map(|&(start, _)| (start, slot)))
+        .filter_map(|(&key, queue)| queue.front().map(|&(start, _)| (start, key)))
         .min();
-    if let Some((start_tick, slot)) = unfinished {
+    if let Some((start_tick, (channel, pitch))) = unfinished {
         return Err(IngestError::UnterminatedNote {
             track,
-            // A slot is below 16 × 128, so both fit a u8.
-            channel: u8::try_from(slot / KEYS).unwrap_or(u8::MAX),
-            pitch: u8::try_from(slot % KEYS).unwrap_or(u8::MAX),
+            channel,
+            pitch,
             start_tick,
         });
     }

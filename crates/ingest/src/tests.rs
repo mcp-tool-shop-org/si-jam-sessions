@@ -778,3 +778,55 @@ fn every_entertainer_tick_is_exact_at_ppq_3360() {
 fn gcd_of(a: u64, b: u64) -> u64 {
     if b == 0 { a } else { gcd_of(b, a % b) }
 }
+
+// ---------------------------------------------------------------------------------------
+// Finding 4 of the external review: the two refusals no input has reached.
+
+/// `count` tracks; every one but the last holds only end-of-track, and the last holds one
+/// note.
+fn many_tracks(declared: u16, count: usize) -> Vec<u8> {
+    let empty = Track::default().end();
+    let last = Track::default().on(0, 0, 60, 1).off(96, 0, 60).end();
+    let mut tracks: Vec<Vec<u8>> = vec![empty; count - 1];
+    tracks.push(last);
+    smf_declaring(1, 96, declared, &tracks)
+}
+
+#[test]
+fn the_largest_track_count_a_header_can_declare_fits_a_track_index() {
+    // A header declares at most u16::MAX tracks, so the last index is u16::MAX - 1.
+    let score = ingest_smf(&many_tracks(u16::MAX, usize::from(u16::MAX))).unwrap();
+    assert_eq!(score.notes, vec![note(0, 60, u16::MAX - 1, 0, 96, 1)]);
+    // One track more than any header can declare is refused by midly's strict parser
+    // before ingest indexes a single track.
+    assert_eq!(
+        ingest_smf(&many_tracks(u16::MAX, usize::from(u16::MAX) + 1)),
+        Err(IngestError::Malformed(
+            "file has a different amount of tracks than declared"
+        ))
+    );
+}
+
+#[test]
+fn a_track_index_beyond_u16_is_refused_by_name() {
+    assert_eq!(track_index(0), Ok(0));
+    assert_eq!(track_index(usize::from(u16::MAX)), Ok(u16::MAX));
+    assert_eq!(
+        track_index(usize::from(u16::MAX) + 1),
+        Err(IngestError::TooManyTracks)
+    );
+}
+
+#[test]
+fn a_tick_beyond_u64_is_refused_by_name() {
+    assert_eq!(advance(u64::MAX - 5, 5, 3), Ok(u64::MAX));
+    assert_eq!(
+        advance(u64::MAX - 5, 6, 3),
+        Err(IngestError::TickOverflow { track: 3 })
+    );
+    // The largest delta a file can hold, from the largest tick.
+    assert_eq!(
+        advance(u64::MAX, (1 << 28) - 1, 7),
+        Err(IngestError::TickOverflow { track: 7 })
+    );
+}
