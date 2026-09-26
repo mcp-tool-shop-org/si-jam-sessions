@@ -50,7 +50,8 @@ fn composition(value: &Value) -> Result<Composition, ReceiptError> {
 fn author(value: &Value) -> Result<Author, ReceiptError> {
     let mut o = Obj::new(value, "composition", "authors[]")?;
     let a = Author {
-        name: o.string("name")?,
+        // `null` records an unknown author.
+        name: o.opt_string("name")?,
         role: o.vocab("role", AuthorRole::from_name)?,
         death_year: o.opt_u16("death_year")?,
     };

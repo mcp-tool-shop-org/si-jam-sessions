@@ -1,0 +1,4 @@
+# Receipted fixture files are committed byte for byte: their SHA-256 is on the
+# receipt, so no end-of-line conversion may touch them.
+*.ly -text
+*.mid binary

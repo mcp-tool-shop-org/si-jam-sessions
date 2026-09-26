@@ -540,13 +540,16 @@ impl IngestRefusal {
     /// | 91 | [`IngestRefusal::SmfCount`]: more than one |
     /// | 100 | the receipt does not load, or breaks a structural rule |
     /// | 101–105 | the files: missing, unexpected, supplied twice, size, SHA-256 |
-    /// | 110–115 | the composition: no authors, no death year, no first-publication year, unevidenced, not public domain in the US, not in the EU |
+    /// | 110–116 | the composition: no authors, no death year, no first-publication year, unevidenced, not public domain in the US, not in the EU, an anonymous work not in the EU |
     /// | 120–122 | the arrangement: no typesetter, no engraver, a quote not in its evidence |
     /// | 123–129 | the licence: unknown, all rights reserved, no redistribution, share-alike, non-commercial, no derivatives, AI-restricted |
     /// | 130–131 | the credit-ledger id: missing, unexpected |
-    /// | 132 | an evidence quote that holds the licence or terms text also negates it |
-    /// | 140–144 | the source edition: no publisher, no year, before first publication, scholarly and in term, term not shown |
-    /// | 150–154 | the in-file licence: unreadable, misrecorded, disagrees with the page, stated nowhere, stated by an own engraving |
+    /// | 132 | an evidence quote that holds the licence or terms text also negates, limits, prohibits or conditions it |
+    /// | 140–146 | the source edition: no publisher, no year, before first publication, scholarly and in term, term not shown, anonymous and not public domain in the US, anonymous and not in the EU |
+    /// | 150–154 | the in-file licence: unreadable, misrecorded, disagrees with the page, stated nowhere, an own engraving stating other than CC0 1.0 |
+    ///
+    /// Codes 116, 145 and 146 came with law version 5 and licence predicate
+    /// version 3, which admits anonymous works and anonymous editions.
     pub fn code(&self) -> u32 {
         match self {
             IngestRefusal::Law(refusal) => refusal.code(),
@@ -590,6 +593,7 @@ fn licence_code(refusal: &provenance::Refusal) -> u32 {
         P::Unevidenced { .. } => 113,
         P::NotPublicDomainUs { .. } => 114,
         P::NotPublicDomainEu { .. } => 115,
+        P::AnonymousNotPublicDomainEu { .. } => 116,
         P::MissingTypesetter => 120,
         P::MissingEngraver => 121,
         P::QuoteNotInEvidence { .. } => 122,
@@ -610,6 +614,8 @@ fn licence_code(refusal: &provenance::Refusal) -> u32 {
         P::EditionBeforeFirstPublication { .. } => 142,
         P::ScholarlyEditionInTerm { .. } => 143,
         P::EditionTermNotShown { .. } => 144,
+        P::AnonymousEditionNotPublicDomainUs { .. } => 145,
+        P::AnonymousEditionNotPublicDomainEu { .. } => 146,
         P::Unreadable { .. } => 150,
         P::InFileMisrecorded { .. } => 151,
         P::InFileLicenceMismatch { .. } => 152,
@@ -641,6 +647,9 @@ fn receipt_reason(f: &mut fmt::Formatter<'_>, error: &ReceiptError) -> fmt::Resu
         ReceiptError::EvidenceNotSorted => write!(f, "its evidence is not sorted by id"),
         ReceiptError::RestrictionsNotSorted => write!(f, "its restrictions are not sorted"),
         ReceiptError::BadName => write!(f, "a file or evidence name is not a plain name"),
+        ReceiptError::AnonymousAuthorDeathYear => {
+            write!(f, "an author it records as unknown has a death year")
+        }
         ReceiptError::Canonical { offset, problem } => write!(
             f,
             "its canonical bytes are malformed at byte {offset} ({problem:?})"
@@ -681,6 +690,16 @@ fn licence_reason(f: &mut fmt::Formatter<'_>, refusal: &provenance::Refusal) -> 
             "{author} died in {death_year}, after {}: not public domain in the European Union",
             provenance::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR
         ),
+        P::AnonymousNotPublicDomainEu {
+            role,
+            first_publication_year,
+        } => write!(
+            f,
+            "the {} is unknown and the work was first published in {first_publication_year}, \
+             after {}: not public domain in the European Union",
+            role.name(),
+            provenance::EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR
+        ),
         P::MissingTypesetter => write!(f, "the typesetter is not named"),
         P::MissingEngraver => write!(f, "the engraver is not named"),
         P::QuoteNotInEvidence { what } => write!(
@@ -705,7 +724,8 @@ fn licence_reason(f: &mut fmt::Formatter<'_>, refusal: &provenance::Refusal) -> 
         }
         P::QuoteNegated { what } => write!(
             f,
-            "an evidence quote that holds the {what} text also negates, limits or conditions it"
+            "an evidence quote that holds the {what} text also negates, limits, prohibits or \
+             conditions it"
         ),
         P::MissingEditionPublisher => {
             write!(f, "the source edition's publisher is not on the receipt")
@@ -723,6 +743,18 @@ fn licence_reason(f: &mut fmt::Formatter<'_>, refusal: &provenance::Refusal) -> 
             f,
             "the edition of {edition_year} is too recent for its date to show it is out of term"
         ),
+        P::AnonymousEditionNotPublicDomainUs { edition_year } => write!(
+            f,
+            "the anonymous edition of {edition_year} was published after {}: not public \
+             domain in the United States",
+            provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR
+        ),
+        P::AnonymousEditionNotPublicDomainEu { edition_year } => write!(
+            f,
+            "the anonymous edition of {edition_year} was published after {}: not public \
+             domain in the European Union",
+            provenance::EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR
+        ),
         P::Unreadable { name, why } => {
             write!(f, "{name}'s licence statements cannot be read ({why:?})")
         }
@@ -737,7 +769,8 @@ fn licence_reason(f: &mut fmt::Formatter<'_>, refusal: &provenance::Refusal) -> 
         P::NoInFileLicence => write!(f, "no file states the host page's licence"),
         P::OwnEngravingStatesLicence { name } => write!(
             f,
-            "{name}, an engraving by this project, states a licence of its own"
+            "{name}, an engraving by this project, states a licence other than {}",
+            provenance::OWN_ENGRAVING_LICENCE
         ),
     }
 }

@@ -9,7 +9,8 @@
 //!
 //! [`Receipt`] records what was fetched, from where, and with which SHA-256; the licence
 //! the host page states and the one each file states about itself; who wrote the work and
-//! when they died; when it was first published; and which edition the typesetting follows.
+//! when they died, or that an author is unknown; when it was first published; and which
+//! edition the typesetting follows.
 //! On disk it is JSON in a strict subset ([`Receipt::from_json`]). What the law hashes is
 //! its canonical encoding ([`Receipt::to_canonical`], [`Receipt::digest`]): little-endian,
 //! length-prefixed, versioned, with exactly one encoding per receipt. The layout is
@@ -53,19 +54,32 @@
 //!   belong to this corpus. A text that prohibits one of them ("Claude use is prohibited")
 //!   is still refused by the negation rule, but not named AI-restricted; one that limits
 //!   it without a prohibiting or negating word passes.
-//! - **Automated-access terms** (scraping, crawling) are not a refusal class in version
-//!   2. No phrase names them and no receipt restriction records them. A text that forbids
-//!   them with a prohibiting or negating word ("scraping is prohibited", "no scraping") is
-//!   refused by the negation rule, not by a class of its own; one without ("scraping
-//!   requires written permission") names nothing the predicate refuses.
+//! - **Automated-access terms** (scraping, crawling) are not a refusal class in versions
+//!   2 and 3. No phrase names them and no receipt restriction records them. A text that
+//!   forbids them with a prohibiting or negating word ("scraping is prohibited", "no
+//!   scraping") is refused by the negation rule, not by a class of its own; one without
+//!   ("scraping requires written permission") names nothing the predicate refuses.
 //! - **A limitation phrased only with the noun** ("restrictions apply", "subject to the
-//!   restrictions below") is no longer read as a negation. The nouns "restriction" and
+//!   restrictions below") is not read as a negation. The nouns "restriction" and
 //!   "restrictions" are not negating words, because the Public Domain Mark says its work
-//!   is "free of known restrictions". The verb forms still are ("use is restricted").
+//!   is "free of known restrictions". The verb and adjective forms are ("use is
+//!   restricted", "restrictive terms").
 //! - **Standard rights statements that hold a negating word** are refused: "No known
 //!   copyright restrictions" and "No Copyright - United States" negate through "no".
-//!   Curating those belongs to the next ingest change, which admits CC0 and the Public
-//!   Domain Mark.
+//!   Version 3 admits CC0 1.0 and the Public Domain Mark and leaves these two refused:
+//!   the first does not claim the work is in the public domain, and the second claims it
+//!   for the United States alone.
+//! - **CC0 by other names.** A bare "CC0", and the SPDX forms "CC0-1.0" and "Creative
+//!   Commons Zero v1.0 Universal", are not admitted; a page that gives one is refused as
+//!   unknown and goes to a person. Version 2's tests pin "cc0" and "cc0-1.0" as refused,
+//!   and version 3 keeps them so.
+//! - **An anonymous work's year is the work's.** The receipt holds one first-publication
+//!   year, the year the work as a whole was, which is when its last part was. An earlier
+//!   part's own year, such as a tune printed before its words, goes in the notes. Both
+//!   publication rules read the later year, which can only refuse more.
+//! - **That an author is unknown is the receipt's claim**, like its dates, resting on the
+//!   evidence it cites; the predicate does not weigh claimants. A pseudonym that leaves no
+//!   doubt who the author is names them, and then the author needs a death year.
 
 #![no_std]
 
@@ -86,7 +100,7 @@ pub use canonical::{CANONICAL_VERSION, MAGIC};
 pub use error::{CanonicalProblem, JsonProblem, ReceiptError};
 pub use infile::{Unreadable, smf_marker, statements};
 pub use json::{MAX_DEPTH, MAX_INPUT};
-pub use licence::{LicenceRefusal, normalise};
+pub use licence::{LicenceRefusal, OWN_ENGRAVING_LICENCE, normalise};
 pub use predicate::{Admitted, Refusal, Supplied, Tier, admit};
 pub use receipt::{
     Arrangement, Author, AuthorRole, Composition, Date, EditionKind, Evidence, FileEntry,
@@ -109,6 +123,17 @@ pub const US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR: u16 = RULES_YEAR - 96;
 /// public domain in [`RULES_YEAR`] (70 years after the last author's death, to the end of
 /// the calendar year).
 pub const EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR: u16 = RULES_YEAR - 71;
+
+/// European Union, for an anonymous work: a work with an unknown author, first published
+/// in this year or earlier, is in the public domain in [`RULES_YEAR`]. Directive
+/// 2006/116/EC, Art. 1(3), runs the term of an anonymous work for 70 years after it is
+/// lawfully made available to the public, and Art. 8 counts it from the first of January
+/// after that. Both EU terms run 70 years from an event, so this is the year of
+/// [`EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR`], defined as that constant; the snapshot header's
+/// EU pin carries both.
+pub const EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR: u16 = EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR;
+
+const _: () = assert!(EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR == RULES_YEAR - 71);
 
 /// A scholarly edition published in this year or earlier is out of its term in
 /// [`RULES_YEAR`] (German UrhG §70: 25 years from publication, to the end of the calendar
@@ -158,7 +183,34 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 ///   others), and a text that prohibits or limits anything no longer affirms its licence.
 /// - `d9ebfdc`: the nouns "restriction" and "restrictions" no longer negate, so the Public
 ///   Domain Mark's sentence affirms; the verb forms still negate.
-pub const PREDICATE_VERSION: u32 = 2;
+///
+/// Version 3 differs from version 2:
+/// - It admits anonymous works. An author the receipt records as unknown (in JSON, a
+///   `null` name) needs no death year, and a claimant is never recorded as the author. When
+///   an author is unknown, the work's first-publication year must pass the EU rule for an
+///   anonymous work ([`EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR`], Directive
+///   2006/116/EC, Art. 1(3)), checked before the US rule, which is unchanged; [`admit`]
+///   says why. A source edition of kind `anonymous` records that the author of what it adds
+///   is unknown, and its year must pass both publication rules. The named-author path is
+///   unchanged: an empty author list, and a named author with no death year, still refuse.
+/// - It admits CC0 1.0 and the Public Domain Mark as public domain, by the names their
+///   deeds give them and, for the mark, by its sentence: as a page licence, and in a file
+///   equal to it. An SMF text event that names CC0 is a licence statement.
+/// - A file of this project's own engraving may state [`OWN_ENGRAVING_LICENCE`],
+///   `CC0 1.0`, the licence of the project's own engravings; any other statement is still
+///   refused. Version 2 refused every statement.
+/// - It refuses more: the prohibition group's irregular forms are negating words
+///   (forbade, forbad, forbiddance, prohibitory, prohibitive, restrictive, disallowance and
+///   their plural and adverb forms). The nouns "restriction" and "restrictions" still are
+///   not.
+/// - It names three refusals and one structural error of its own, and the canonical
+///   encoding gains two values: an unknown author's death tag and edition kind
+///   `anonymous`. A receipt that uses neither encodes exactly as it did, so the Entertainer
+///   receipt's digest is unchanged (`e23ba2e9…`), and the Entertainer is admitted as public
+///   domain.
+///
+/// Version 3's pushed refinements, one line each: none yet.
+pub const PREDICATE_VERSION: u32 = 3;
 
 impl Receipt {
     /// Loads a receipt from JSON in the strict subset (see `json.rs`), refusing unknown or

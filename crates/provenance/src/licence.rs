@@ -72,6 +72,10 @@ impl From<Restriction> for LicenceRefusal {
     }
 }
 
+/// The licence of this project's own engravings, and the one licence statement a file of
+/// one may make. It is on the admitted list as public domain.
+pub const OWN_ENGRAVING_LICENCE: &str = "CC0 1.0";
+
 /// The admitted licence classes. Each is its own tier; they never mix.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdmittedClass {
@@ -80,8 +84,22 @@ pub enum AdmittedClass {
 }
 
 /// The normalised texts that admit, and nothing else.
+///
+/// Public domain, in predicate version 3, includes two tools of Creative Commons, each by
+/// the name its deed gives it: CC0 1.0, a dedication to the public domain, and the Public
+/// Domain Mark 1.0, a label for a work free of known copyright, which admits by its
+/// sentence too. Their SPDX forms (`CC0-1.0`, "Creative Commons Zero v1.0 Universal") are
+/// not on the list; the crate's Known limits say why.
 const ADMITTED: &[(&str, AdmittedClass)] = &[
     ("public domain", AdmittedClass::PublicDomain),
+    ("cc0 1.0", AdmittedClass::PublicDomain),
+    ("cc0 1.0 universal", AdmittedClass::PublicDomain),
+    ("public domain mark 1.0", AdmittedClass::PublicDomain),
+    (
+        "this work has been identified as being free of known restrictions under copyright \
+         law, including all related and neighboring rights.",
+        AdmittedClass::PublicDomain,
+    ),
     ("creative commons attribution 4.0", AdmittedClass::CcBy40),
     (
         "creative commons attribution 4.0 international",
@@ -241,19 +259,29 @@ const NEGATING_WORDS: &[&str] = &[
     "solely",
     "exclusively",
     "but",
-    // Prohibition: a text that prohibits anything no longer affirms its licence. The nouns
-    // "restriction" and "restrictions" are left out, because the Public Domain Mark says
-    // its work is "free of known restrictions".
+    // Prohibition: a text that prohibits anything no longer affirms its licence. The group
+    // is prohibit, forbid, ban, restrict and disallow: each verb's inflections, and its
+    // irregular forms that name a prohibition, which are forbid's past tense and the
+    // group's adjectives, adverbs and nouns. The nouns "restriction" and "restrictions" are
+    // left out, because the Public Domain Mark says its work is "free of known
+    // restrictions".
     "prohibit",
     "prohibits",
     "prohibited",
     "prohibiting",
     "prohibition",
     "prohibitions",
+    "prohibitory",
+    "prohibitive",
+    "prohibitively",
     "forbid",
     "forbids",
+    "forbade",
+    "forbad",
     "forbidden",
     "forbidding",
+    "forbiddance",
+    "forbiddances",
     "ban",
     "bans",
     "banned",
@@ -262,10 +290,14 @@ const NEGATING_WORDS: &[&str] = &[
     "restricts",
     "restricted",
     "restricting",
+    "restrictive",
+    "restrictively",
     "disallow",
     "disallows",
     "disallowed",
     "disallowing",
+    "disallowance",
+    "disallowances",
     // Lapse.
     "formerly",
     "previously",
@@ -1059,6 +1091,72 @@ mod tests {
         for &r in Restriction::ALL {
             let refusal = LicenceRefusal::from(r);
             assert_ne!(refusal, LicenceRefusal::Unknown, "{r:?}");
+        }
+    }
+
+    /// Predicate version 3: CC0 1.0 is a public-domain dedication and the Public Domain
+    /// Mark labels a work free of known copyright, so both admit as public domain, by the
+    /// names their deeds give them and, for the mark, by its sentence. Nothing else does.
+    #[test]
+    fn cc0_and_the_public_domain_mark_are_admitted_as_public_domain() {
+        for text in [
+            "cc0 1.0",
+            "cc0 1.0 universal",
+            "public domain mark 1.0",
+            "this work has been identified as being free of known restrictions under \
+             copyright law, including all related and neighboring rights.",
+        ] {
+            assert_eq!(
+                admitted_class(text),
+                Some(AdmittedClass::PublicDomain),
+                "{text}"
+            );
+        }
+        // Exact texts only: a form that only resembles one admits nothing.
+        for text in [
+            "cc0 1.0.",
+            "cc0 1",
+            "cc0 2.0",
+            "cc0 universal",
+            "cc0 1.0 international",
+            "public domain mark",
+            "public domain mark 2.0",
+            "this work is free of known copyright restrictions.",
+            "this work has been identified as being free of known restrictions under \
+             copyright law, including all related and neighbouring rights.",
+        ] {
+            assert_eq!(admitted_class(text), None, "{text}");
+        }
+    }
+
+    /// Predicate version 3: the prohibition group in its irregular forms. Forbid's past
+    /// tense, and the adjectives, adverbs and nouns of prohibit, forbid, restrict and
+    /// disallow, negate like the rest of the group. The nouns "restriction" and
+    /// "restrictions" stay out, because the Public Domain Mark says its work is "free of
+    /// known restrictions".
+    #[test]
+    fn the_prohibition_group_includes_its_irregular_forms() {
+        for word in [
+            "forbade",
+            "forbad",
+            "forbiddance",
+            "forbiddances",
+            "prohibitory",
+            "prohibitive",
+            "prohibitively",
+            "restrictive",
+            "restrictively",
+            "disallowance",
+            "disallowances",
+        ] {
+            assert!(negates(&alloc::format!("public domain, {word}")), "{word}");
+        }
+        for text in [
+            "public domain, restriction",
+            "public domain, restrictions",
+            "free of known restrictions",
+        ] {
+            assert!(!negates(text), "{text}");
         }
     }
 }

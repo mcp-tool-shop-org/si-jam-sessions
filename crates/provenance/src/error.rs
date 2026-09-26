@@ -32,6 +32,9 @@ pub enum ReceiptError {
     RestrictionsNotSorted,
     /// A file or evidence name outside the plain-name alphabet.
     BadName,
+    /// An author the receipt records as unknown has a death year. Nobody knows when an
+    /// unknown author died, and the canonical encoding has no place for it.
+    AnonymousAuthorDeathYear,
     /// The canonical bytes are malformed. `offset` is a byte offset.
     Canonical {
         offset: usize,
@@ -69,4 +72,6 @@ pub enum CanonicalProblem {
     BadFlag,
     NotUtf8,
     TrailingBytes,
+    /// An author marked unknown (death tag 2) whose name is not empty.
+    UnknownAuthorNamed,
 }

@@ -140,11 +140,26 @@ pub use time::{TempoMap, rescale_tick};
 ///   reach window passed the committed horizon, about 20 ms before the note
 ///   was heard, and a later live note could replace that row. Version 4 now
 ///   closes score notes from the playhead, as above.
+/// - 5: the same law under licence predicate version 3, with the same rules
+///   year and cut-offs. Version 3 admits anonymous works and anonymous
+///   editions, CC0 1.0 and the Public Domain Mark, and an own engraving's
+///   statement of CC0 1.0; what it admits and refuses is `crates/provenance`'s
+///   to state (see `provenance::PREDICATE_VERSION`). Its EU cut-off for an
+///   anonymous work is the year of the EU death cut-off, which the header
+///   already carries, so the header gains no word. The ingest verb's refusal
+///   codes 116, 145 and 146 are new.
+///
+///   Nothing version 4 computed for a score it admitted changes: the
+///   Entertainer keeps its receipt digest and its tier, so the constructed
+///   take's snapshot differs from version 4's in its law-version word and its
+///   predicate-version word alone. So version 5 names golden `66b59807…`, and
+///   that snapshot with byte 12 written back to 4 and byte 36 to 2 hashes to
+///   `fd574ccc…`.
 ///
 /// The predicate's rules are the law's, and the law pins their version and
 /// date cut-offs below. Moving any of them fails the build there until the
 /// pin is updated, and by rule the law version with it.
-pub const LAW_VERSION: u32 = 4;
+pub const LAW_VERSION: u32 = 5;
 
 // The licence predicate this law version admits scores under. provenance's
 // cut-offs move every January (`RULES_YEAR`), and a moved cut-off can change
@@ -153,13 +168,21 @@ pub const LAW_VERSION: u32 = 4;
 // with it, in the same commit. The compiler cannot hold the second half; the
 // rule above and the golden, which carries both numbers, do. The snapshot
 // header carries the same values, so a changed one also moves every hash.
+// It has no word for the EU cut-off for an anonymous work, which provenance
+// defines as the EU death cut-off: the last assert holds them equal, so the
+// header's EU word carries both.
 const _: () = {
-    assert!(LAW_VERSION == 4);
-    assert!(provenance::PREDICATE_VERSION == 2);
+    assert!(LAW_VERSION == 5);
+    assert!(provenance::PREDICATE_VERSION == 3);
     assert!(provenance::RULES_YEAR == 2026);
     assert!(provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR == 1930);
     assert!(provenance::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR == 1955);
+    assert!(provenance::EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR == 1955);
     assert!(provenance::LAST_OUT_OF_TERM_EDITION_YEAR == 2000);
+    assert!(
+        provenance::EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR
+            == provenance::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR
+    );
 };
 
 /// Ticks per quarter note: 3,360 = 2⁵·3·5·7.

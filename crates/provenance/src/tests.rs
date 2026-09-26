@@ -234,7 +234,7 @@ impl Fixture {
             },
             composition: Composition {
                 authors: vec![Author {
-                    name: named("A. Composer"),
+                    name: Some(named("A. Composer")),
                     role: AuthorRole::Composer,
                     death_year: Some(1900),
                 }],
@@ -508,7 +508,7 @@ fn the_eu_cut_off_is_every_author_dead_by_1955() {
     // A lyricist counts: the term runs from the last death.
     let mut f = Fixture::new();
     f.receipt.composition.authors.push(Author {
-        name: named("A. Lyricist"),
+        name: Some(named("A. Lyricist")),
         role: AuthorRole::Lyricist,
         death_year: Some(1970),
     });
@@ -1370,6 +1370,737 @@ fn an_unreadable_file_is_refused() {
 }
 
 // ---------------------------------------------------------------------------------------
+// Predicate version 3: CC0, the Public Domain Mark, own engravings under CC0, and the
+// prohibition group's irregular forms.
+
+/// CC0 1.0 admits as public domain: as the page licence, and in a file equal to it. The
+/// in-file rule is unchanged, so every statement must still equal the page's licence.
+#[test]
+fn cc0_is_admitted_as_a_page_licence_and_in_file() {
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture, want: Result<Tier, Refusal>| {
+        let got = f.admit().map(|a| a.tier);
+        if got != want {
+            wrong.push(format!("{place}: {got:?}, not {want:?}"));
+        }
+    };
+    // The page licence, stated equal in the LilyPond file.
+    for text in ["CC0 1.0", "CC0 1.0 Universal"] {
+        let mut f = Fixture::new();
+        f.page_licence(text);
+        f.ly_header(&format!("  license = \"{text}\"\n"));
+        check(text, f, Ok(Tier::PublicDomain));
+    }
+    // Stated by the MIDI file alone, in its copyright event.
+    let mut f = Fixture::new();
+    f.page_licence("CC0 1.0");
+    f.ly_header("");
+    f.mid = smf_with(&[(0x02, b"CC0 1.0")], 1);
+    f.refresh();
+    check("smf copyright event", f, Ok(Tier::PublicDomain));
+    // Stated by the MIDI file alone, in a text event.
+    let mut f = Fixture::new();
+    f.page_licence("CC0 1.0");
+    f.ly_header("");
+    f.mid = smf_with(&[(0x01, b"CC0 1.0")], 1);
+    f.refresh();
+    check("smf text event", f, Ok(Tier::PublicDomain));
+    // A markup that holds it and affirms it agrees, beside a statement of it.
+    let mut f = Fixture::new();
+    f.page_licence("CC0 1.0");
+    f.ly_header(
+        "  license = \"CC0 1.0\"\n  copyright = \\markup { \"Dedicated to the public domain under CC0 1.0\" }\n",
+    );
+    check("markup", f, Ok(Tier::PublicDomain));
+    // Public Domain in a file beside a CC0 page, and CC0 in a file beside a Public Domain
+    // page, are statements that differ from the page.
+    let mut f = Fixture::new();
+    f.page_licence("CC0 1.0");
+    check(
+        "public domain beside cc0",
+        f,
+        Err(Refusal::InFileLicenceMismatch {
+            name: named(LY_NAME),
+        }),
+    );
+    let mut f = Fixture::new();
+    f.ly_header("  license = \"CC0 1.0\"\n");
+    check(
+        "cc0 beside public domain",
+        f,
+        Err(Refusal::InFileLicenceMismatch {
+            name: named(LY_NAME),
+        }),
+    );
+    // CC0 is public domain, so it carries no credit.
+    let mut f = Fixture::new();
+    f.page_licence("CC0 1.0");
+    f.ly_header("  license = \"CC0 1.0\"\n");
+    f.third().credit_ledger_id = Some(named("credit-0001"));
+    check("credit", f, Err(Refusal::UnexpectedCreditLedgerId));
+    assert!(wrong.is_empty(), "{} wrong: {wrong:#?}", wrong.len());
+}
+
+/// The Public Domain Mark admits as public domain, by its sentence and by its name. A
+/// sentence that only resembles the mark's is not it, and a rights statement that holds
+/// a negating word still refuses (Known limits).
+#[test]
+fn the_public_domain_mark_is_admitted_as_public_domain() {
+    const PDM: &str = "This work has been identified as being free of known restrictions \
+                       under copyright law, including all related and neighboring rights.";
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture, want: Result<Tier, Refusal>| {
+        let got = f.admit().map(|a| a.tier);
+        if got != want {
+            wrong.push(format!("{place}: {got:?}, not {want:?}"));
+        }
+    };
+    // The mark's sentence as the page licence, stated equal in the LilyPond file.
+    let mut f = Fixture::new();
+    f.page_licence(PDM);
+    f.ly_header(&format!("  license = \"{PDM}\"\n"));
+    check("the sentence", f, Ok(Tier::PublicDomain));
+    // The mark by its name, stated by the MIDI file's copyright event.
+    let mut f = Fixture::new();
+    f.page_licence("Public Domain Mark 1.0");
+    f.ly_header("");
+    f.mid = smf_with(&[(0x02, b"Public Domain Mark 1.0")], 1);
+    f.refresh();
+    check("the name", f, Ok(Tier::PublicDomain));
+    // The short sentence is neither.
+    let short = "This work is free of known copyright restrictions.";
+    let mut f = Fixture::new();
+    f.page_licence(short);
+    f.ly_header(&format!("  license = \"{short}\"\n"));
+    check(
+        "the short sentence",
+        f,
+        Err(Refusal::Licence(LicenceRefusal::Unknown)),
+    );
+    // A rights statement that holds "no": its own quote negates it.
+    let mut f = Fixture::new();
+    f.page_licence("No known copyright restrictions");
+    f.ly_header("  license = \"No known copyright restrictions\"\n");
+    check(
+        "no known copyright restrictions",
+        f,
+        Err(Refusal::QuoteNegated {
+            what: "page licence",
+        }),
+    );
+    assert!(wrong.is_empty(), "{} wrong: {wrong:#?}", wrong.len());
+}
+
+/// The project's own engravings are under CC0 1.0. A file of one may state exactly that,
+/// in any field that states a licence; any other statement is still refused, CC0 in
+/// another form included.
+#[test]
+fn an_own_engraving_may_state_cc0_1_0_and_nothing_else() {
+    fn own(f: &mut Fixture) {
+        f.receipt.arrangement = Arrangement::ThisProject(ThisProject {
+            engraver: named("si-jam-sessions"),
+        });
+    }
+    let mut wrong = Vec::new();
+    for header in [
+        "  license = \"CC0 1.0\"\n",
+        "  copyright = \"CC0 1.0\"\n",
+        "  license = \"  cc0 \\t 1.0 \"\n",
+        "  license = \"CC0 1.0\"\n  copyright = \"CC0 1.0\"\n",
+        "  copyright = \\markup { \"CC0 1.0\" }\n",
+    ] {
+        let mut f = Fixture::new();
+        f.ly_header(header);
+        own(&mut f);
+        let got = f.admit().map(|a| a.tier);
+        if got != Ok(Tier::OwnEngraving) {
+            wrong.push(format!("{header:?}: {got:?}"));
+        }
+    }
+    for (place, metas) in [
+        ("smf copyright event", &[(0x02, &b"CC0 1.0"[..])][..]),
+        ("smf text event", &[(0x01, &b"CC0 1.0"[..])][..]),
+    ] {
+        let mut f = Fixture::new();
+        f.ly_header("");
+        f.mid = smf_with(metas, 1);
+        f.refresh();
+        own(&mut f);
+        let got = f.admit().map(|a| a.tier);
+        if got != Ok(Tier::OwnEngraving) {
+            wrong.push(format!("{place}: {got:?}"));
+        }
+    }
+    for header in [
+        "  license = \"CC0 1.0 Universal\"\n",
+        "  license = \"CC0\"\n",
+        "  license = \"CC0-1.0\"\n",
+        "  license = \"Creative Commons Attribution 4.0\"\n",
+        "  license = \"CC0 1.0\"\n  copyright = \"Engraved 2026\"\n",
+        "  copyright = \\markup { \"Dedicated to the public domain under CC0 1.0\" }\n",
+    ] {
+        let mut f = Fixture::new();
+        f.ly_header(header);
+        own(&mut f);
+        let want = Err(Refusal::OwnEngravingStatesLicence {
+            name: named(LY_NAME),
+        });
+        let got = f.admit().map(|a| a.tier);
+        if got != want {
+            wrong.push(format!("{header:?}: {got:?}, not {want:?}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{} wrong: {wrong:#?}", wrong.len());
+}
+
+/// A licence text that holds one of the prohibition group's irregular forms does not
+/// affirm its licence, in a copyright markup or in an evidence quote.
+#[test]
+fn a_licence_text_with_an_irregular_prohibiting_form_does_not_affirm() {
+    let texts = [
+        "The typesetter forbade resale.",
+        "Resale was forbad by the typesetter.",
+        "A forbiddance of resale is attached.",
+        "Placed there on restrictive terms.",
+        "Resale is restrictively licensed.",
+        "This notice is prohibitory.",
+        "Resale prices are prohibitive.",
+        "Resale is prohibitively priced.",
+        "A disallowance of resale is attached.",
+    ];
+    let mut wrong = Vec::new();
+    for text in texts {
+        let mut f = Fixture::new();
+        f.ly_header(&format!(
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"Placed in the public domain. {text}\" }}\n"
+        ));
+        let want = Err(Refusal::InFileLicenceMismatch {
+            name: named(LY_NAME),
+        });
+        let got = f.admit().map(|a| a.tier);
+        if got != want {
+            wrong.push(format!("markup {text:?}: {got:?}"));
+        }
+        let mut f = Fixture::new();
+        f.evidence_mut("terms").quotes = vec![format!("Dedicated to the public domain. {text}")];
+        let want = Err(Refusal::QuoteNegated { what: "terms" });
+        let got = f.admit().map(|a| a.tier);
+        if got != want {
+            wrong.push(format!("terms quote {text:?}: {got:?}"));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{} of {} wrong: {wrong:#?}",
+        wrong.len(),
+        texts.len() * 2
+    );
+}
+
+// ---------------------------------------------------------------------------------------
+// Predicate version 3: anonymous works and anonymous editions.
+
+/// An author the receipt records as unknown.
+fn unknown(role: AuthorRole) -> Author {
+    Author {
+        name: None,
+        role,
+        death_year: None,
+    }
+}
+
+/// The fixture with its composer unknown and the work and its edition first published in
+/// `year`.
+fn anonymous_published(year: u16) -> Fixture {
+    let mut f = Fixture::new();
+    f.receipt.composition.authors = vec![unknown(AuthorRole::Composer)];
+    f.receipt.composition.first_publication_year = Some(year);
+    f.receipt.source_edition.year = Some(year);
+    f
+}
+
+/// An anonymous work is public domain by its first publication: at or before 1930 in the
+/// US, at or before 1955 in the EU (Directive 2006/116/EC, Art. 1(3)).
+#[test]
+fn an_anonymous_work_is_admitted_by_its_first_publication() {
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture| {
+        let got = f.admit().map(|a| a.tier);
+        if got != Ok(Tier::PublicDomain) {
+            wrong.push(format!("{place}: {got:?}"));
+        }
+    };
+    check("1859", anonymous_published(1859));
+    check("1930", anonymous_published(1930));
+    // A named lyricist and an unknown composer: the words' author died, the tune's is
+    // unknown.
+    let mut f = anonymous_published(1862);
+    f.receipt.composition.authors.insert(
+        0,
+        Author {
+            name: Some(named("A. Lyricist")),
+            role: AuthorRole::Lyricist,
+            death_year: Some(1910),
+        },
+    );
+    check("a named lyricist beside an unknown composer", f);
+    // Every author unknown.
+    let mut f = anonymous_published(1859);
+    f.receipt
+        .composition
+        .authors
+        .push(unknown(AuthorRole::Lyricist));
+    check("every author unknown", f);
+    assert!(wrong.is_empty(), "{} wrong: {wrong:#?}", wrong.len());
+}
+
+/// First published in 1931, an anonymous work is refused by the US rule; in 1956, by the
+/// EU rule for anonymous works, which is checked first. Both read the same year, and the
+/// EU cut-off is the later one, so checked second it could never refuse anything.
+#[test]
+fn an_anonymous_work_is_refused_by_its_first_publication() {
+    let cases = [
+        (
+            1931,
+            Refusal::NotPublicDomainUs {
+                first_publication_year: 1931,
+            },
+        ),
+        // The EU cut-off is inclusive: 1955 passes it, and the US rule refuses.
+        (
+            1955,
+            Refusal::NotPublicDomainUs {
+                first_publication_year: 1955,
+            },
+        ),
+        (
+            1956,
+            Refusal::AnonymousNotPublicDomainEu {
+                role: AuthorRole::Composer,
+                first_publication_year: 1956,
+            },
+        ),
+    ];
+    let mut wrong = Vec::new();
+    for (year, want) in cases {
+        let got = anonymous_published(year).refused();
+        if got != want {
+            wrong.push(format!("{year}: {got:?}, not {want:?}"));
+        }
+    }
+    // An unknown lyricist beside a named composer who died in time: the refusal names the
+    // unknown author's role.
+    let mut f = Fixture::new();
+    f.receipt
+        .composition
+        .authors
+        .push(unknown(AuthorRole::Lyricist));
+    f.receipt.composition.first_publication_year = Some(1956);
+    f.receipt.source_edition.year = Some(1956);
+    let want = Refusal::AnonymousNotPublicDomainEu {
+        role: AuthorRole::Lyricist,
+        first_publication_year: 1956,
+    };
+    let got = f.refused();
+    if got != want {
+        wrong.push(format!("unknown lyricist: {got:?}, not {want:?}"));
+    }
+    assert!(wrong.is_empty(), "{} wrong: {wrong:#?}", wrong.len());
+}
+
+/// The named-author path is unchanged. A named author still needs a death year, even
+/// beside an unknown one; a work with no unknown author is refused at 1956 by the US rule,
+/// as before; and a named author who died too late is refused beside an unknown one.
+#[test]
+fn the_named_author_path_is_unchanged() {
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture, want: Refusal| {
+        let got = f.refused();
+        if got != want {
+            wrong.push(format!("{place}: {got:?}, not {want:?}"));
+        }
+    };
+    let mut f = Fixture::new();
+    f.receipt.composition.authors = vec![
+        unknown(AuthorRole::Composer),
+        Author {
+            name: Some(named("A. Lyricist")),
+            role: AuthorRole::Lyricist,
+            death_year: None,
+        },
+    ];
+    check(
+        "a named author without a death year",
+        f,
+        Refusal::MissingDeathYear {
+            author: named("A. Lyricist"),
+        },
+    );
+    let mut f = Fixture::new();
+    f.receipt.composition.first_publication_year = Some(1956);
+    f.receipt.source_edition.year = Some(1956);
+    check(
+        "no unknown author, first published 1956",
+        f,
+        Refusal::NotPublicDomainUs {
+            first_publication_year: 1956,
+        },
+    );
+    let mut f = Fixture::new();
+    f.receipt.composition.authors[0].death_year = Some(1956);
+    f.receipt
+        .composition
+        .authors
+        .push(unknown(AuthorRole::Lyricist));
+    check(
+        "a named composer who died in 1956",
+        f,
+        Refusal::NotPublicDomainEu {
+            author: named("A. Composer"),
+            death_year: 1956,
+        },
+    );
+    // An empty author list is still refused: an unknown author is recorded, not left out.
+    let mut f = Fixture::new();
+    f.receipt.composition.authors.clear();
+    check("no authors", f, Refusal::NoAuthors);
+    assert!(wrong.is_empty(), "{} wrong: {wrong:#?}", wrong.len());
+}
+
+/// An unknown author has no death year: the receipt is refused as it loads, from JSON or
+/// from a receipt built in code.
+#[test]
+fn an_unknown_author_has_no_death_year() {
+    let mut f = Fixture::new();
+    f.receipt.composition.authors[0].name = None;
+    assert_eq!(
+        f.refused(),
+        Refusal::Receipt(ReceiptError::AnonymousAuthorDeathYear)
+    );
+    assert_eq!(
+        json_error(|t| t.replacen("\"name\": \"Scott Joplin\"", "\"name\": null", 1)),
+        ReceiptError::AnonymousAuthorDeathYear
+    );
+}
+
+/// In JSON an unknown author's name is `null`, as every value the receipt does not know
+/// is. Any other value that is not a string is refused.
+#[test]
+fn an_unknown_author_is_written_as_a_null_name() {
+    let text = core::str::from_utf8(REAL_JSON).unwrap();
+    let edited = text
+        .replacen("\"name\": \"Scott Joplin\"", "\"name\": null", 1)
+        .replacen("\"death_year\": 1917", "\"death_year\": null", 1);
+    let receipt = Receipt::from_json(edited.as_bytes()).expect("loads");
+    assert_eq!(
+        receipt.composition.authors,
+        vec![unknown(AuthorRole::Composer)]
+    );
+    // The Entertainer with its composer unknown is public domain by its publication in
+    // 1902, and its receipt is a different receipt.
+    let admitted = admit(&receipt, &real_supplied()).expect("admitted");
+    assert_eq!(admitted.tier, Tier::PublicDomain);
+    assert_ne!(hex(&admitted.receipt_digest), REAL_DIGEST);
+    assert_eq!(
+        json_error(|t| t.replacen("\"name\": \"Scott Joplin\"", "\"name\": 1917", 1)),
+        ReceiptError::BadValue {
+            object: "authors[]",
+            key: "name",
+        }
+    );
+}
+
+/// An anonymous source edition's own term runs from its publication: at or before 1930
+/// in the US, at or before 1955 in the EU, the EU rule checked first. The other kinds of
+/// edition are unchanged: their date alone shows them out of term through 2000.
+#[test]
+fn an_anonymous_edition_is_public_domain_by_its_publication() {
+    let edition = |kind: EditionKind, year: u16| {
+        let mut f = Fixture::new();
+        f.receipt.source_edition.kind = kind;
+        f.receipt.source_edition.year = Some(year);
+        f.admit().map(|a| a.tier)
+    };
+    let cases = [
+        (1899, Ok(Tier::PublicDomain)),
+        (1930, Ok(Tier::PublicDomain)),
+        (
+            1931,
+            Err(Refusal::AnonymousEditionNotPublicDomainUs { edition_year: 1931 }),
+        ),
+        (
+            1955,
+            Err(Refusal::AnonymousEditionNotPublicDomainUs { edition_year: 1955 }),
+        ),
+        (
+            1956,
+            Err(Refusal::AnonymousEditionNotPublicDomainEu { edition_year: 1956 }),
+        ),
+    ];
+    let mut wrong = Vec::new();
+    for (year, want) in cases {
+        let got = edition(EditionKind::Anonymous, year);
+        if got != want {
+            wrong.push(format!("anonymous {year}: {got:?}, not {want:?}"));
+        }
+    }
+    for kind in [
+        EditionKind::FirstEdition,
+        EditionKind::Reprint,
+        EditionKind::Scholarly,
+        EditionKind::Unknown,
+    ] {
+        let got = edition(kind, 1956);
+        if got != Ok(Tier::PublicDomain) {
+            wrong.push(format!("{kind:?} 1956: {got:?}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{} wrong: {wrong:#?}", wrong.len());
+    // In JSON the kind is `anonymous`.
+    let receipt = Receipt::from_json(
+        core::str::from_utf8(REAL_JSON)
+            .unwrap()
+            .replacen("\"kind\": \"first-edition\"", "\"kind\": \"anonymous\"", 1)
+            .as_bytes(),
+    )
+    .expect("loads");
+    assert_eq!(receipt.source_edition.kind, EditionKind::Anonymous);
+}
+
+/// An unknown author and an anonymous edition round-trip through the canonical encoding,
+/// which gives them values no version 2 receipt holds: the author's death tag 2 after an
+/// empty name, and edition kind 4. A named author encodes as before (the Entertainer's
+/// digest is pinned above).
+#[test]
+fn an_unknown_author_and_an_anonymous_edition_round_trip() {
+    let mut f = Fixture::new();
+    f.receipt.composition.authors = vec![
+        unknown(AuthorRole::Composer),
+        Author {
+            name: Some(named("A. Lyricist")),
+            role: AuthorRole::Lyricist,
+            death_year: Some(1910),
+        },
+        unknown(AuthorRole::Lyricist),
+    ];
+    f.receipt.source_edition.kind = EditionKind::Anonymous;
+    let bytes = f.receipt.to_canonical();
+    let back = Receipt::from_canonical(&bytes).expect("decodes");
+    assert_eq!(back, f.receipt);
+    assert_eq!(back.to_canonical(), bytes);
+
+    // The first author's record starts after the magic, the version, the schema, the
+    // score id, the title, the date and the author count: an empty name, the composer's
+    // tag, then death tag 2.
+    let at = 4 + 2 + 2 + (4 + 5) + (4 + 5) + 4 + 4;
+    assert_eq!(&bytes[at..at + 6], &[0, 0, 0, 0, 0, 2]);
+    // An unknown author with a name is refused, and so is a death tag past 2.
+    let mut named_unknown = f.receipt.clone();
+    named_unknown.composition.authors[0] = Author {
+        name: Some(named("X")),
+        role: AuthorRole::Composer,
+        death_year: None,
+    };
+    let mut b = named_unknown.to_canonical();
+    // `X` sits at at + 4, its role at at + 5 and its death tag at at + 6.
+    assert_eq!(b[at + 6], 0);
+    b[at + 6] = 2;
+    assert_eq!(
+        Receipt::from_canonical(&b),
+        Err(ReceiptError::Canonical {
+            offset: at,
+            problem: CanonicalProblem::UnknownAuthorNamed
+        })
+    );
+    let mut b = bytes.clone();
+    b[at + 5] = 3;
+    assert_eq!(
+        Receipt::from_canonical(&b),
+        Err(ReceiptError::Canonical {
+            offset: at + 5,
+            problem: CanonicalProblem::BadFlag
+        })
+    );
+}
+
+// ---------------------------------------------------------------------------------------
+// The Battle Hymn fixture: a receipt for this project's own CC0 engraving of Battle Hymn
+// of the Republic, built from `research/battle-hymn/evidence-manifest.json`. Its two files
+// are placeholders; the real score comes later.
+
+const BH_JSON: &[u8] = include_bytes!("../fixtures/battle-hymn/receipt.json");
+const BH_LY: &[u8] = include_bytes!("../fixtures/battle-hymn/battle-hymn.ly");
+const BH_MID: &[u8] = include_bytes!("../fixtures/battle-hymn/battle-hymn.mid");
+const BH_MANIFEST: &[u8] = include_bytes!("../../../research/battle-hymn/evidence-manifest.json");
+
+fn battle_hymn() -> Receipt {
+    Receipt::from_json(BH_JSON).expect("the Battle Hymn fixture loads")
+}
+
+fn battle_hymn_supplied() -> [Supplied<'static>; 2] {
+    [
+        Supplied {
+            name: "battle-hymn.ly",
+            bytes: BH_LY,
+        },
+        Supplied {
+            name: "battle-hymn.mid",
+            bytes: BH_MID,
+        },
+    ]
+}
+
+/// The fixture is admitted as this project's own engraving, and it records what it must:
+/// the words by Julia Ward Howe, who died in 1910, first published in 1862; the tune's
+/// composer as unknown, with the tune's 1859 printing and its claimants in the notes; the
+/// anonymous Ditson edition of 1862; and the engraving's own CC0 1.0 statement.
+#[test]
+fn the_battle_hymn_fixture_is_admitted_as_an_own_engraving() {
+    let r = battle_hymn();
+    let admitted = admit(&r, &battle_hymn_supplied()).expect("admitted");
+    assert_eq!(admitted.tier, Tier::OwnEngraving);
+    assert_eq!(admitted.receipt_digest, r.digest());
+
+    assert_eq!(
+        r.composition.authors,
+        vec![
+            Author {
+                name: Some(named("Julia Ward Howe")),
+                role: AuthorRole::Lyricist,
+                death_year: Some(1910),
+            },
+            unknown(AuthorRole::Composer),
+        ]
+    );
+    assert_eq!(r.composition.first_publication_year, Some(1862));
+    assert_eq!(
+        r.source_edition.publisher.as_deref(),
+        Some("Oliver Ditson & Co.")
+    );
+    assert_eq!(r.source_edition.year, Some(1862));
+    assert_eq!(r.source_edition.kind, EditionKind::Anonymous);
+    assert_eq!(
+        r.arrangement,
+        Arrangement::ThisProject(ThisProject {
+            engraver: named("si-jam-sessions"),
+        })
+    );
+    assert_eq!(
+        r.files[0].in_file_licence,
+        vec![Statement {
+            field: StatementField::LilypondCopyright,
+            text: named(OWN_ENGRAVING_LICENCE),
+        }]
+    );
+    assert_eq!(r.files[1].in_file_licence, vec![]);
+    // The tune's own year and its claimants are notes; a claimant is never an author.
+    let notes = r.notes.join("\n");
+    assert!(notes.contains("The tune was in print by 1859"), "{notes}");
+    assert!(
+        notes.contains("William Steffe is the most-cited"),
+        "{notes}"
+    );
+    for a in &r.composition.authors {
+        assert!(
+            !a.name.as_deref().unwrap_or_default().contains("Steffe"),
+            "{a:?}"
+        );
+    }
+    // The canonical encoding round-trips, and the receipt carries no local paths.
+    let bytes = r.to_canonical();
+    assert_eq!(Receipt::from_canonical(&bytes).as_ref(), Ok(&r));
+    let text = core::str::from_utf8(BH_JSON).unwrap();
+    for needle in [":\\", "/home/", "\\Users\\", "/Users/", "file:"] {
+        assert!(!text.contains(needle), "{needle}");
+    }
+    assert_eq!(text.matches(":/").count(), text.matches("://").count());
+}
+
+/// Reads a JSON object's member, for the manifest check below.
+fn member<'a>(value: &'a crate::json::Value, key: &str) -> &'a crate::json::Value {
+    match value {
+        crate::json::Value::Obj(members) => {
+            &members
+                .iter()
+                .find(|(k, _)| k == key)
+                .unwrap_or_else(|| panic!("no {key}"))
+                .1
+        }
+        _ => panic!("not an object at {key}"),
+    }
+}
+
+fn items(value: &crate::json::Value) -> &[crate::json::Value] {
+    match value {
+        crate::json::Value::Arr(items) => items,
+        _ => panic!("not an array"),
+    }
+}
+
+fn text(value: &crate::json::Value) -> Option<&str> {
+    match value {
+        crate::json::Value::Str(s) => Some(s),
+        crate::json::Value::Null => None,
+        _ => panic!("not a string or null"),
+    }
+}
+
+/// Every evidence entry on the fixture is one file of the committed evidence manifest:
+/// its URL, where it resolved, its size and its SHA-256 are the manifest's, it was fetched
+/// on the receipt's day, and its quotes are that file's manifest quotes, in order. And
+/// every entry is cited, by the composition, the edition or a note.
+#[test]
+fn the_battle_hymn_fixture_is_built_from_the_evidence_manifest() {
+    use crate::json::Value;
+    let manifest = crate::json::parse(BH_MANIFEST).expect("the manifest parses");
+    let r = battle_hymn();
+    let day = format!(
+        "{:04}-{:02}-{:02}T",
+        r.fetched_on.year, r.fetched_on.month, r.fetched_on.day
+    );
+    let mut found = 0;
+    for source in items(member(&manifest, "evidence")) {
+        for file in items(member(source, "files")) {
+            let path = text(member(file, "file")).unwrap();
+            let name = path.strip_prefix("evidence/").unwrap();
+            let Some(e) = r.evidence(name) else {
+                continue;
+            };
+            found += 1;
+            assert_eq!(Some(e.url.as_str()), text(member(file, "url")), "{name}");
+            assert_eq!(
+                e.resolved_url.as_deref(),
+                text(member(file, "resolved_url")),
+                "{name}"
+            );
+            assert_eq!(
+                Some(hex(&e.sha256).as_str()),
+                text(member(file, "sha256")),
+                "{name}"
+            );
+            assert_eq!(&Value::Uint(e.bytes), member(file, "bytes"), "{name}");
+            assert!(
+                text(member(file, "fetched_at")).unwrap().starts_with(&day),
+                "{name}"
+            );
+            let quotes: Vec<&str> = items(member(source, "quotes"))
+                .iter()
+                .filter(|q| text(member(q, "file")) == Some(path))
+                .map(|q| text(member(q, "text")).unwrap())
+                .collect();
+            assert_eq!(e.quotes, quotes, "{name}");
+        }
+    }
+    assert_eq!(found, r.evidence.len(), "an entry is not a manifest file");
+    for e in &r.evidence {
+        let cited = r.composition.evidence.contains(&e.id)
+            || r.source_edition.evidence.contains(&e.id)
+            || r.notes.iter().any(|n| n.contains(e.id.as_str()));
+        assert!(cited, "{} is cited nowhere", e.id);
+    }
+}
+
+// ---------------------------------------------------------------------------------------
 // The canonical encoding.
 
 #[test]
@@ -1649,8 +2380,9 @@ fn the_rules_are_those_of_2026() {
     assert_eq!(RULES_YEAR, 2026);
     assert_eq!(US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR, 1930);
     assert_eq!(EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR, 1955);
+    assert_eq!(EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR, 1955);
     assert_eq!(LAST_OUT_OF_TERM_EDITION_YEAR, 2000);
-    assert_eq!(PREDICATE_VERSION, 2);
+    assert_eq!(PREDICATE_VERSION, 3);
     assert_eq!(CANONICAL_VERSION, 1);
     assert_eq!(RECEIPT_SCHEMA, 1);
 }

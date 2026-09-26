@@ -197,8 +197,8 @@ fn plain_smf(bytes: &[u8]) -> Result<u16, Unreadable> {
 
 /// True if SMF text bytes are a licence statement. They mention copyright or a licence:
 /// one of `copyright`, `(c)`, `licen`, `public domain`, `creative commons`,
-/// `rights reserved` (ASCII, any case), or a copyright sign (U+00A9 in UTF-8, or byte
-/// `A9` in text that is not UTF-8). Or they hold a restriction phrase
+/// `rights reserved`, `cc0` (ASCII, any case), or a copyright sign (U+00A9 in UTF-8, or
+/// byte `A9` in text that is not UTF-8). Or they hold a restriction phrase
 /// (`licence::restriction_in`, on the text's words), which is how a ban on AI use in a
 /// text event is read.
 pub fn smf_marker(raw: &[u8]) -> bool {
@@ -209,6 +209,7 @@ pub fn smf_marker(raw: &[u8]) -> bool {
         b"public domain",
         b"creative commons",
         b"rights reserved",
+        b"cc0",
     ];
     let lower: Vec<u8> = raw.iter().map(u8::to_ascii_lowercase).collect();
     let ascii_hit = MARKERS
@@ -707,6 +708,19 @@ mod tests {
         assert_eq!(
             statements(Media::Smf, &latin1),
             Err(Unreadable::SmfTextNotUtf8)
+        );
+    }
+
+    /// Predicate version 3 admits CC0 1.0, so a text event that names CC0 states a
+    /// licence: a CC0 notice written into the wrong event is still read.
+    #[test]
+    fn a_text_event_that_names_cc0_is_a_statement() {
+        assert!(smf_marker(b"CC0 1.0"));
+        assert!(smf_marker(b"Dedicated under cc0"));
+        let file = smf_with_meta(&[(0x03, b"Piano"), (0x01, b"CC0 1.0")]);
+        assert_eq!(
+            statements(Media::Smf, &file).unwrap(),
+            vec![st(StatementField::SmfText, "CC0 1.0")]
         );
     }
 
