@@ -48,9 +48,9 @@ Two arrangements of *Battle Hymn of the Republic* play side by side on the
 | glm-5.3 | 5:02 | 1,720 | [116 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-glm-5.3.wav), SHA-256 `85b2d567…2eed` |
 | kimi-k3 | 4:37 | 1,924 | [106 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-kimi-k3.wav), SHA-256 `bf49d310…a017` |
 
-Rendering is deterministic: on the Windows machine that made them, a second render gives the same bytes. A
-render on another platform has not been compared yet. After fetching the piano once, this command reproduces
-the first one:
+Rendering is deterministic: a second render gives the same bytes. CI's piano job rendered each exemplar
+whole on Linux, and both SHA-256s equal the release: the same on Windows and Linux. After fetching the
+piano once, this command reproduces the first one:
 
 ```bash
 cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece battle-hymn-glm-5.3 --voice piano

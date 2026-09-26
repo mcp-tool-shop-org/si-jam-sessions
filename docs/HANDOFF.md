@@ -47,8 +47,8 @@ source differ is itself useful to show.
 | Length, notes | 5:02, 1,720 | 4:37, 1,924 |
 | WAV SHA-256 | `85b2d567…2eed` (115,998,136 bytes) | `bf49d310…a017` (106,486,216 bytes) |
 
-- **Rendered through the law** on the piano, with no click. A second render on this Windows machine gives the
-  same bytes. A render on Linux has not been compared yet (see next steps).
+- **Rendered through the law** on the piano, with no click. A second render gives the same bytes. CI's piano
+  job on Linux printed `85b2d567…2eed` and `bf49d310…a017`, the release's hashes: the same on Windows and Linux.
 - **The page's recordings are release assets.** `pages.yml` downloads the MP3 and Opus files from v0.1.0 and
   checks each against `site/audio.sha256` before it builds. Deleting or replacing the release breaks the next
   Pages build on purpose.
@@ -87,21 +87,17 @@ source differ is itself useful to show.
 
 ## Next steps, in order
 
-1. **Compare the exemplar renders on Linux.** Dispatch CI's piano job (`workflow_dispatch` on `ci.yml`). It
-   renders each exemplar whole with the real samples. If its SHA-256s equal the release's, say "the same on
-   Windows and Linux" on the README, the page and the handbook. If they differ, find out why before claiming
-   anything.
-2. **The JavaScript engines check the exemplar goldens** (#15): an `engine-js --exemplar <id>` mode.
-3. **The listening test,** and a note-by-note check of both arrangements against the 1862 edition. Neither has
+1. **The JavaScript engines check the exemplar goldens** (#15): an `engine-js --exemplar <id>` mode.
+2. **The listening test,** and a note-by-note check of both arrangements against the 1862 edition. Neither has
    been done, and the surfaces say so.
-4. **The owner's MIDI keyboard.** WinMM's device-only premises (serial callbacks per port; none after
+3. **The owner's MIDI keyboard.** WinMM's device-only premises (serial callbacks per port; none after
    `midiInClose`) meet a real keyboard for the first time. The surfaces say live input is untested until then.
-5. **Upstream fixes found during the treatment:**
+4. **Upstream fixes found during the treatment:**
    - `@mcptoolshop/site-theme`: CodeCardGrid's cards need `min-width: 0`, patched here in `global.css` until
      then; the theme could also offer an audio section.
    - `@mcptoolshop/shipcheck`: `shipcheck ci` should recognise `cargo deny … advisories` as a dependency
      scanner.
-6. **Keep this handoff current.**
+5. **Keep this handoff current.**
 
 ## Reviews
 

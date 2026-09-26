@@ -46,9 +46,9 @@ Due arrangiamenti di *Battle Hymn of the Republic* vengono riprodotti contempora
 | glm-5.3 | 5:02 | 1,720 | [116 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-glm-5.3.wav), SHA-256 `85b2d567…2eed` |
 | kimi-k3 | 4:37 | 1,924 | [106 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-kimi-k3.wav), SHA-256 `bf49d310…a017` |
 
-Il rendering è deterministico: sulla macchina Windows che li ha creati, un secondo rendering produce gli stessi byte. Un
-rendering su un'altra piattaforma non è ancora stato confrontato. Dopo aver scaricato il piano una volta, questo comando riproduce
-il primo:
+Il rendering è deterministico: un secondo rendering produce gli stessi byte. Il lavoro piano della CI ha
+renderizzato ogni esemplare per intero su Linux, e entrambi gli SHA-256 coincidono con la release: gli stessi su
+Windows e su Linux. Dopo aver scaricato il piano una volta, questo comando riproduce il primo:
 
 ```bash
 cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece battle-hymn-glm-5.3 --voice piano
