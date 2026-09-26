@@ -1,0 +1,958 @@
+{
+ "schema": "si-jam-research/evidence-manifest/1",
+ "subject": "Battle Hymn of the Republic",
+ "built_by": "work/build_manifest.py",
+ "claims": {
+  "C1-tune-first-publication": "The tune was in print by 1859 as the camp-meeting hymn 'Say, Brothers, Will You Meet Us?' with a 'Glory, glory, hallelujah' refrain; the earliest printing reported in the literature is 1858. No composer is named in the 1859 printings found; they credit arrangers only.",
+  "C2-words-first-publication": "Julia Ward Howe's words were first published, unsigned, as 'Battle Hymn of the Republic' on p. 145 of The Atlantic Monthly, vol. IX, no. LII, February 1862 (Ticknor and Fields, Boston, copyright 1862).",
+  "C3-howe-death": "Julia Ward Howe was born 27 May 1819 and died 17 October 1910.",
+  "C4-steffe-dates": "William Steffe's dates are uncertain: the Library of Congress name authority gives 'approximately 1830-1890' from Claghorn's dictionary ('d. ca. 1890'). A Philadelphia Freemason named William Steffe (Past Master, Mozart Lodge No. 436) died in 1911; whether he is the same man is not established.",
+  "C5-authorship-disputed": "Steffe's authorship is a claim, not an established fact: the LoC authority file enters the song under its title and cites Fuld that no claim to its composition can be sustained; Steffe, Thomas Brigham Bishop and Frank E. Jerome are the persistent claimants; an 1861 edition credits 'Phillip Simonds'; the Steffe story (1856, a Charleston fire company) appears in print by 1885.",
+  "L1-eu-anonymous-term": "EU term (Directive 2006/116/EC art. 1): life of the author + 70 years; for anonymous works, 70 years after the work is lawfully made available to the public, unless the author's identity is disclosed in that period (then life + 70). Text read from legislation.gov.uk's copy of the Directive, because EUR-Lex answered HTTP 202 with an empty body.",
+  "H1-source-edition": "The pinned source harmonisation is Oliver Ditson & Co., Boston, 1862 (plate 21454; deposited 9 April 1862), anonymous; its introduction and verse accompaniment already appear in Ditson's July 1861 'Glory, Hallelujah' edition, also anonymous."
+ },
+ "evidence": [
+  {
+   "id": "eu-term-directive-art1",
+   "supports": [
+    "L1-eu-anonymous-term"
+   ],
+   "files": [
+    {
+     "file": "evidence/legislation-gov-uk-eudr-2006-116-art1.html",
+     "url": "https://www.legislation.gov.uk/eudr/2006/116/article/1",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:13:48Z",
+     "bytes": 35981,
+     "sha256": "b6d78e844c286a399f1c82d96224cbb87b34ac817025e8497230a595de735301",
+     "content_type": "text/html;charset=utf-8",
+     "last_modified": "Mon, 14 Sep 2026 16:04:15 GMT"
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/legislation-gov-uk-eudr-2006-116-art1.html",
+     "text": "Directive 2006/116/EC of the European Parliament and of the Council of 12 December 2006 on the term of protection of copyright and certain re",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/legislation-gov-uk-eudr-2006-116-art1.html",
+     "text": "shall run for the life of the author and for 70 years after his death",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/legislation-gov-uk-eudr-2006-116-art1.html",
+     "text": "In the case of anonymous or pseudonymous works, the term of protection shall run for 70 years after the work is lawfully made available to the public.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/legislation-gov-uk-eudr-2006-116-art1.html",
+     "text": "if the author discloses his identity during the period referred to in the first sentence, the term of protection applicable shall be that laid down in paragraph 1.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "loc-naf-howe",
+   "supports": [
+    "C3-howe-death",
+    "C2-words-first-publication"
+   ],
+   "files": [
+    {
+     "file": "evidence/loc-naf-howe-n50029084.marcxml.xml",
+     "url": "https://id.loc.gov/authorities/names/n50029084.marcxml.xml",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:50:03Z",
+     "bytes": 8194,
+     "sha256": "6688a7d1dec0593204203bbf49c659ef753a83638288a5c5bcb59dbc827adc68",
+     "content_type": "application/xml; charset=UTF-8",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/loc-naf-howe-n50029084.marcxml.xml",
+     "text": "Howe, Julia Ward,",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-howe-n50029084.marcxml.xml",
+     "text": "<marcxml:subfield code=\"g\">1910-10-17</marcxml:subfield>",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-howe-n50029084.marcxml.xml",
+     "text": "died 17 October 1910 in Newport, Rhode Island",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-howe-n50029084.marcxml.xml",
+     "text": "known for authorship of Battle Hymn of the Republic",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "loc-naf-steffe",
+   "supports": [
+    "C4-steffe-dates",
+    "C5-authorship-disputed"
+   ],
+   "files": [
+    {
+     "file": "evidence/loc-naf-steffe-nr95043969.marcxml.xml",
+     "url": "https://id.loc.gov/authorities/names/nr95043969.marcxml.xml",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:50:00Z",
+     "bytes": 2391,
+     "sha256": "f09e0539b4f3eabda328b0dc6c34aaecf60f6b4ff064562be8cd61b1ee46fa59",
+     "content_type": "application/xml; charset=UTF-8",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/loc-naf-steffe-nr95043969.marcxml.xml",
+     "text": "approximately 1830-1890",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-steffe-nr95043969.marcxml.xml",
+     "text": "b. ca. 1830; d. ca. 1890; family name Di Stefano; organist, choirmaster, and composer",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-steffe-nr95043969.marcxml.xml",
+     "text": "The composer of Glory Hallelujah is unknown, but it has been claimed to be the work of William Steffe.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "loc-naf-battle-hymn",
+   "supports": [
+    "C5-authorship-disputed",
+    "C1-tune-first-publication"
+   ],
+   "files": [
+    {
+     "file": "evidence/loc-naf-battle-hymn-no00005966.marcxml.xml",
+     "url": "https://id.loc.gov/authorities/names/no00005966.marcxml.xml",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:50:01Z",
+     "bytes": 4174,
+     "sha256": "d4ce5199d8bee23c49e7e41ec8e4e3aa7c93d4052a0a9708e3a8ae481e1ca042",
+     "content_type": "application/xml; charset=UTF-8",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/loc-naf-battle-hymn-no00005966.marcxml.xml",
+     "text": "<marcxml:subfield code=\"a\">Battle hymn of the republic (Song)</marcxml:subfield>",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-battle-hymn-no00005966.marcxml.xml",
+     "text": "none of the claims to the composition of the Glory hallelujah song can be sustained; the most persistent claims have been made on behalf of William Steffe, Thomas Brigham Bishop, and Frank E. Jerome",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-battle-hymn-no00005966.marcxml.xml",
+     "text": "Say, brothers, will you meet us?",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-battle-hymn-no00005966.marcxml.xml",
+     "text": "<marcxml:subfield code=\"a\">Bishop, T. Brigham</marcxml:subfield>",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-naf-battle-hymn-no00005966.marcxml.xml",
+     "text": "<marcxml:subfield code=\"d\">1835-1905.</marcxml:subfield>",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "ia-atlantic-1862-02",
+   "supports": [
+    "C2-words-first-publication"
+   ],
+   "files": [
+    {
+     "file": "evidence/ia-atlantic-1862-02-leaf0-p145.jpg",
+     "url": "https://archive.org/download/sim_atlantic_1862-02_9_52/page/n0_w1600.jpg",
+     "resolved_url": "https://ia600905.us.archive.org/BookReader/BookReaderImages.php?id=sim_atlantic_1862-02_9_52&itemPath=%2F10%2Fitems%2Fsim_atlantic_1862-02_9_52&server=ia600905.us.archive.org&page=n0_w1600.jpg",
+     "fetched_at": "2026-09-26T10:51:39Z",
+     "bytes": 321604,
+     "sha256": "444279e8c827c5d6dab83b5ddbe5e2c29f8eb4d5a9607b1622ae15896e011a07",
+     "content_type": "image/jpeg",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-leaf1-p146.jpg",
+     "url": "https://archive.org/download/sim_atlantic_1862-02_9_52/page/n1_w1000.jpg",
+     "resolved_url": "https://ia800905.us.archive.org/BookReader/BookReaderImages.php?id=sim_atlantic_1862-02_9_52&itemPath=%2F10%2Fitems%2Fsim_atlantic_1862-02_9_52&server=ia800905.us.archive.org&page=n1_w1000.jpg",
+     "fetched_at": "2026-09-26T10:51:41Z",
+     "bytes": 205973,
+     "sha256": "e3f973a5b96858395fe093c12619cb65075c2e800167d0b2951b0053b28db852",
+     "content_type": "image/jpeg",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-leaf3-p148.jpg",
+     "url": "https://archive.org/download/sim_atlantic_1862-02_9_52/page/n3_w1000.jpg",
+     "resolved_url": "https://ia600905.us.archive.org/BookReader/BookReaderImages.php?id=sim_atlantic_1862-02_9_52&itemPath=%2F10%2Fitems%2Fsim_atlantic_1862-02_9_52&server=ia600905.us.archive.org&page=n3_w1000.jpg",
+     "fetched_at": "2026-09-26T11:50:25Z",
+     "bytes": 203338,
+     "sha256": "0d1552f189093502a00d58d9eb70819f452afc90f7ec4913dd0f4a013174ee79",
+     "content_type": "image/jpeg",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-djvu.txt",
+     "url": "https://archive.org/download/sim_atlantic_1862-02_9_52/sim_atlantic_1862-02_9_52_djvu.txt",
+     "resolved_url": "https://ia800905.us.archive.org/10/items/sim_atlantic_1862-02_9_52/sim_atlantic_1862-02_9_52_djvu.txt",
+     "fetched_at": "2026-09-26T10:51:44Z",
+     "bytes": 463262,
+     "sha256": "09de66bd4151a85c3d1b2200559fa62c09f7a8067fbf696f120ed8a896d6707c",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Sat, 10 Apr 2021 18:55:57 GMT"
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-metadata.json",
+     "url": "https://archive.org/metadata/sim_atlantic_1862-02_9_52/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:51:43Z",
+     "bytes": 2158,
+     "sha256": "5ea7a5be666a541cd4ab8814b7990ed0ecb47b98cf5d02020091c64ab7a95c53",
+     "content_type": "application/json",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/ia-atlantic-1862-02-djvu.txt",
+     "text": "BATTLE HYMN OF THE REPUBLIC.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-djvu.txt",
+     "text": "MINE eyes have seen the glory of the coming of the Lord :",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-metadata.json",
+     "text": "The Atlantic Monthly  1862-02: Vol 9 Iss 52",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-leaf0-p145.jpg",
+     "text": "VOL. IX.—FEBRUARY, 1862.—NO. LII.",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-leaf0-p145.jpg",
+     "text": "BATTLE HYMN OF THE REPUBLIC.",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-leaf0-p145.jpg",
+     "text": "Entered according to Act of Congress, in the year 1862, by TICKNOR AND FIELDS, in the Clerk's Office of the District Court of the District of Massachusetts.",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-leaf0-p145.jpg",
+     "text": "[no author's name is printed with the poem; the foot of the page reads 'VOL. IX.' and the signature mark '10']",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/ia-atlantic-1862-02-leaf1-p146.jpg",
+     "text": "146 Agnes of Sorrento. [February,",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    }
+   ]
+  },
+  {
+   "id": "loc-ditson-1862",
+   "supports": [
+    "H1-source-edition",
+    "C2-words-first-publication"
+   ],
+   "files": [
+    {
+     "file": "evidence/loc-ditson-1862-item-2023782802.json",
+     "url": "https://www.loc.gov/item/2023782802/?fo=json",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:53:31Z",
+     "bytes": 40031,
+     "sha256": "aeb6f37de3ef34530fa4c1cc7ec232178fb6d6731b528963ee0c4e8cbba1eb05",
+     "content_type": "application/json",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-001.jp2",
+     "url": "https://tile.loc.gov/storage-services/public/music/muscivilwar-200000858/001.jp2",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:53:31Z",
+     "bytes": 712391,
+     "sha256": "8417617dcb72c4fa2b8973058a7dd11826d31c4b3f161d4186b394b97a12441d",
+     "content_type": "image/jp2",
+     "last_modified": "Tue, 24 Jun 2025 21:51:58 GMT"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-002.jp2",
+     "url": "https://tile.loc.gov/storage-services/public/music/muscivilwar-200000858/002.jp2",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:53:32Z",
+     "bytes": 724433,
+     "sha256": "e1e046c7d4418cb1551cb98ffba02679cf4ff260264acd4b99de0b0bc941145c",
+     "content_type": "image/jp2",
+     "last_modified": "Tue, 24 Jun 2025 21:51:58 GMT"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-003.jp2",
+     "url": "https://tile.loc.gov/storage-services/public/music/muscivilwar-200000858/003.jp2",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:53:33Z",
+     "bytes": 711684,
+     "sha256": "7c13c1d18e352686e19403a9a7a74ddce752dbfbe882c1342d4da013676d2162",
+     "content_type": "image/jp2",
+     "last_modified": "Tue, 24 Jun 2025 21:51:58 GMT"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-004.jp2",
+     "url": "https://tile.loc.gov/storage-services/public/music/muscivilwar-200000858/004.jp2",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T10:53:34Z",
+     "bytes": 721838,
+     "sha256": "0a803fc07998d4cdaec5c877e90a157cd25f7740dae8ca8b1bd4492308010b99",
+     "content_type": "image/jp2",
+     "last_modified": "Tue, 24 Jun 2025 21:51:58 GMT"
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/loc-ditson-1862-item-2023782802.json",
+     "text": "Boston : Oliver Ditson & Co., 1862.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-item-2023782802.json",
+     "text": "Howe, Mrs. Dr. S. G. [Julia Ward] Lyricist",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-001.jp2",
+     "text": "BATTLE HYMN OF THE REPUBLIC Adapted to the favorite Melody of \"Glory, Hallelujah,\" WRITTEN BY Mrs. Dr. S. G. Howe, FOR THE ATLANTIC MONTHLY.",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-001.jp2",
+     "text": "BOSTON. Published by Oliver Ditson & Co. 277 Washington St.",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-001.jp2",
+     "text": "Entered according to act of Congress AD 1862 by O. Ditson & Co. in the Clerks Office of the Dist. Court of Mass.",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-001.jp2",
+     "text": "[manuscript] Deposited April 9th 1862 / Recorded Vol. 37 Page 209",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/loc-ditson-1862-muscivilwar-200000858-002.jp2",
+     "text": "BATTLE HYMN OF THE REPUBLIC. [no composer or arranger named; plate number 21454 at the foot of the music pages]",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    }
+   ]
+  },
+  {
+   "id": "ia-prayer-meeting-tune-book-1859",
+   "supports": [
+    "C1-tune-first-publication",
+    "C5-authorship-disputed"
+   ],
+   "files": [
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-djvu.txt",
+     "url": "https://archive.org/download/prayermeetingtun00amer/prayermeetingtun00amer_djvu.txt",
+     "resolved_url": "https://dn720703.ca.archive.org/0/items/prayermeetingtun00amer/prayermeetingtun00amer_djvu.txt",
+     "fetched_at": "2026-09-26T12:00:48Z",
+     "bytes": 84260,
+     "sha256": "e9c52c6dcd181d8eb7774f1820673c7573886edbdc16457eae0a4b0e69528300",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Wed, 13 Dec 2023 11:42:24 GMT"
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-metadata.json",
+     "url": "https://archive.org/metadata/prayermeetingtun00amer/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T11:49:17Z",
+     "bytes": 1902,
+     "sha256": "0418b2414acb532643bcfc2093a9231e5001146816f263fc4a8a5768ccbcbf69",
+     "content_type": "application/json",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-title-n6.jpg",
+     "url": "https://archive.org/download/prayermeetingtun00amer/page/n6_w1200.jpg",
+     "resolved_url": "https://ia800806.us.archive.org/BookReader/BookReaderImages.php?id=prayermeetingtun00amer&itemPath=%2F0%2Fitems%2Fprayermeetingtun00amer&server=ia800806.us.archive.org&page=n6_w1200.jpg",
+     "fetched_at": "2026-09-26T11:49:09Z",
+     "bytes": 797103,
+     "sha256": "d97a965bd9f6089b0e1d6ee195fea8acaa5ac5cc23177f2758a5e5a52122a9cb",
+     "content_type": "image/jpeg",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-verso-n7.jpg",
+     "url": "https://archive.org/download/prayermeetingtun00amer/page/n7_w1200.jpg",
+     "resolved_url": "https://ia600806.us.archive.org/BookReader/BookReaderImages.php?id=prayermeetingtun00amer&itemPath=%2F0%2Fitems%2Fprayermeetingtun00amer&server=ia600806.us.archive.org&page=n7_w1200.jpg",
+     "fetched_at": "2026-09-26T11:49:13Z",
+     "bytes": 840275,
+     "sha256": "e2bb11a3cca95176a8005afa2a7cc04c70f16148c2f03c114474ce661c4fd0b3",
+     "content_type": "image/jpeg",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-p104-n109.jpg",
+     "url": "https://archive.org/download/prayermeetingtun00amer/page/n109.jpg",
+     "resolved_url": "https://ia600806.us.archive.org/BookReader/BookReaderImages.php?id=prayermeetingtun00amer&itemPath=%2F0%2Fitems%2Fprayermeetingtun00amer&server=ia600806.us.archive.org&page=n109.jpg",
+     "fetched_at": "2026-09-26T11:49:04Z",
+     "bytes": 1124123,
+     "sha256": "91dfdeae6eb414400c5fe38393ba55ddf0eadb80648266706fd48817d37f3495",
+     "content_type": "image/jpeg",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-p105-n110.jpg",
+     "url": "https://archive.org/download/prayermeetingtun00amer/page/n110.jpg",
+     "resolved_url": "https://ia800806.us.archive.org/BookReader/BookReaderImages.php?id=prayermeetingtun00amer&itemPath=%2F0%2Fitems%2Fprayermeetingtun00amer&server=ia800806.us.archive.org&page=n110.jpg",
+     "fetched_at": "2026-09-26T12:02:11Z",
+     "bytes": 1068880,
+     "sha256": "e81cfdf4865878be4a37eb990a429461339b7cd5148d266a5cccdc7503634c2d",
+     "content_type": "image/jpeg",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-djvu.txt",
+     "text": "Entered  according  to  Act  of  Congress,  in  the  year  1859,  by  the",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-djvu.txt",
+     "text": "AMERICAN   SUNDAY-SCHOOL   UNION, \n\n1122  Chestnut  Street",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-djvu.txt",
+     "text": "1  Say,  brothers,  will  you  meet  us,  Say,  brothers,  will  you  meet  us,",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-p104-n109.jpg",
+     "text": "226 SAY, ... 4 Glo-ry, glo-ry, hal-le-lu-jah, Glory, glo-ry, hal-le-lu-jah,",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/ia-prayer-meeting-tune-book-1859-p105-n110.jpg",
+     "text": "BROTHERS. Arr. by A. T.",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    }
+   ]
+  },
+  {
+   "id": "ia-jenks-1859",
+   "supports": [
+    "C1-tune-first-publication",
+    "C5-authorship-disputed"
+   ],
+   "files": [
+    {
+     "file": "evidence/ia-jenks-devotional-melodies-1859-p59-n64.jpg",
+     "url": "https://archive.org/download/devotionalmelo00jenk/page/n64_w1200.jpg",
+     "resolved_url": "https://ia800509.us.archive.org/BookReader/BookReaderImages.php?id=devotionalmelo00jenk&itemPath=%2F18%2Fitems%2Fdevotionalmelo00jenk&server=ia800509.us.archive.org&page=n64_w1200.jpg",
+     "fetched_at": "2026-09-26T12:02:29Z",
+     "bytes": 633092,
+     "sha256": "d3b9108314d657e91c6ef3ac66a7cc3398911668fa8760d941bafe7cefa2fc28",
+     "content_type": "image/jpeg",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-jenks-devotional-melodies-1859-metadata.json",
+     "url": "https://archive.org/metadata/devotionalmelo00jenk/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:02:35Z",
+     "bytes": 1534,
+     "sha256": "f34f6fe97cf7e04dfa3f37b7b5e38ac98d5a92f88564768098f1d32020d4f71a",
+     "content_type": "application/json",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-jenks-devotional-melodies-1859-djvu.txt",
+     "url": "https://archive.org/download/devotionalmelo00jenk/devotionalmelo00jenk_djvu.txt",
+     "resolved_url": "https://dn720207.ca.archive.org/0/items/devotionalmelo00jenk/devotionalmelo00jenk_djvu.txt",
+     "fetched_at": "2026-09-26T12:02:36Z",
+     "bytes": 300505,
+     "sha256": "63a2865f857a85c4d39af3db406e6c4ef7230cf272abbe81b9ab97a653d6b0ab",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Wed, 08 Nov 2023 21:01:18 GMT"
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/ia-jenks-devotional-melodies-1859-metadata.json",
+     "text": "Philadelphia : A. S. Jenks",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-jenks-devotional-melodies-1859-djvu.txt",
+     "text": "Entered  according  to  the  Act  of  Congress,  in  the  year  1859,  by",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-jenks-devotional-melodies-1859-p59-n64.jpg",
+     "text": "“Say, Brothers, will you Meet Us?” L. M. ... ARRANGED BY E. P. RESTEEN. ... NOT TOO FAST. [2/4]",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    }
+   ]
+  },
+  {
+   "id": "ia-sunday-school-times-1859-01-15",
+   "supports": [
+    "C1-tune-first-publication"
+   ],
+   "files": [
+    {
+     "file": "evidence/ia-sunday-school-times-1859-01-15-djvu.txt",
+     "url": "https://archive.org/download/sim_sunday-school-times_1859-01-15_1_3/sim_sunday-school-times_1859-01-15_1_3_djvu.txt",
+     "resolved_url": "https://dn760102.eu.archive.org/0/items/sim_sunday-school-times_1859-01-15_1_3/sim_sunday-school-times_1859-01-15_1_3_djvu.txt",
+     "fetched_at": "2026-09-26T12:00:50Z",
+     "bytes": 273800,
+     "sha256": "73f7d4372ec375a0e782b02d977d4f6a8203f6e895d59ac85db14f58cbf439c5",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Thu, 10 Jun 2021 22:38:40 GMT"
+    },
+    {
+     "file": "evidence/ia-sunday-school-times-1859-01-15-metadata.json",
+     "url": "https://archive.org/metadata/sim_sunday-school-times_1859-01-15_1_3/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:04:00Z",
+     "bytes": 2256,
+     "sha256": "de661a805ce2e8c923ccc26e25d960eba02d831ebfc8d4e10cda530f5af9324a",
+     "content_type": "application/json",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/ia-sunday-school-times-1859-01-15-djvu.txt",
+     "text": "PHILADELPHIA, SATURDAY, JANUARY 15, 1859.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-sunday-school-times-1859-01-15-djvu.txt",
+     "text": "SAY, BROTHERS, WILL YOU MEET US?",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-sunday-school-times-1859-01-15-djvu.txt",
+     "text": "taining the music and words of this beautiful Union",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "loc-glory-hallelujah-ditson-1861",
+   "supports": [
+    "H1-source-edition",
+    "C1-tune-first-publication"
+   ],
+   "files": [
+    {
+     "file": "evidence/loc-glory-glory-1861-ditson-item-2023783074.json",
+     "url": "https://www.loc.gov/item/2023783074/?fo=json",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T11:47:57Z",
+     "bytes": 41792,
+     "sha256": "19eeae109a41381fc0a6f66506a7344a7e2a27611d9bece18c788fc0b806a10f",
+     "content_type": "application/json",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/loc-glory-glory-1861-ditson-001-50pct.jpg",
+     "url": "https://tile.loc.gov/image-services/iiif/public:music:muscivilwar-200001134:001/full/pct:50.0/0/default.jpg",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T11:47:57Z",
+     "bytes": 358151,
+     "sha256": "f623c6c63bbb73477b6ecfb4e5cda1146a79ad91b1b5a8c6b3018c428cd1fdec",
+     "content_type": "image/jpeg",
+     "last_modified": "Sat, 26 Sep 2026 11:47:59 GMT"
+    },
+    {
+     "file": "evidence/loc-glory-glory-1861-ditson-002-50pct.jpg",
+     "url": "https://tile.loc.gov/image-services/iiif/public:music:muscivilwar-200001134:002/full/pct:50.0/0/default.jpg",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T11:47:58Z",
+     "bytes": 380576,
+     "sha256": "766477ae53ed6b27ac3e8a1b9e4cd9e2f5456fc6e66f78be53040d7343605b84",
+     "content_type": "image/jpeg",
+     "last_modified": "Sat, 26 Sep 2026 11:47:26 GMT"
+    },
+    {
+     "file": "evidence/loc-glory-glory-1861-ditson-002.jp2",
+     "url": "https://tile.loc.gov/storage-services/public/music/muscivilwar-200001134/002.jp2",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:00:27Z",
+     "bytes": 709828,
+     "sha256": "77d994b8f11b47e44979728f06778239df3aa2a29638edd9eeddda2c367fcdde",
+     "content_type": "image/jp2",
+     "last_modified": "Tue, 24 Jun 2025 21:56:24 GMT"
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/loc-glory-glory-1861-ditson-item-2023783074.json",
+     "text": "Boston : Oliver Ditson & Co., 1861.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-glory-glory-1861-ditson-001-50pct.jpg",
+     "text": "The popular refrain of GLORY, HALLELUJAH AS SUNG BY THE Federal Volunteers Throughout the Union.",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/loc-glory-glory-1861-ditson-001-50pct.jpg",
+     "text": "[manuscript] Deposited July 24th 1861",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    },
+    {
+     "file": "evidence/loc-glory-glory-1861-ditson-002-50pct.jpg",
+     "text": "GLORY! GLORY! HALLELUJAH! [no composer or arranger named; piano introduction bars 1-3 and the verse chord pattern match the 1862 edition]",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    }
+   ]
+  },
+  {
+   "id": "loc-john-browns-song-1861",
+   "supports": [
+    "C5-authorship-disputed"
+   ],
+   "files": [
+    {
+     "file": "evidence/loc-john-browns-song-1861-simonds-item-2023783905.json",
+     "url": "https://www.loc.gov/item/2023783905/?fo=json",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:01:24Z",
+     "bytes": 43103,
+     "sha256": "51d4f54b43be2b9d7d30c846d6addbb8525bd4997ea46851dc4d9b637a91eccb",
+     "content_type": "application/json",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/loc-john-browns-song-1861-simonds-item-2023783905.json",
+     "text": "Boston : Russell & Patee, 1861.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-john-browns-song-1861-simonds-item-2023783905.json",
+     "text": "Simonds, Phillip Composer",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "loc-ditson-1890-reissue",
+   "supports": [
+    "C5-authorship-disputed"
+   ],
+   "files": [
+    {
+     "file": "evidence/loc-ditson-1890-reissue-item-2023871344.json",
+     "url": "https://www.loc.gov/item/2023871344/?fo=json",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:01:24Z",
+     "bytes": 39090,
+     "sha256": "137e1bb70d35ddcb151a3a2f642c9b2f38e5ab6f5e77d161391b89f9cf53020d",
+     "content_type": "application/json",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/loc-ditson-1890-reissue-p1-50pct.jpg",
+     "url": "https://tile.loc.gov/image-services/iiif/public:music:musihas-100010493:musihas-100010493.0001/full/pct:50.0/0/default.jpg",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:04:01Z",
+     "bytes": 184640,
+     "sha256": "cf44b9dd71c8e577de55d240cd52ebd6a3d953187218361a4df7b05a103fe796",
+     "content_type": "image/jpeg",
+     "last_modified": "Sat, 26 Sep 2026 11:47:09 GMT"
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/loc-ditson-1890-reissue-item-2023871344.json",
+     "text": "Steffe, William Composer",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-ditson-1890-reissue-item-2023871344.json",
+     "text": "Received by LC in 1890.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/loc-ditson-1890-reissue-p1-50pct.jpg",
+     "text": "[pencil, not printed:] [Steffe, Wm.]",
+     "check": "read-from-image by the archivist; the sha256 pins the image read"
+    }
+   ]
+  },
+  {
+   "id": "ia-army-navy-journal-1885-03-21",
+   "supports": [
+    "C5-authorship-disputed"
+   ],
+   "files": [
+    {
+     "file": "evidence/ia-army-navy-journal-1885-03-21-djvu.txt",
+     "url": "https://archive.org/download/sim_armed-forces-journal_1885-03-21_22_34/sim_armed-forces-journal_1885-03-21_22_34_djvu.txt",
+     "resolved_url": "https://dn790001.ca.archive.org/0/items/sim_armed-forces-journal_1885-03-21_22_34/sim_armed-forces-journal_1885-03-21_22_34_djvu.txt",
+     "fetched_at": "2026-09-26T12:00:57Z",
+     "bytes": 382853,
+     "sha256": "ab7b5caa3597d74985ea32d9ac198c901021f0a73a98e3ef5a7d65b07bfe247f",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Sun, 30 May 2021 17:09:42 GMT"
+    },
+    {
+     "file": "evidence/ia-army-navy-journal-1885-03-21-metadata.json",
+     "url": "https://archive.org/metadata/sim_armed-forces-journal_1885-03-21_22_34/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:04:02Z",
+     "bytes": 2286,
+     "sha256": "fc41a6de48aeae4e4fe79ba50819b881d3c10cf5d789842e2424ae8bd9e7737e",
+     "content_type": "application/json",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/ia-army-navy-journal-1885-03-21-djvu.txt",
+     "text": "was composed in 1856 by Mr. William Steffe, a some-",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-army-navy-journal-1885-03-21-djvu.txt",
+     "text": "fora fire company at Charleston, S. C., for a series",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-army-navy-journal-1885-03-21-djvu.txt",
+     "text": "The friends of Mr. Steffe, who claim that he still re-",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "ia-elson-1900",
+   "supports": [
+    "C5-authorship-disputed"
+   ],
+   "files": [
+    {
+     "file": "evidence/ia-elson-national-music-of-america-1900-djvu.txt",
+     "url": "https://archive.org/download/nationalmusicofa00elso/nationalmusicofa00elso_djvu.txt",
+     "resolved_url": "https://ia600809.us.archive.org/9/items/nationalmusicofa00elso/nationalmusicofa00elso_djvu.txt",
+     "fetched_at": "2026-09-26T12:01:04Z",
+     "bytes": 369550,
+     "sha256": "667def56c8b8cfe60d61d0c0aa028c755dd35e907d514a8b60e28d399b308265",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Thu, 19 Oct 2023 23:03:28 GMT"
+    },
+    {
+     "file": "evidence/ia-elson-national-music-of-america-1900-metadata.json",
+     "url": "https://archive.org/metadata/nationalmusicofa00elso/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:04:06Z",
+     "bytes": 1609,
+     "sha256": "790ceddb2f0ef62249abdb43acecd56870212258cfca010a1d919118b6e17a5a",
+     "content_type": "application/json",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/ia-elson-national-music-of-america-1900-djvu.txt",
+     "text": "is  claimed  by  Mr.  William  Steffe,  a  popular \nSunday-school  composer,  as  his  own.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "ia-claghorn-1974",
+   "supports": [
+    "C1-tune-first-publication",
+    "C4-steffe-dates",
+    "C5-authorship-disputed"
+   ],
+   "files": [
+    {
+     "file": "evidence/ia-hymn-society-papers-djvu.txt",
+     "url": "https://archive.org/download/papers0000hymn/papers0000hymn_djvu.txt",
+     "resolved_url": "https://dn790002.ca.archive.org/0/items/papers0000hymn/papers0000hymn_djvu.txt",
+     "fetched_at": "2026-09-26T12:01:19Z",
+     "bytes": 28060,
+     "sha256": "5e96bf6a0e4cfcaa3e94c5a55c3d2b6e5e295ea1077625bdaa8df6991103f901",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Wed, 24 Mar 2021 11:58:44 GMT"
+    },
+    {
+     "file": "evidence/ia-hymn-society-papers-metadata.json",
+     "url": "https://archive.org/metadata/papers0000hymn/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:01:22Z",
+     "bytes": 2067,
+     "sha256": "a5db54f63593e54b620e8af625fd931b8b1f371cbaed14ff7a18d937c9e3c324",
+     "content_type": "application/json",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/ia-hymn-society-papers-djvu.txt",
+     "text": "Copyright 1974 by the Hymn Society of America",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-hymn-society-papers-djvu.txt",
+     "text": "earliest known publication of the \nsong appeared as “My brother will you meet me”",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-hymn-society-papers-djvu.txt",
+     "text": "The Union Harp & Revival Chorister, Cincinnati (1858).",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-hymn-society-papers-djvu.txt",
+     "text": "York, on November 27, 1858.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-hymn-society-papers-djvu.txt",
+     "text": "since his name appears in the City Directories there in 1856 and",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  },
+  {
+   "id": "ia-grand-lodge-pa-1911-1912",
+   "supports": [
+    "C4-steffe-dates"
+   ],
+   "files": [
+    {
+     "file": "evidence/ia-grand-lodge-pa-1911-djvu.txt",
+     "url": "https://archive.org/download/1911abstractsofp00free/1911abstractsofp00free_djvu.txt",
+     "resolved_url": "https://dn790009.ca.archive.org/0/items/1911abstractsofp00free/1911abstractsofp00free_djvu.txt",
+     "fetched_at": "2026-09-26T12:01:07Z",
+     "bytes": 1223465,
+     "sha256": "376d955ba270013efac83fb003580a78973eb47bb8aa4f2e6fc4db54acb4d2c5",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Fri, 17 May 2024 22:21:58 GMT"
+    },
+    {
+     "file": "evidence/ia-grand-lodge-pa-1911-metadata.json",
+     "url": "https://archive.org/metadata/1911abstractsofp00free/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:04:08Z",
+     "bytes": 1695,
+     "sha256": "a213ffa0a4bd632d0f2b7bc7268438c1245c7890094111eefed82c1ef9b6608b",
+     "content_type": "application/json",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-grand-lodge-pa-1912-djvu.txt",
+     "url": "https://archive.org/download/1912abstractsofp00free/1912abstractsofp00free_djvu.txt",
+     "resolved_url": "https://dn720607.ca.archive.org/0/items/1912abstractsofp00free/1912abstractsofp00free_djvu.txt",
+     "fetched_at": "2026-09-26T12:01:11Z",
+     "bytes": 550627,
+     "sha256": "e1a6dcb8f19a1a92f0330114692a429762fe495f57246024dde0bd628312cb6b",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Sun, 29 Oct 2023 21:16:56 GMT"
+    },
+    {
+     "file": "evidence/ia-grand-lodge-pa-1912-metadata.json",
+     "url": "https://archive.org/metadata/1912abstractsofp00free/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:04:09Z",
+     "bytes": 1790,
+     "sha256": "6782d9ddd57a2e3e9968d8fd46a33e4e8b682952f62814f0a6080ea030469990",
+     "content_type": "application/json",
+     "last_modified": null
+    },
+    {
+     "file": "evidence/ia-masonic-temple-dedication-1875-djvu.txt",
+     "url": "https://archive.org/download/dedicationmemori00free/dedicationmemori00free_djvu.txt",
+     "resolved_url": "https://dn760004.eu.archive.org/0/items/dedicationmemori00free/dedicationmemori00free_djvu.txt",
+     "fetched_at": "2026-09-26T12:01:15Z",
+     "bytes": 511983,
+     "sha256": "b858411e57eb5b34af0a1e91b4706f17d087aeb135bd7149d856f241f2cd11f4",
+     "content_type": "text/plain; charset=utf-8",
+     "last_modified": "Wed, 08 Nov 2023 15:53:45 GMT"
+    },
+    {
+     "file": "evidence/ia-masonic-temple-dedication-1875-metadata.json",
+     "url": "https://archive.org/metadata/dedicationmemori00free/metadata",
+     "resolved_url": null,
+     "fetched_at": "2026-09-26T12:04:10Z",
+     "bytes": 2056,
+     "sha256": "6f1772864248fa64934863f4e738a69e5d40ca21331d48b25fb31e4f1ea56a30",
+     "content_type": "application/json",
+     "last_modified": null
+    }
+   ],
+   "quotes": [
+    {
+     "file": "evidence/ia-grand-lodge-pa-1911-djvu.txt",
+     "text": "During  this  year,  your  Board  has  lost  by  death  three",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-grand-lodge-pa-1911-djvu.txt",
+     "text": "Past  Master  Brother  William  Steffe,  Lodge  No.  436,",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-grand-lodge-pa-1911-djvu.txt",
+     "text": "Philadelphia,  December  27,  1911.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-grand-lodge-pa-1912-djvu.txt",
+     "text": "The  late  William  Steffe,  for  many  years  Secretary  of  the",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-masonic-temple-dedication-1875-djvu.txt",
+     "text": "Mozart  Lodge,  No.  436,  Philadelphia.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    },
+    {
+     "file": "evidence/ia-masonic-temple-dedication-1875-djvu.txt",
+     "text": "William  Steffe,  W.  M.",
+     "check": "byte-exact substring of the fetched file (UTF-8)"
+    }
+   ]
+  }
+ ],
+ "fetched_but_not_cited": [
+  "ia-sunday-school-times-1859-01-15-leaf1.jpg"
+ ]
+}
