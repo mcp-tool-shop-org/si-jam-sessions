@@ -4,7 +4,7 @@
 //! cargo run -p host --release -- devices
 //! cargo run -p host --release -- play [--output <index|name>] [--mute]
 //! cargo run -p host --release -- render <out.wav>
-//! cargo run -p host --release -- jam [--output <index|name>] [--midi <index|name> | --keyboard]
+//! cargo run -p host --release -- jam [--output <index|name>] [--midi <index|name> | --keyboard] [--mute]
 //! cargo run -p host --release -- jitter [--output <index|name>]
 //! cargo run -p host --release -- notices
 //! ```
@@ -37,7 +37,7 @@ const USAGE: &str = "usage:
                                 play The Entertainer's constructed take against the score and the click;
                                 --mute renders and counts everything and sends the device silence
   host render <out.wav>         render the same mix to a WAV file, with no device
-  host jam [--output X] [--midi X | --keyboard]
+  host jam [--output X] [--midi X | --keyboard] [--mute]
                                 play the score and the click, take a live take, print its verdicts
   host jitter [--output X]      measure the audio clock's readings and the console's key path
   host notices                  print the licences of the crates the host is built from
@@ -53,7 +53,7 @@ fn main() -> ExitCode {
                 [path] => render(path),
                 _ => Err(String::from("render takes one argument, the WAV to write")),
             },
-            "jam" => options(rest, true, false).and_then(|o| jam(&o)),
+            "jam" => options(rest, true, true).and_then(|o| jam(&o)),
             "jitter" => options(rest, false, false).and_then(|o| jitter(&o)),
             "notices" => no_options(rest).map(|()| print!("{}", host::notices::TEXT)),
             "help" | "--help" | "-h" => {
@@ -89,7 +89,7 @@ fn no_options(rest: &[String]) -> Result<(), String> {
 }
 
 /// The options a command takes: `--output` always; `--midi` and `--keyboard`
-/// for `jam` (`live`); `--mute` for `play` (`mute`).
+/// for `jam` (`live`); `--mute` for `play` and `jam` (`mute`).
 fn options(rest: &[String], live: bool, mute: bool) -> Result<Options, String> {
     let mut o = Options::default();
     let mut args = rest.iter();
@@ -291,31 +291,64 @@ fn open(
     })
 }
 
-/// Waits for the stream's first callbacks and says what the output is.
+/// Says what the output is, now; its latency follows once it settles.
 fn describe(output: &Output, session: &Session) {
-    let shared = &session.playing.shared;
-    for _ in 0..200 {
-        if shared.callbacks.load(Ordering::Relaxed) >= 3 {
-            break;
-        }
-        thread::sleep(Duration::from_millis(5));
-    }
-    let latency_ms = shared.latency_nanos.load(Ordering::Relaxed) as f64 / 1e6;
     let buffer = session
         .playing
         .buffer
         .map_or_else(|| String::from("unknown"), |b| b.to_string());
     println!(
-        "Output: {} ({} channels, 48 kHz, {buffer} frames a callback, {latency_ms:.1} ms from a \
-         callback to the ear, as the device reports it)",
+        "Output: {} ({} channels, 48 kHz, {buffer} frames a callback)",
         output.name, session.playing.channels
     );
-    if output.bluetooth || latency_ms > 40.0 {
+}
+
+/// Reports the output's latency once, when it has settled.
+///
+/// The latency cpal reports (`playback - callback`) grows while WASAPI fills
+/// the device's buffer at the start: on this project's Bluetooth speaker the
+/// first callback came after half a second, and the latency then read 43 ms
+/// before it settled at 163 ms. So it is read from the law thread's loop,
+/// which must not stop to wait for it, and printed when two readings 100 ms
+/// apart agree within half a millisecond.
+#[derive(Default)]
+struct Latency {
+    last: Option<(std::time::Instant, u64)>,
+    told: bool,
+}
+
+impl Latency {
+    fn watch(&mut self, output: &Output, session: &Session) {
+        let shared = &session.playing.shared;
+        if self.told || shared.callbacks.load(Ordering::Relaxed) == 0 {
+            return;
+        }
+        let now = std::time::Instant::now();
+        let nanos = shared.latency_nanos.load(Ordering::Relaxed);
+        match self.last {
+            Some((then, before)) if now.duration_since(then) >= Duration::from_millis(100) => {
+                if nanos.abs_diff(before) < 500_000 {
+                    self.told = true;
+                    tell_latency(output, nanos);
+                } else {
+                    self.last = Some((now, nanos));
+                }
+            }
+            Some(_) => {}
+            None => self.last = Some((now, nanos)),
+        }
+    }
+}
+
+fn tell_latency(output: &Output, nanos: u64) {
+    let ms = nanos as f64 / 1e6;
+    println!("  The output reports {ms:.1} ms from a callback to the ear.");
+    if output.bluetooth || ms > 40.0 {
         println!(
-            "  This output delays everything by about {latency_ms:.0} ms or more. That is fine \
-             for hearing a late note against the click, but too slow to play along through: your \
-             own notes come back that late. Grading follows what you hear, except any delay the \
-             device does not report, which grades your notes that much late."
+            "  That is fine for hearing a late note against the click, but too slow to play \
+             along through: your own notes come back that late. Grading follows what you hear, \
+             except any delay the device does not report, which grades your notes that much \
+             late. A wired output is the one to play through."
         );
     }
 }
@@ -385,7 +418,9 @@ fn play(o: &Options) -> Result<(), String> {
     stop_on_enter(Arc::clone(&stop));
     let end = piece.end + 48_000;
     let mut failed = None;
+    let mut latency = Latency::default();
     while !stop.load(Ordering::Relaxed) {
+        latency.watch(&output, &session);
         let frame = session.playing.shared.frames.load(Ordering::Acquire);
         if frame >= end {
             break;
@@ -588,7 +623,7 @@ fn jam(o: &Options) -> Result<(), String> {
     law.ingest(&piece.container).map_err(refused)?;
     let (monitor_in, monitor_out) = RingBuffer::<Monitor>::new(256);
     let (presses_in, mut presses) = RingBuffer::<Press>::new(4_096);
-    let mut session = open(&output, &mut law, Some(monitor_out), false)?;
+    let mut session = open(&output, &mut law, Some(monitor_out), o.mute)?;
     describe(&output, &session);
     let stop = stop_flag(&session);
     let started = start_input(input, &session, &stop, monitor_in, presses_in)?;
@@ -603,7 +638,9 @@ fn jam(o: &Options) -> Result<(), String> {
     let mut passed: Vec<Passed> = Vec::new();
     let end = piece.end + 48_000;
     let mut failed = None;
+    let mut latency = Latency::default();
     while !stop.load(Ordering::Relaxed) {
+        latency.watch(&output, &session);
         let frame = session.playing.shared.frames.load(Ordering::Acquire);
         if frame >= end {
             break;
