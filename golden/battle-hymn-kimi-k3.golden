@@ -1,0 +1,34 @@
+# The golden of the exemplar battle-hymn-kimi-k3: what the law commits when the score plays with
+# no take, from sample 0 to one second past its last sound. Written only by
+# `cargo run -p golden --bin write-golden`; `write-golden --check` exits non-zero
+# when regenerating would change this file or golden/battle-hymn-kimi-k3.frames.
+golden-format 1
+exemplar battle-hymn-kimi-k3
+law-version 5
+snapshot-format 2
+predicate-version 3
+rules-year 2026
+us-last-public-domain-publication-year 1930
+eu-last-public-domain-death-year 1955
+last-out-of-term-edition-year 2000
+ppq 3360
+sample-rate 48000
+quantum-samples 48
+horizon-quanta 100
+gate-samples 1920
+input scores/battle-hymn-kimi-k3/receipt.json 18735 7d99de6d3abab7a0338b0e45e44d46578a280a031778904670d7e828300a18af
+input scores/battle-hymn-kimi-k3/battle-hymn-kimi-k3.ly 11869 7164ddc3c8682108d96b7d3846f0ff9dc15d6109224c3b2d324888eda0551a2c
+input scores/battle-hymn-kimi-k3/battle-hymn-kimi-k3.mid 16294 7dae53e7ef77d97bb0384825b4e44c83f441540933790ec24657de8a4446c889
+container 46975 58ae7b783fcc8ac3700e940982030c256e54e75d0cdeada28de49e579f08b608
+receipt-digest d044ffa49ce26ae3268e8a743ba737dd3d05e93fa7a9106afd203d100e9e4793
+tier own-engraving
+score-notes 1924
+score-end 13262749
+tail-samples 48000
+window 0 277307
+steps 277208
+frame-notes 1924 beats 348
+frames-wire 52472 f01717117378a3edbe19820272805f63fb34c4502bb5a8bb6aa2d48be240e51c
+frames 105975 9f79fecfc3816cdd41eaaf7ea3165d63af0a21de505559100c5f14f10ccb3d03
+snapshot 282311
+golden 0f93de92b08ed6534a79462744035dcc553a91d8c05b3475750e83b440b89391

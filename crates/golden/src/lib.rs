@@ -13,9 +13,12 @@
 //!   its Rust API (they must agree), and the golden file's text;
 //! - [`engine_js`]: the script a JavaScript engine runs to compute the same
 //!   hash from the same bytes;
-//! - `write-golden`: the only writer of `golden/entertainer.golden` and
-//!   `golden/entertainer.rows`; with `--check` it writes nothing and exits 1
-//!   when regenerating would change either;
+//! - [`exemplar`]: each exemplar's golden, what the law commits when the
+//!   arrangement plays with no take: its frames and its snapshot's hash;
+//! - `write-golden`: the only writer of `golden/entertainer.golden`,
+//!   `golden/entertainer.rows` and each exemplar's `golden/<id>.golden` and
+//!   `golden/<id>.frames`; with `--check` it writes nothing and exits 1 when
+//!   regenerating would change any of them;
 //! - `engine-js`: writes the engine script for a given wasm, after checking
 //!   that its inputs are the golden file's.
 //!
@@ -56,6 +59,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub mod engine_js;
+pub mod exemplar;
 pub mod prng;
 pub mod run;
 pub mod take;
