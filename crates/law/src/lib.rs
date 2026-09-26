@@ -87,17 +87,17 @@ pub use time::{TempoMap, rescale_tick};
 ///   and carries the predicate's version and cut-off years in its header. It
 ///   ran licence predicate version 1 and named the golden `f12b07b0…` on a
 ///   pushed head; it did not reach `main`.
-/// - 3: the same law under licence predicate version 2 (see
-///   `provenance::PREDICATE_VERSION`: negated licence text does not affirm,
-///   AI wording is matched as whole words, other restriction phrases from the
-///   start of a word). Version 2 named golden `f12b07b0…` on a pushed head, so
-///   the law with predicate version 2 needed a new number; it names golden
-///   `145c7af9…`. The SMF reader's two track-count refusals have codes of
-///   their own.
+/// - 3: the same law under licence predicate version 2, with rules year 2026
+///   and the cut-offs 1930 (US publication), 1955 (EU death) and 2000
+///   (edition). What version 2 admits and refuses is `crates/provenance`'s to
+///   state (see `provenance::PREDICATE_VERSION`), and the law does not restate
+///   it. Version 2 named golden `f12b07b0…` on a pushed head, so the law with
+///   predicate version 2 needed a new number; it names golden `145c7af9…`.
+///   The SMF reader's two track-count refusals have codes of their own.
 ///
-/// The predicate's rules are the law's, and its version and date cut-offs are
-/// pinned below. Moving any of them fails the build there until the pin is
-/// updated, and by rule the law version with it.
+/// The predicate's rules are the law's, and the law pins their version and
+/// date cut-offs below. Moving any of them fails the build there until the
+/// pin is updated, and by rule the law version with it.
 pub const LAW_VERSION: u32 = 3;
 
 // The licence predicate this law version admits scores under. provenance's
