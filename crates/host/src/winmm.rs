@@ -17,9 +17,20 @@
 //! [`deliver`] starts or releases the monitor voice and hands the press to the
 //! law thread, through two `rtrb` rings made before the port opened. It calls
 //! no multimedia function, allocates nothing and takes no lock; a full ring
-//! drops the message rather than wait.
+//! drops the message rather than wait. WinMM's invalid-message notice,
+//! `MIM_ERROR`, is counted with one atomic add, and `jam` reports the count.
+//!
+//! A keyboard unplugged mid-jam sends WinMM nothing, so the callback never
+//! hears of it. `jam` watches the port count instead ([`port_count`]) and
+//! says when it drops.
+//!
+//! Two premises here are WinMM's, and midir rests on the same two: WinMM calls
+//! the callback for one port serially, and never after `midiInClose` has
+//! returned. The owner's first plug-in of a keyboard is their first test on a
+//! real device.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use cpal::traits::StreamTrait;
 use rtrb::Producer;
@@ -27,11 +38,17 @@ use windows::Win32::Media::Audio::{
     CALLBACK_FUNCTION, HMIDIIN, MIDIINCAPSW, midiInClose, midiInGetDevCapsW, midiInGetNumDevs,
     midiInOpen, midiInReset, midiInStart, midiInStop,
 };
-use windows::Win32::Media::{MM_MIM_DATA, MMSYSERR_NOERROR};
+use windows::Win32::Media::{MM_MIM_DATA, MM_MIM_ERROR, MMSYSERR_NOERROR};
 
 use crate::device::nanos;
 use crate::event::Monitor;
 use crate::live::{Press, Stamp, midi_press};
+
+/// How many MIDI input ports WinMM lists now.
+pub fn port_count() -> u32 {
+    // SAFETY: no arguments; it only counts devices.
+    unsafe { midiInGetNumDevs() }
+}
 
 /// The MIDI input ports, by WinMM index, with their names.
 pub fn ports() -> Vec<String> {
@@ -55,17 +72,20 @@ pub fn ports() -> Vec<String> {
 }
 
 /// Where a message goes: the monitor voice, the law thread, and the stream
-/// clock that stamps its arrival.
+/// clock that stamps its arrival; and the count of `MIM_ERROR` notices.
 pub struct Sink {
     pub monitor: Producer<Monitor>,
     pub input: Producer<Press>,
     pub stream: Arc<cpal::Stream>,
+    pub errors: Arc<AtomicU64>,
 }
 
-/// An open MIDI input. Dropping it stops and closes the port.
+/// An open MIDI input. [`MidiIn::close`] stops and closes the port; dropping
+/// it does the same and prints a close that fails.
 pub struct MidiIn {
     handle: HMIDIIN,
     sink: *mut Sink,
+    open: bool,
 }
 
 impl MidiIn {
@@ -106,19 +126,52 @@ impl MidiIn {
                 "MIDI port {port} did not start (WinMM error {status})"
             ));
         }
-        Ok(MidiIn { handle, sink })
+        Ok(MidiIn {
+            handle,
+            sink,
+            open: true,
+        })
+    }
+
+    /// Stops, resets and closes the port, then frees the callback's context.
+    ///
+    /// WinMM calls the callback no more once `midiInClose` has returned, so
+    /// the context is freed only after a close that succeeded. A close that
+    /// fails leaves the port with WinMM, whose callback may still run, so the
+    /// context is left allocated, never freed, and the failure is returned.
+    pub fn close(mut self) -> Result<(), String> {
+        self.shut()
+    }
+
+    fn shut(&mut self) -> Result<(), String> {
+        if !self.open {
+            return Ok(());
+        }
+        self.open = false;
+        // SAFETY: the port is open; stopping and resetting it end its input.
+        unsafe {
+            midiInStop(self.handle);
+            midiInReset(self.handle);
+        }
+        // SAFETY: the port is open and is closed once, here.
+        let status = unsafe { midiInClose(self.handle) };
+        if status != MMSYSERR_NOERROR {
+            return Err(format!(
+                "the MIDI port did not close (WinMM error {status}); its callback's context \
+                 is left allocated, since WinMM may still call it"
+            ));
+        }
+        // SAFETY: midiInClose returned with success, so WinMM calls the
+        // callback no more, and `sink` is freed once, with nothing using it.
+        drop(unsafe { Box::from_raw(self.sink) });
+        Ok(())
     }
 }
 
 impl Drop for MidiIn {
     fn drop(&mut self) {
-        // SAFETY: the port is open; after midiInClose returns WinMM calls the
-        // callback no more, so `sink` is freed once, with nothing using it.
-        unsafe {
-            midiInStop(self.handle);
-            midiInReset(self.handle);
-            midiInClose(self.handle);
-            drop(Box::from_raw(self.sink));
+        if let Err(e) = self.shut() {
+            eprintln!("host: {e}");
         }
     }
 }
@@ -133,7 +186,13 @@ unsafe extern "system" fn on_message(
     param1: usize,
     param2: usize,
 ) {
-    if message != MM_MIM_DATA || instance == 0 {
+    if instance == 0 || (message != MM_MIM_DATA && message != MM_MIM_ERROR) {
+        return;
+    }
+    if message == MM_MIM_ERROR {
+        // SAFETY: as below; only the counter is read.
+        let sink = unsafe { &*(instance as *const Sink) };
+        sink.errors.fetch_add(1, Ordering::Relaxed);
         return;
     }
     // SAFETY: `instance` is the Sink the port was opened with. WinMM calls

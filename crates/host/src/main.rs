@@ -25,8 +25,8 @@ use host::bridge::{Law, Refused};
 use host::callback::{Callback, Shared};
 use host::device::{self, Output, Playing};
 use host::event::{Event, Monitor};
-use host::live::{Clocks, Held, Passed, Press, pass, release_all};
-use host::schedule::Scheduler;
+use host::live::{Clocks, Held, Passed, Press, close_through, delivery, pass, release_all};
+use host::schedule::{Scheduler, steps_for};
 use host::score::{Piece, clock, root};
 use host::synth::Synth;
 use host::{RING_EVENTS, offline};
@@ -278,7 +278,9 @@ fn open(
     // The first H + 1 quanta are in the ring before the first callback, and
     // the callback knows how far: its pre-roll waits for a callback they
     // cover.
-    let pumped = scheduler.pump(law, 0, &mut events).map_err(refused)?;
+    let pumped = scheduler
+        .pump(law, steps_for(0, 0, None), &mut events)
+        .map_err(refused)?;
     shared.covered.store(pumped.covered, Ordering::Release);
     let callback = Callback::new(
         Synth::new(0),
@@ -298,14 +300,21 @@ fn open(
 }
 
 impl Session {
-    /// Steps the law to the callback's position, fills the ring, and tells
-    /// the callback how far the ring is complete.
-    fn pump(&mut self, law: &mut Law) -> Result<(), String> {
+    /// Steps the law ([`steps_for`]): to the sample heard now when `heard` is
+    /// given, to the callback's position otherwise, and always far enough that
+    /// the horizon covers the next two callbacks of the largest size seen.
+    /// Then fills the ring, and tells the callback how far it is complete.
+    fn pump(&mut self, law: &mut Law, heard: Option<i64>) -> Result<(), String> {
         let shared = &self.playing.shared;
         let frame = shared.frames.load(Ordering::Acquire);
+        let lookahead = shared
+            .largest_buffer
+            .load(Ordering::Relaxed)
+            .saturating_mul(2);
+        let target = steps_for(frame, lookahead, heard);
         let pumped = self
             .scheduler
-            .pump(law, frame, &mut self.events)
+            .pump(law, target, &mut self.events)
             .map_err(refused)?;
         shared.covered.store(pumped.covered, Ordering::Release);
         Ok(())
@@ -484,7 +493,7 @@ fn play(o: &Options) -> Result<(), String> {
         if frame >= end {
             break;
         }
-        if let Err(e) = session.pump(&mut law) {
+        if let Err(e) = session.pump(&mut law, None) {
             failed = Some(e);
             break;
         }
@@ -494,12 +503,11 @@ fn play(o: &Options) -> Result<(), String> {
     stop.store(true, Ordering::SeqCst);
     let _ = session.playing.stream.pause();
     println!("{}", counted(&session));
-    if let Some(e) = device_error(&session).or(failed) {
-        return Err(e);
-    }
-    let record = law.record().map_err(refused)?;
-    drawn_rows(&piece, &record.rows);
-    Ok(())
+    let report = law
+        .record()
+        .map_err(refused)
+        .map(|record| drawn_rows(&piece, &record.rows));
+    host::outcome(report, device_error(&session).or(failed))
 }
 
 /// Which input a jam takes.
@@ -577,10 +585,39 @@ fn choose_input(o: &Options) -> Result<Input, String> {
     Ok(Input::None)
 }
 
+/// A MIDI input, started: the port, the count of invalid messages WinMM
+/// reported, and the port count when it opened, to notice a keyboard
+/// unplugged mid-jam (WinMM tells its callback nothing then).
+#[cfg(windows)]
+struct Midi {
+    port: host::winmm::MidiIn,
+    errors: Arc<std::sync::atomic::AtomicU64>,
+    ports: u32,
+    told: bool,
+}
+
+#[cfg(windows)]
+impl Midi {
+    /// Says once if WinMM lists fewer MIDI input ports than when the jam
+    /// began.
+    fn watch(&mut self) {
+        let now = host::winmm::port_count();
+        if !self.told && now < self.ports {
+            self.told = true;
+            println!(
+                "  WinMM now lists {now} MIDI input ports, {} when the jam began. If the \
+                 keyboard was unplugged, its notes stopped arriving; WinMM does not say so \
+                 otherwise.",
+                self.ports
+            );
+        }
+    }
+}
+
 /// The input, started: what must be stopped when the jam ends.
 enum Started {
     #[cfg(windows)]
-    Midi(host::winmm::MidiIn),
+    Midi(Midi),
     #[cfg(windows)]
     Keyboard(thread::JoinHandle<Result<(), String>>),
     #[cfg(not(windows))]
@@ -597,15 +634,23 @@ fn start_input(
 ) -> Result<Started, String> {
     match input {
         Input::Midi(port, name) => {
+            let errors = Arc::new(std::sync::atomic::AtomicU64::new(0));
             let sink = host::winmm::Sink {
                 monitor,
                 input: presses,
                 stream: Arc::clone(&session.playing.stream),
+                errors: Arc::clone(&errors),
             };
+            let ports = host::winmm::port_count();
             let midi = host::winmm::MidiIn::open(port, sink)?;
             println!("Live input: MIDI port {port}, \"{name}\". Press Enter to stop.");
             stop_on_enter(Arc::clone(stop));
-            Ok(Started::Midi(midi))
+            Ok(Started::Midi(Midi {
+                port: midi,
+                errors,
+                ports,
+                told: false,
+            }))
         }
         Input::Keyboard => {
             let stream = Arc::clone(&session.playing.stream);
@@ -636,10 +681,31 @@ fn start_input(
     Ok(Started::None)
 }
 
+/// Watches the input while the jam runs.
+fn watch_input(started: &mut Started) {
+    match started {
+        #[cfg(windows)]
+        Started::Midi(midi) => midi.watch(),
+        #[cfg(windows)]
+        Started::Keyboard(_) => {}
+        #[cfg(not(windows))]
+        Started::None => {}
+    }
+}
+
+/// Stops the input, and reports what WinMM said on the way.
 fn finish_input(started: Started) {
     match started {
         #[cfg(windows)]
-        Started::Midi(midi) => drop(midi),
+        Started::Midi(midi) => {
+            let errors = midi.errors.load(Ordering::Relaxed);
+            if errors > 0 {
+                println!("WinMM reported {errors} invalid MIDI messages (MIM_ERROR).");
+            }
+            if let Err(e) = midi.port.close() {
+                eprintln!("host: {e}");
+            }
+        }
         #[cfg(windows)]
         Started::Keyboard(keys) => match keys.join() {
             Ok(Ok(())) => {}
@@ -683,7 +749,7 @@ fn jam(o: &Options) -> Result<(), String> {
     let mut session = open(&output, &mut law, Some(monitor_out), o.mute)?;
     describe(&output, &session);
     let stop = stop_flag(&session);
-    let started = start_input(input, &session, &stop, monitor_in, presses_in)?;
+    let mut started = start_input(input, &session, &stop, monitor_in, presses_in)?;
     println!(
         "Play along with the score (the pure voice) and the click; your notes sound in the \
          reedy voice. The score ends at {}.",
@@ -697,17 +763,20 @@ fn jam(o: &Options) -> Result<(), String> {
     let mut failed = None;
     let mut latency = Latency::default();
     let mut startup = Startup::default();
+    let mut watched = std::time::Instant::now();
     while !stop.load(Ordering::Relaxed) {
         latency.watch(&output, &session);
         startup.watch(&session);
+        if watched.elapsed() >= Duration::from_millis(500) {
+            watched = std::time::Instant::now();
+            watch_input(&mut started);
+        }
         let frame = session.playing.shared.frames.load(Ordering::Acquire);
         if frame >= end {
             break;
         }
-        if let Err(e) = session.pump(&mut law) {
-            failed = Some(e);
-            break;
-        }
+        // Presses first, at the playhead they were played under; then the
+        // law steps to the sample heard now.
         take_presses(
             &mut session,
             &mut presses,
@@ -716,6 +785,13 @@ fn jam(o: &Options) -> Result<(), String> {
             &mut law,
             &mut passed,
         );
+        let heard = clocks
+            .audio
+            .sample_at(device::nanos(session.playing.stream.now()));
+        if let Err(e) = session.pump(&mut law, heard) {
+            failed = Some(e);
+            break;
+        }
         thread::sleep(Duration::from_millis(1));
     }
     stop.store(true, Ordering::SeqCst);
@@ -732,18 +808,21 @@ fn jam(o: &Options) -> Result<(), String> {
     let now = device::nanos(session.playing.stream.now());
     release_all(&mut law, &clocks, &mut held, now, &mut passed);
     let _ = session.playing.stream.pause();
+    // The law's transport runs on alone until every score note before the
+    // stop has closed, so every row of the jam is final.
+    let stopped_at = clocks.audio.sample_at(now).unwrap_or(0);
+    let closed = close_through(&mut law, stopped_at).map_err(refused);
     println!("{}", counted(&session));
-    if let Some(e) = device_error(&session).or(failed) {
-        eprintln!("host: {e}");
-    }
-    verdicts(&mut law, &passed)
+    let report = closed.and_then(|()| verdicts(&mut law, &passed));
+    host::outcome(report, device_error(&session).or(failed))
 }
 
-/// Prints the live take's verdicts: what the law took and refused, the rows
-/// for the notes played, and how many score notes the jam passed unplayed. In
-/// a live session the law gives an unplayed score note its never-played row
-/// only once the performance has passed it, so those rows reach as far as the
-/// jam did, and no further.
+/// Prints the live take's verdicts: what the law took and refused, how the
+/// note-ons kept the delivery allowance, the rows for the notes played, and how
+/// many score notes the jam passed unplayed. The law shows a row only once it
+/// is final, when its score note has closed; the jam ran the law's transport
+/// on past the stop first, so the rows reach as far as the jam did, and every
+/// one is final.
 fn verdicts(law: &mut Law, passed: &[Passed]) -> Result<(), String> {
     let record = law.record().map_err(refused)?;
     let (ons, offs): (Vec<&Passed>, Vec<&Passed>) = passed.iter().partition(|p| p.down);
@@ -774,12 +853,21 @@ fn verdicts(law: &mut Law, passed: &[Passed]) -> Result<(), String> {
             );
         }
     }
+    if let Some((median, largest, past)) = delivery(passed) {
+        let ms = |samples: i64| samples as f64 / 48.0;
+        println!(
+            "Delivery: each note-on reached the law a median {:.1} ms and at most {:.1} ms \
+             after the law's playhead passed it; the allowance is 100 ms, and {past} came later.",
+            ms(median),
+            ms(largest)
+        );
+    }
     let (never, played): (Vec<&str>, Vec<&str>) = record
         .rows
         .lines()
         .partition(|r| r.ends_with(": never played"));
     let count = |word: &str| played.iter().filter(|r| r.ends_with(word)).count();
-    println!("The law's rows for the notes you played, in score order:");
+    println!("The law's rows for the notes you played, in the order they became final:");
     for row in &played {
         println!("  {row}");
     }

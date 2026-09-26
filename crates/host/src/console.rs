@@ -5,15 +5,20 @@
 //! moment `ReadConsoleInputW` hands it over, then goes through the same clocks
 //! and the same live verb as a MIDI note. Auto-repeat is ignored; Esc stops
 //! the jam.
+//!
+//! The keys come from the console's input buffer opened by name, `CONIN$`,
+//! not from standard input: a console with no window, which no keystroke from
+//! the desktop can reach, still has one, and a redirected standard input does
+//! not hide it.
 
+use std::fs::{File, OpenOptions};
+use std::os::windows::io::AsRawHandle;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use cpal::traits::StreamTrait;
 use rtrb::Producer;
-use windows::Win32::Foundation::WAIT_OBJECT_0;
-use windows::Win32::System::Console::{
-    GetStdHandle, INPUT_RECORD, KEY_EVENT, ReadConsoleInputW, STD_INPUT_HANDLE,
-};
+use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
+use windows::Win32::System::Console::{INPUT_RECORD, KEY_EVENT, ReadConsoleInputW};
 use windows::Win32::System::Threading::WaitForSingleObject;
 
 use crate::device::nanos;
@@ -26,6 +31,27 @@ pub const LAYOUT: &str = "Z S X D C V G B H N J M , play C4 to C5; Q 2 W 3 E R 5
 
 const ESCAPE: u16 = 0x1B;
 const COMMA: u16 = 0xBC;
+
+/// The console's input buffer, open for reading and writing.
+struct ConsoleInput {
+    file: File,
+}
+
+impl ConsoleInput {
+    fn open() -> Result<ConsoleInput, String> {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("CONIN$")
+            .map(|file| ConsoleInput { file })
+            .map_err(|e| format!("the console's input did not open (is there a console?): {e}"))
+    }
+
+    /// The handle, valid while `self` lives.
+    fn handle(&self) -> HANDLE {
+        HANDLE(self.file.as_raw_handle())
+    }
+}
 
 /// The pitch a key plays, by its Windows virtual-key code.
 pub fn pitch_of(key: u16) -> Option<u8> {
@@ -53,9 +79,8 @@ pub fn read(
     mut monitor: Producer<Monitor>,
     mut input: Producer<Press>,
 ) -> Result<(), String> {
-    // SAFETY: no pointer arguments.
-    let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) }
-        .map_err(|e| format!("the console's input did not open: {e}"))?;
+    let input_buffer = ConsoleInput::open()?;
+    let handle = input_buffer.handle();
     let mut held = [false; 256];
     let mut records = [INPUT_RECORD::default(); 32];
     while !stop.load(Ordering::Relaxed) {
@@ -115,6 +140,7 @@ const PROBE: u16 = 0x87;
 /// Times the part of a key's journey the host can time: from a key record
 /// written into the console's input buffer (`WriteConsoleInputW`) to the
 /// moment a reader, waiting as [`read`] waits, stamps it on the stream clock.
+/// It writes into the console the command runs in, which needs no window.
 /// Returns each delay in nanoseconds, `count` of them, taken 3 to 13 ms apart.
 /// The keyboard's own scan and its USB polling come before the buffer and are
 /// not in these numbers.
@@ -123,16 +149,14 @@ pub fn measure(stream: &cpal::Stream, count: usize) -> Result<Vec<u64>, String> 
     use std::time::Duration;
     use windows::Win32::System::Console::{INPUT_RECORD_0, KEY_EVENT_RECORD, WriteConsoleInputW};
 
-    // SAFETY: no pointer arguments.
-    let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) }
-        .map_err(|e| format!("the console's input did not open: {e}"))?;
+    let input_buffer = ConsoleInput::open()?;
+    let handle = input_buffer.handle();
     let (stamped, stamps) = mpsc::channel::<u64>();
     std::thread::scope(|scope| {
         let reader = scope.spawn(move || -> Result<(), String> {
-            // A handle is not Send; this thread takes its own.
-            // SAFETY: no pointer arguments.
-            let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) }
-                .map_err(|e| format!("the console's input did not open: {e}"))?;
+            // A handle is not Send; this thread opens its own.
+            let own = ConsoleInput::open()?;
+            let handle = own.handle();
             let mut records = [INPUT_RECORD::default(); 16];
             let mut seen = 0;
             while seen < count {

@@ -172,7 +172,7 @@ mod tests {
     use super::*;
     use crate::bridge::Law;
     use crate::offline;
-    use crate::schedule::Scheduler;
+    use crate::schedule::{Scheduler, steps_for};
     use law::wire::encode_score;
     use law::{HORIZON_QUANTA, QUANTUM_SAMPLES};
     use rtrb::RingBuffer;
@@ -241,7 +241,7 @@ mod tests {
         let (readings_in, mut readings_out) = RingBuffer::new(4_096);
         let shared = Arc::new(Shared::default());
         let mut scheduler = Scheduler::new(0);
-        let pumped = scheduler.pump(&mut law, 0, &mut events).unwrap();
+        let pumped = scheduler.pump(&mut law, 1, &mut events).unwrap();
         shared.covered.store(pumped.covered, Ordering::Release);
         let mut callback = Callback::new(
             Synth::new(0),
@@ -264,7 +264,8 @@ mod tests {
             heard += size as u64 * 1_000_000_000 / 48_000;
             sent.extend_from_slice(&buffer);
             let frame = shared.frames.load(Ordering::Acquire);
-            let pumped = scheduler.pump(&mut law, frame, &mut events).unwrap();
+            let target = steps_for(frame, 0, None);
+            let pumped = scheduler.pump(&mut law, target, &mut events).unwrap();
             shared.covered.store(pumped.covered, Ordering::Release);
             size = rest;
         }

@@ -2,21 +2,32 @@
 //!
 //! The scheduler runs on a thread that is not the audio callback's, and the
 //! callback never calls the law. Each [`Scheduler::pump`]:
-//! 1. steps the law until its playhead is the quantum that holds the next
-//!    frame the callback will render: one step per 48 samples of the audio
-//!    clock;
+//! 1. steps the law to the step count [`steps_for`] gives: one step per 48
+//!    samples of the audio clock;
 //! 2. reads the committed frames of every quantum it has not read yet, up to
 //!    the committed horizon, H = 100 quanta (100 ms) past the playhead;
 //! 3. pushes their events into the ring in order, as far as the ring has room,
 //!    and keeps the rest, in order, for the next pump.
 //!
-//! So the ring holds each committed event before its quantum is rendered, with
-//! up to 100 ms of lead, and each exactly once: windows follow one another
-//! with no quantum shared and none skipped.
+//! So the ring holds each committed event before its quantum is rendered, and
+//! each exactly once: windows follow one another with no quantum shared and
+//! none skipped.
+//!
+//! # Where the playhead is
+//!
+//! In a jam the law's playhead is the sample being heard ([`steps_for`] with
+//! the audio clock's reading), not the next frame the callback renders. The
+//! law closes a score note when its playhead has passed the note's onset by
+//! the reach and the delivery allowance, and a note a person plays is handed
+//! over a few milliseconds after it is heard; with the playhead on what is
+//! heard, that is all the allowance has to cover. The playhead never falls so
+//! far behind the render that the horizon misses the frames the next callbacks
+//! ask for. Without an audio clock (`render`, `play`) the playhead is the
+//! render position.
 
 use std::collections::VecDeque;
 
-use law::QUANTUM_SAMPLES;
+use law::{HORIZON_QUANTA, QUANTUM_SAMPLES};
 use rtrb::{Producer, PushError};
 
 use crate::bridge::{Law, Refused};
@@ -57,17 +68,16 @@ impl Scheduler {
         }
     }
 
-    /// Steps the law to the playhead of `frame`, the next frame the callback
-    /// renders, reads what it newly committed, and pushes as many events into
-    /// `ring` as fit (see the module documentation).
+    /// Steps the law to `target` steps ([`steps_for`]), reads what it newly
+    /// committed, and pushes as many events into `ring` as fit (see the module
+    /// documentation). The law never steps back.
     pub fn pump(
         &mut self,
         law: &mut Law,
-        frame: u64,
+        target: u64,
         ring: &mut Producer<Event>,
     ) -> Result<Pumped, Refused> {
         let mut pumped = Pumped::default();
-        let target = frame / u64::from(QUANTUM_SAMPLES) + 1;
         while law.steps() < target {
             law.step()?;
             pumped.steps += 1;
@@ -98,12 +108,38 @@ impl Scheduler {
     }
 }
 
+/// The step count for the law, with `frame` the next frame the callback
+/// renders and `lookahead` the frames the next callbacks may ask for before
+/// the law thread pumps again.
+///
+/// - With `heard`, the law sample heard now: the playhead is the quantum that
+///   holds it.
+/// - Without it (no audio clock yet, or none at all): the quantum that holds
+///   `frame`, the render position.
+///
+/// Either way, never fewer steps than put the committed horizon, playhead plus
+/// H, on the quantum of the last frame the next callbacks render: `frame +
+/// lookahead - 1`. So the ring always holds what the device asks for next, and
+/// a device whose latency is larger than H keeps its playhead that much ahead
+/// of what is heard.
+pub fn steps_for(frame: u64, lookahead: u64, heard: Option<i64>) -> u64 {
+    let quantum = u64::from(QUANTUM_SAMPLES);
+    let at = match heard {
+        Some(sample) => u64::try_from(sample).unwrap_or(0) / quantum,
+        None => frame / quantum,
+    };
+    let needed = frame.saturating_add(lookahead.saturating_sub(1)) / quantum;
+    let floor = needed
+        .saturating_add(1)
+        .saturating_sub(u64::from(HORIZON_QUANTA));
+    at.saturating_add(1).max(floor)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::event::from_frames;
     use crate::score::Piece;
-    use law::{HORIZON_QUANTA, QUANTUM_SAMPLES};
     use rtrb::RingBuffer;
 
     /// Every event of the constructed take's piece, read in one window with the
@@ -140,7 +176,8 @@ mod tests {
         let mut frame = 0u64;
         let mut i = 0;
         while frame < end {
-            let pumped = scheduler.pump(&mut law, frame, &mut producer).unwrap();
+            let target = steps_for(frame, 0, None);
+            let pumped = scheduler.pump(&mut law, target, &mut producer).unwrap();
             most_pending = most_pending.max(pumped.pending);
             let block_end = frame + blocks[i % blocks.len()];
             while let Ok(event) = consumer.peek() {
@@ -157,7 +194,8 @@ mod tests {
         }
         // What was still waiting for room when the render reached the end.
         loop {
-            let pumped = scheduler.pump(&mut law, frame, &mut producer).unwrap();
+            let target = steps_for(frame, 0, None);
+            let pumped = scheduler.pump(&mut law, target, &mut producer).unwrap();
             let mut moved = false;
             while let Ok(event) = consumer.peek() {
                 if event.onset() >= frame {
@@ -205,7 +243,7 @@ mod tests {
         law.admit_take(&piece.take).unwrap();
         let (mut producer, mut consumer) = RingBuffer::new(crate::RING_EVENTS);
         let mut scheduler = Scheduler::new(0);
-        let pumped = scheduler.pump(&mut law, 0, &mut producer).unwrap();
+        let pumped = scheduler.pump(&mut law, 1, &mut producer).unwrap();
         let lead = (u64::from(HORIZON_QUANTA) + 1) * u64::from(QUANTUM_SAMPLES);
         assert_eq!((pumped.pending, pumped.covered), (0, lead));
         while consumer.pop().is_ok() {}
@@ -216,10 +254,83 @@ mod tests {
         let at_zero = all.iter().position(|e| e.onset() > 0).unwrap();
         let (mut producer, _consumer) = RingBuffer::new(at_zero);
         let mut scheduler = Scheduler::new(0);
-        let pumped = scheduler.pump(&mut law, 480_000, &mut producer).unwrap();
+        let target = steps_for(480_000, 0, None);
+        let pumped = scheduler.pump(&mut law, target, &mut producer).unwrap();
         assert_eq!(pumped.pending, all.len() - at_zero);
         assert_eq!(pumped.covered, all[at_zero].onset());
         assert!(pumped.covered > 0);
+    }
+
+    /// The step count: the render position without an audio clock; the heard
+    /// sample's quantum with one; and never so few steps that the horizon
+    /// misses the frames the next callbacks render.
+    #[test]
+    fn the_playhead_follows_what_is_heard_within_the_horizon() {
+        let h = u64::from(HORIZON_QUANTA);
+        assert_eq!(steps_for(48_000, 2_112, None), 1_001, "the render position");
+        let frame = 480_000u64;
+        // A wired output, heard 53.8 ms (2,582 samples) behind the render.
+        let heard = frame as i64 - 2_582;
+        assert_eq!(steps_for(frame, 2_112, Some(heard)), heard as u64 / 48 + 1);
+        // A Bluetooth output, heard 186.4 ms (8,948 samples) behind, more than
+        // H: the horizon reaches the last frame of the next two callbacks.
+        let heard = frame as i64 - 8_948;
+        let steps = steps_for(frame, 2 * 1_124, Some(heard));
+        assert_eq!(steps - 1 + h, (frame + 2 * 1_124 - 1) / 48);
+        assert!(steps > heard as u64 / 48 + 1);
+        // Before sample 0 is heard: one step.
+        assert_eq!(steps_for(1_056, 2_112, Some(-1_526)), 1);
+    }
+
+    /// With the playhead on the heard sample, the ring still holds every
+    /// event before its block begins, on a wired output (heard 53.8 ms behind
+    /// the render, 1,056-frame callbacks) and on a Bluetooth one (186.4 ms,
+    /// more than H, 1,124-frame callbacks), pumped between callbacks with the
+    /// next two callbacks as lookahead, as `jam` pumps. On the wired output the
+    /// playhead is the heard quantum; on the Bluetooth one it is ahead of it
+    /// only as far as the horizon needs.
+    #[test]
+    fn a_playhead_on_the_heard_clock_still_fills_the_ring_in_time() {
+        let piece = Piece::entertainer(&crate::score::root()).unwrap();
+        let end = 48_000 * 20;
+        let all = expected(&piece, end / u64::from(QUANTUM_SAMPLES) + 200);
+        let want: Vec<Event> = all.iter().copied().filter(|e| e.onset() < end).collect();
+        for (latency, block) in [(2_582u64, 1_056u64), (8_948, 1_124)] {
+            let mut law = Law::acquire();
+            law.ingest(&piece.container).unwrap();
+            law.admit_take(&piece.take).unwrap();
+            let (mut producer, mut consumer) = RingBuffer::new(crate::RING_EVENTS);
+            let mut scheduler = Scheduler::new(0);
+            let (mut taken, mut late, mut lead) = (Vec::new(), 0, 0i64);
+            let mut frame = 0u64;
+            while frame < end {
+                let heard = frame as i64 - latency as i64;
+                let target = steps_for(frame, 2 * block, Some(heard));
+                scheduler.pump(&mut law, target, &mut producer).unwrap();
+                if heard >= 0 {
+                    let playhead = ((law.steps() - 1) * 48) as i64;
+                    lead = lead.max(playhead - heard);
+                }
+                while let Ok(event) = consumer.peek() {
+                    if event.onset() >= frame + block {
+                        break;
+                    }
+                    if event.onset() < frame {
+                        late += 1;
+                    }
+                    taken.push(consumer.pop().unwrap());
+                }
+                frame += block;
+            }
+            taken.retain(|e| e.onset() < end);
+            assert_eq!(late, 0, "latency {latency}");
+            assert!(taken == want, "latency {latency}: the events differ");
+            let beyond = (latency + 2 * block) as i64 - (u64::from(HORIZON_QUANTA) * 48) as i64;
+            assert!(lead <= beyond.max(0) + 48, "latency {latency}: lead {lead}");
+            if beyond < 0 {
+                assert!(lead <= 0, "latency {latency}: lead {lead}");
+            }
+        }
     }
 
     /// A ring too small for a chord: the scheduler keeps what does not fit and

@@ -15,13 +15,14 @@
 //! - [`event`]: what crosses into the callback, through `rtrb` rings created
 //!   before the stream.
 //! - [`schedule`]: the non-real-time side. It steps the law one quantum per 48
-//!   samples of the audio clock and moves committed frames into the ring ahead
-//!   of the playhead, each exactly once.
+//!   samples of the audio clock, in a jam with the playhead on the sample
+//!   heard, and moves committed frames into the ring ahead of the render, each
+//!   exactly once.
 //! - [`anchor`] and [`live`]: the clocks, and live input from a press to the
 //!   law's live verbs, a note-on when a key goes down and a note-off when it
-//!   comes up. A key press is stamped on the stream clock, a MIDI message
-//!   on WinMM's; both become a law sample through the same audio clock, which is
-//!   re-anchored on every callback.
+//!   comes up, each within the law's delivery allowance. A key press is stamped
+//!   on the stream clock, a MIDI message on WinMM's; both become a law sample
+//!   through the same audio clock, which is re-anchored on every callback.
 //! - [`offline`]: the same pipeline without a device, for `render`.
 //! - [`device`], and `winmm` and `console` on Windows: the thin shells around
 //!   cpal, WinMM MIDI input and the Windows console. They are not exercised in
@@ -75,7 +76,40 @@ pub mod synth;
 #[cfg(windows)]
 pub mod winmm;
 
+/// A command's result once its report is printed. A report that could not be
+/// printed is the result; otherwise the error that stopped the command, a
+/// device error or a refused law call, if there was one: a command that
+/// stopped on an error exits 1 even when it printed its report.
+pub fn outcome(report: Result<(), String>, stopped: Option<String>) -> Result<(), String> {
+    report?;
+    match stopped {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
 /// Events the ring into the callback holds. The scheduler keeps it filled
 /// through the committed horizon, 100 ms ahead of the playhead, and *The
 /// Entertainer* commits a few dozen events in any 100 ms.
 pub const RING_EVENTS: usize = 4_096;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A jam or a play that stopped on a device error prints its report and
+    /// still fails; a report that cannot be printed fails first.
+    #[test]
+    fn a_command_that_stopped_on_an_error_fails_after_its_report() {
+        let device = || Some(String::from("the output device is no longer available"));
+        assert_eq!(outcome(Ok(()), None), Ok(()));
+        assert_eq!(
+            outcome(Ok(()), device()),
+            Err(String::from("the output device is no longer available"))
+        );
+        assert_eq!(
+            outcome(Err(String::from("law_snapshot refused")), device()),
+            Err(String::from("law_snapshot refused"))
+        );
+    }
+}

@@ -9,6 +9,20 @@
 //! what the note cites and grades it, each score note at most once, so the
 //! presses go to it in the order they were received. The host decides
 //! nothing.
+//!
+//! # The delivery allowance
+//!
+//! The law closes a score note once its playhead has passed the note's onset
+//! by the reach and then by the delivery allowance, H (4,800 samples,
+//! 100 ms): a note handed over later than its onset plus the allowance can no
+//! longer be graded against a note that has closed. [`Passed::lag`] records,
+//! for every note handed over, how far the playhead was past the note's onset,
+//! so `jam` can show the allowance was kept. In a jam the playhead follows the
+//! audio clock ([`crate::schedule::steps_for`]), so the lag is the time from
+//! the key to the law: the input's own path, and the law thread's loop, which
+//! takes presses before it steps the law.
+
+use law::{LIVE_ALLOWANCE_SAMPLES, QUANTUM_SAMPLES};
 
 use crate::anchor::{AudioClock, MidiClock};
 use crate::bridge::{Law, Refused};
@@ -78,9 +92,24 @@ pub struct Passed {
     /// The law sample the press was heard at. `None` when the audio clock had
     /// no reading yet, before law time started: then nothing was passed.
     pub sample: Option<i64>,
+    /// How far the law's playhead was past `sample` when the press was
+    /// handed over, in samples; negative when it had not reached it. The
+    /// delivery allowance bounds it ([`LIVE_ALLOWANCE_SAMPLES`]). `None` when
+    /// nothing was passed.
+    pub lag: Option<i64>,
     /// The law's refusal. `None` when the law took it, or when nothing was
     /// passed.
     pub refused: Option<Refused>,
+}
+
+/// How far the law's playhead, the first sample of its playhead quantum, is
+/// past `sample`, in samples, or `None` while its transport is stopped.
+fn lag(law: &Law, sample: i64) -> Option<i64> {
+    let playhead = law
+        .steps()
+        .checked_sub(1)?
+        .checked_mul(u64::from(QUANTUM_SAMPLES))?;
+    i64::try_from(playhead).ok()?.checked_sub(sample)
 }
 
 /// The pitches whose live note the law holds: a note-on it admitted, and no
@@ -141,6 +170,7 @@ pub fn pass(
         if held.holds(press.pitch) {
             note_off(law, held, press.pitch, sample, log);
         }
+        let lag = sample.and_then(|at| lag(law, at));
         let refused = sample.and_then(|at| {
             law.live_note(at, u32::from(press.pitch), u32::from(press.velocity))
                 .err()
@@ -153,6 +183,7 @@ pub fn pass(
             pitch: press.pitch,
             velocity: press.velocity,
             sample,
+            lag,
             refused,
         });
     } else if held.holds(press.pitch) {
@@ -161,6 +192,7 @@ pub fn pass(
 }
 
 fn note_off(law: &mut Law, held: &mut Held, pitch: u8, sample: Option<i64>, log: &mut Vec<Passed>) {
+    let lag = sample.and_then(|at| lag(law, at));
     let refused = sample.and_then(|at| law.live_note_off(u32::from(pitch), at).err());
     if sample.is_some() && refused.is_none() {
         held.set(pitch, false);
@@ -170,8 +202,49 @@ fn note_off(law: &mut Law, held: &mut Held, pitch: u8, sample: Option<i64>, log:
         pitch,
         velocity: 0,
         sample,
+        lag,
         refused,
     });
+}
+
+/// How the note-ons in `log` kept the delivery allowance: the median and the
+/// largest lag, in samples, and how many were past the allowance. `None` when
+/// no note-on was handed over.
+pub fn delivery(log: &[Passed]) -> Option<(i64, i64, usize)> {
+    let mut lags: Vec<i64> = log
+        .iter()
+        .filter(|p| p.down)
+        .filter_map(|p| p.lag)
+        .collect();
+    lags.sort_unstable();
+    let median = *lags.get(lags.len() / 2)?;
+    let largest = *lags.last()?;
+    let allowance = i64::from(LIVE_ALLOWANCE_SAMPLES);
+    let past = lags.iter().filter(|&&l| l > allowance).count();
+    Some((median, largest, past))
+}
+
+/// Runs the law's transport on after a jam until every score note with an
+/// onset before `stop`, the law sample heard when the jam stopped, has closed,
+/// and one step past the last note handed over: then every row of the jam is
+/// final and shown. The playhead stops on the first quantum boundary at or past
+/// `stop` plus [`law::CLOSE_SAMPLES`], so a score note less than a quantum
+/// after the stop can close too, and none later. The audio has stopped; the
+/// law's step clock runs alone.
+pub fn close_through(law: &mut Law, stop: i64) -> Result<(), Refused> {
+    let quantum = u64::from(QUANTUM_SAMPLES);
+    let stop = u64::try_from(stop).unwrap_or(0);
+    // Closed once the playhead, (steps - 1) * Q, is past onset + CLOSE for
+    // every onset up to stop - 1: once it is at or past stop + CLOSE.
+    let close = stop.saturating_add(u64::from(law::CLOSE_SAMPLES));
+    let target = close
+        .div_ceil(quantum)
+        .saturating_add(1)
+        .max(law.steps().saturating_add(1));
+    while law.steps() < target {
+        law.step()?;
+    }
+    Ok(())
 }
 
 /// Ends every note the law holds at `instant`, when the jam stops, lowest
@@ -370,15 +443,20 @@ mod tests {
         assert!(held.holds(74));
     }
 
-    /// Plays the score's first twelve notes, six octaves, as a person would
-    /// who hears them exactly: each key down at the instant its score note is
-    /// heard and up 4,000 samples later, through a device whose readings put
-    /// law sample 0 at stream instant 5 s. `wrong` plays one of the notes on
-    /// another key. `stamp` stamps a press received at a stream instant.
-    /// Returns the rows and what was passed.
+    /// Plays the score's first `count` notes (the first twelve are six
+    /// octaves) as a person would who hears them exactly: each key down at the
+    /// instant its score note is heard and up 4,000 samples later, through a
+    /// device whose readings put law sample 0 at stream instant 5 s, with the
+    /// law's playhead on the quantum heard, as a jam steps it. `wrong` plays
+    /// one of the notes on another key; `stamp` stamps a press received at a
+    /// stream instant. The jam stops at law sample `stop`, and the law's
+    /// transport runs on until every score note before it has closed. Returns
+    /// the rows and what was passed.
     fn play_the_opening(
         stamp: impl Fn(u64) -> Stamp,
         wrong: Option<(usize, u8)>,
+        count: usize,
+        stop: u64,
     ) -> (Vec<String>, Vec<Passed>) {
         let piece = Piece::entertainer(&root()).unwrap();
         let mut law = Law::acquire();
@@ -387,7 +465,7 @@ mod tests {
             .score
             .notes()
             .iter()
-            .take(12)
+            .take(count)
             .map(|n| (n.onset_sample, n.pitch))
             .collect();
         if let Some((index, pitch)) = wrong {
@@ -399,7 +477,7 @@ mod tests {
         let mut frame = 0u64;
         for &(onset, pitch) in &notes {
             // Every callback's reading up to past this note, one per 480
-            // frames, and the law stepped past it.
+            // frames, and the playhead on the quantum of its onset.
             while frame <= onset + 4_800 {
                 clocks.audio.push(Reading {
                     sample: frame,
@@ -407,7 +485,7 @@ mod tests {
                 });
                 frame += 480;
             }
-            while law.steps() * 48 < onset + 4_800 {
+            while law.steps() * 48 <= onset {
                 law.step().unwrap();
             }
             for (down, at) in [(true, onset), (false, onset + 4_000)] {
@@ -422,6 +500,7 @@ mod tests {
                 pass(&mut law, &clocks, &mut held, press, instant, &mut passed);
             }
         }
+        close_through(&mut law, i64::try_from(stop).unwrap()).unwrap();
         let rows = law
             .record()
             .unwrap()
@@ -440,9 +519,16 @@ mod tests {
     #[test]
     fn keys_played_on_time_grade_as_matches_at_zero() {
         // Note 4 is 72 at sample 19,999; 71 is played for it.
-        let (rows, passed) = play_the_opening(|nanos| Stamp::Stream { nanos }, Some((4, 71)));
+        let (rows, passed) =
+            play_the_opening(|nanos| Stamp::Stream { nanos }, Some((4, 71)), 12, 60_000);
         assert_eq!(passed.len(), 24);
         assert!(passed.iter().all(|p| p.refused.is_none()), "{passed:#?}");
+        // Handed over as heard: the playhead had not passed a note-on's onset.
+        assert!(
+            passed.iter().filter(|p| p.down).all(|p| p.lag <= Some(0)),
+            "{passed:#?}"
+        );
+        assert_eq!(delivery(&passed).map(|(_, _, past)| past), Some(0));
         assert_eq!(rows.len(), 12, "{rows:#?}");
         assert_eq!(
             rows[4],
@@ -455,6 +541,96 @@ mod tests {
             );
             assert!(row.ends_with(": match"), "{row}");
         }
+    }
+
+    /// A jam that stops partway: eight notes played, the jam stopped at sample
+    /// 55,000. The transport runs on until every score note before the stop has
+    /// closed, so the eight have their rows, notes 8 and 9 (sample 49,999),
+    /// passed with no key, are never played, and notes 10 and 11 (59,999),
+    /// after the stop, have no row.
+    #[test]
+    fn a_jam_closes_through_its_stop() {
+        let (rows, _) = play_the_opening(|nanos| Stamp::Stream { nanos }, None, 8, 55_000);
+        assert_eq!(rows.len(), 10, "{rows:#?}");
+        assert!(
+            rows[..8].iter().all(|r| r.ends_with(": match")),
+            "{rows:#?}"
+        );
+        assert_eq!(
+            rows[8],
+            "note 8: onset 49999 samples, pitch 71, no take note cites it: never played"
+        );
+        assert!(rows[9].starts_with("note 9: ") && rows[9].ends_with("never played"));
+    }
+
+    /// Closing through a stop, to the sample: a note one sample before the
+    /// stop closes, one a quantum after it does not.
+    #[test]
+    fn closing_through_a_stop_closes_every_note_before_it() {
+        use score_model::{IngestedNote, IngestedScore, MeterChange, TempoChange};
+        // One tick is one sample: 70,000 us a quarter at source PPQ 3,360.
+        let notes = [1_000u64, 2_000, 2_049]
+            .iter()
+            .map(|&start| IngestedNote {
+                start_tick: start,
+                pitch: 60,
+                track: 1,
+                channel: 0,
+                end_tick: start + 10,
+                velocity: 80,
+            })
+            .collect();
+        let score = law::wire::encode_score(&IngestedScore {
+            source_ppq: 3_360,
+            tempo: vec![TempoChange {
+                tick: 0,
+                us_per_quarter: 70_000,
+            }],
+            meter: vec![MeterChange {
+                tick: 0,
+                numerator: 4,
+                denominator_pow2: 2,
+            }],
+            notes,
+        })
+        .unwrap();
+        let mut law = Law::acquire();
+        law.load_score(&score).unwrap();
+        law.step().unwrap();
+        close_through(&mut law, 2_001).unwrap();
+        let rows = law.record().unwrap().rows;
+        let rows: Vec<&str> = rows.lines().collect();
+        assert_eq!(
+            rows,
+            [
+                "note 0: onset 1000 samples, pitch 60, no take note cites it: never played",
+                "note 1: onset 2000 samples, pitch 60, no take note cites it: never played",
+            ]
+        );
+    }
+
+    /// The delivery summary: the median and largest lag of the note-ons, and
+    /// how many were past the allowance.
+    #[test]
+    fn delivery_reads_the_note_ons_lags() {
+        let at = |down, lag| Passed {
+            down,
+            pitch: 60,
+            velocity: 0,
+            sample: Some(0),
+            lag,
+            refused: None,
+        };
+        assert_eq!(delivery(&[]), None);
+        let log = [
+            at(true, Some(40)),
+            at(true, Some(-7)),
+            at(false, Some(9_000)),
+            at(true, Some(4_801)),
+            at(true, None),
+            at(true, Some(4_800)),
+        ];
+        assert_eq!(delivery(&log), Some((4_800, 4_801, 1)));
     }
 
     /// The same notes through MIDI: WinMM stamps each in whole milliseconds
@@ -475,6 +651,8 @@ mod tests {
                 }
             },
             None,
+            12,
+            60_000,
         );
         assert!(passed.iter().all(|p| p.refused.is_none()), "{passed:#?}");
         assert_eq!(rows.len(), 12, "{rows:#?}");

@@ -13,7 +13,7 @@ use rtrb::RingBuffer;
 use crate::RING_EVENTS;
 use crate::bridge::{Law, Refused};
 use crate::event::Event;
-use crate::schedule::Scheduler;
+use crate::schedule::{Scheduler, steps_for};
 use crate::synth::{Counts, RATE, Synth};
 
 /// Every event the scheduler moves through the ring for frames `0..end`, in
@@ -24,7 +24,7 @@ pub fn events(law: &mut Law, end: u64) -> Result<Vec<Event>, Refused> {
     let mut out = Vec::new();
     let mut frame = 0u64;
     while frame < end {
-        scheduler.pump(law, frame, &mut producer)?;
+        scheduler.pump(law, steps_for(frame, 0, None), &mut producer)?;
         let block_end = frame.saturating_add(480).min(end);
         while let Ok(event) = consumer.peek() {
             if event.onset() >= block_end {
@@ -47,7 +47,7 @@ pub fn render(law: &mut Law, end: u64, block: usize) -> Result<(Vec<f32>, Counts
     let mut synth = Synth::new(0);
     let mut out = vec![0.0f32; usize::try_from(end).unwrap_or(0)];
     for chunk in out.chunks_mut(block.max(1)) {
-        scheduler.pump(law, synth.frame(), &mut producer)?;
+        scheduler.pump(law, steps_for(synth.frame(), 0, None), &mut producer)?;
         synth.render(chunk, 1, &mut consumer, None);
     }
     Ok((out, synth.counts()))

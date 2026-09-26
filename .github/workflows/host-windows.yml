@@ -7,8 +7,8 @@
 # on windows-latest. Nothing here opens an audio or MIDI device; the runner has
 # none.
 #
-# It runs only when the host, the lockfile, the toolchain or this file
-# changes. The two Windows-only files use nothing outside the host, and a
+# It runs only when the host, the workspace manifest (its profiles reach the
+# host's build), the lockfile, the toolchain or this file changes. The two Windows-only files use nothing outside the host, and a
 # change to the law or the other crates reaches the host's shared code, which
 # ci.yml's Linux job compiles and tests on every such change.
 #
@@ -36,12 +36,14 @@ on:
   push:
     branches: [main]
     paths:
+      - Cargo.toml
       - Cargo.lock
       - rust-toolchain.toml
       - crates/host/**
       - .github/workflows/host-windows.yml
   pull_request:
     paths:
+      - Cargo.toml
       - Cargo.lock
       - rust-toolchain.toml
       - crates/host/**
