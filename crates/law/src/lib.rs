@@ -49,6 +49,7 @@ extern crate alloc;
 extern crate std as _;
 
 pub mod abi;
+mod frames;
 mod grade;
 #[cfg(test)]
 #[allow(
@@ -59,6 +60,16 @@ mod grade;
 )]
 mod ingest_tests;
 mod law;
+mod live;
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used
+)]
+mod live_tests;
 mod refusal;
 mod score;
 mod snapshot;
@@ -66,8 +77,10 @@ mod take;
 mod time;
 pub mod wire;
 
+pub use frames::{Beat, FrameNote, Frames, Voice};
 pub use grade::{CitedKind, Verdict};
 pub use law::{Law, Provenance};
+pub use live::LiveNote;
 pub use refusal::{Event, IngestRefusal, Refusal, WireFault};
 pub use score::{LawMeter, LawNote, LawScore, LawTempo};
 pub use snapshot::{SNAPSHOT_FORMAT, SNAPSHOT_MAGIC};
@@ -94,6 +107,13 @@ pub use time::{TempoMap, rescale_tick};
 ///   it. Version 2 named golden `f12b07b0…` on a pushed head, so the law with
 ///   predicate version 2 needed a new number; it names golden `145c7af9…`.
 ///   The SMF reader's two track-count refusals have codes of their own.
+///
+///   Version 3 then gained two verbs that do not move its golden: the frame
+///   export ([`Law::frames`]), which reads committed quanta and changes
+///   nothing, and the live verb ([`Law::live`]), which admits a record into
+///   the take through the take's own admission and grading, citing by the rule
+///   of [`LIVE_REACH_SAMPLES`]. A take admitted as a batch is graded, rowed and
+///   hashed exactly as before, and refusal codes 160 to 172 were appended.
 ///
 /// The predicate's rules are the law's, and the law pins their version and
 /// date cut-offs below. Moving any of them fails the build there until the
@@ -188,6 +208,26 @@ pub const HORIZON_QUANTA: u32 = 100;
 /// sibling's labelled data.
 pub const GATE_SAMPLES: u32 = 1_920;
 
+/// How far a live note of a score note's pitch may be from it and still
+/// answer it: twice the gate, 3,840 samples (80 ms).
+///
+/// A person's note does not say which score note it answers, and the host
+/// decides nothing, so the live verb decides ([`Law::live`]):
+/// - a live note answers the nearest score note of its own pitch up to this
+///   far away, and grades match, early or late;
+/// - failing that, the nearest score note of any pitch within the gate, and
+///   grades wrong pitch;
+/// - failing both, it is an addition.
+///
+/// Why twice the gate: the constructed take plays notes up to 60 ms late
+/// (2,880 samples, one and a half gates), and a note played that late is still
+/// the note it was meant to be, graded late. Past two gates the rule stops
+/// guessing and calls the note an addition, which leaves its score note never
+/// played; both rows say so in digits. It is derived from the gate rather than
+/// pinned on its own, so the snapshot header, which carries the gate, carries
+/// it too.
+pub const LIVE_REACH_SAMPLES: u32 = 3_840;
+
 /// The largest sample position the law holds: `i64::MAX`. Every onset fits an
 /// `i64`, so every difference of two onsets is an exact `i64`. At 48 kHz this
 /// is about six million years.
@@ -205,4 +245,5 @@ const _: () = {
     assert!(GATE_SAMPLES.is_multiple_of(QUANTUM_SAMPLES));
     assert!(SAMPLE_RATE.is_multiple_of(QUANTUM_SAMPLES));
     assert!(MAX_SAMPLE == i64::MAX as u64);
+    assert!(LIVE_REACH_SAMPLES == 2 * GATE_SAMPLES);
 };

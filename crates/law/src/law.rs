@@ -8,7 +8,9 @@ use provenance::{Media, Receipt, Supplied, Tier};
 use score_model::IngestedScore;
 use sha2::{Digest, Sha256};
 
+use crate::frames::{self, Frames, LiveLength};
 use crate::grade::{self, Verdict};
+use crate::live::{self, LiveNote};
 use crate::refusal::{IngestRefusal, Refusal};
 use crate::score::LawScore;
 use crate::snapshot;
@@ -41,13 +43,20 @@ pub struct Provenance {
 ///   quanta after it are committed. A proposal for quantum `q <= s - 1 + H` is
 ///   refused as late by `s + H - q` quanta; the first open quantum is `s + H`.
 ///
-/// A committed quantum never changes: every quantum at or before the horizon
-/// is refused, and the horizon only moves forward.
+/// A committed quantum never changes for a proposal: every quantum at or before
+/// the horizon is refused, and the horizon only moves forward. A live note is
+/// not a proposal but a record of what a person played ([`Law::live`]): it is
+/// admitted at its own onset, at or before the horizon, and never refused for
+/// lateness. The committed frames ([`Law::frames`]) are read out of committed
+/// quanta only.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Law {
     score: LawScore,
     /// Strictly increasing in [`TakeNote::key`].
     take: Vec<TakeNote>,
+    /// The lengths of the take notes the live verb admitted, strictly
+    /// increasing in their keys, which are keys of `take`. Not hashed.
+    live: Vec<LiveLength>,
     steps: u64,
     /// `None` for a score loaded as bytes ([`Law::load`]), which no receipt
     /// admitted; the snapshot says so.
@@ -65,6 +74,7 @@ impl Law {
         Ok(Law {
             score: LawScore::from_ingested(score)?,
             take: Vec::new(),
+            live: Vec::new(),
             steps: 0,
             provenance: None,
         })
@@ -124,6 +134,7 @@ impl Law {
         Ok(Law {
             score,
             take: Vec::new(),
+            live: Vec::new(),
             steps: 0,
             provenance: Some(Provenance {
                 tier: admitted.tier,
@@ -191,6 +202,13 @@ impl Law {
     /// the take does not depend on how its notes were batched.
     pub fn admit(&mut self, notes: &[TakeNote]) -> Result<(), Refusal> {
         let horizon = self.committed_horizon()?;
+        self.admit_under(notes, horizon)
+    }
+
+    /// Admission, as [`Law::admit`] states it. The live verb shares it: a
+    /// proposal passes the committed horizon, and check 3 refuses it when it
+    /// is late; a live note, a record, passes `None`, and check 3 is skipped.
+    fn admit_under(&mut self, notes: &[TakeNote], horizon: Option<u64>) -> Result<(), Refusal> {
         let score_notes = self.score.notes().len();
         let mut previous: Option<&TakeNote> = None;
         for (index, note) in notes.iter().enumerate() {
@@ -281,6 +299,117 @@ impl Law {
         Ok(())
     }
 
+    /// The live verb: one note a person played, admitted into the take as a
+    /// record at its own onset.
+    ///
+    /// The checks run in this order, and the first that fails is the refusal:
+    /// 1. the transport runs ([`Refusal::LiveStopped`]);
+    /// 2. the pitch is at most 127 and the velocity is in 1..=127;
+    /// 3. the onset is at or after sample 0, where the take starts;
+    /// 4. the onset's quantum is at or before the committed horizon: a record
+    ///    is of a quantum already reached, and it is never refused as late;
+    /// 5. the note lasts at least one sample and ends at or before
+    ///    [`MAX_SAMPLE`];
+    /// 6. no admitted note has its onset, its pitch and its citation.
+    ///
+    /// The law decides what the note cites, by the rule in `live::cite`; the
+    /// host decides nothing. The note then goes through the take's admission
+    /// without the horizon check and is graded with the take, so a note played
+    /// live gets the verdict and the row it would get admitted as a take. Its
+    /// length is kept for the committed frames and is not hashed: the snapshot
+    /// holds the take as a take, so a live take and an admitted take of the
+    /// same notes have the same snapshot.
+    ///
+    /// Returns the take note as admitted, with its citation.
+    pub fn live(&mut self, note: LiveNote) -> Result<TakeNote, Refusal> {
+        let horizon = self.committed_horizon()?.ok_or(Refusal::LiveStopped)?;
+        let pitch = u8::try_from(note.pitch)
+            .ok()
+            .filter(|&p| p <= 127)
+            .ok_or(Refusal::LivePitch { pitch: note.pitch })?;
+        let velocity = u8::try_from(note.velocity)
+            .ok()
+            .filter(|&v| (1..=127).contains(&v))
+            .ok_or(Refusal::LiveVelocity {
+                velocity: note.velocity,
+            })?;
+        let onset_sample =
+            u64::try_from(note.onset_sample).map_err(|_| Refusal::LiveBeforeStart {
+                onset_sample: note.onset_sample,
+            })?;
+        let quantum = onset_sample
+            .checked_div(u64::from(crate::QUANTUM_SAMPLES))
+            .ok_or(Refusal::Overflow)?;
+        if quantum > horizon {
+            return Err(Refusal::LiveAhead {
+                onset_sample,
+                quantum,
+                horizon,
+            });
+        }
+        if note.duration_samples == 0 {
+            return Err(Refusal::LiveEmpty { onset_sample });
+        }
+        let past_the_end = Refusal::LiveEndOutOfRange {
+            onset_sample,
+            duration_samples: note.duration_samples,
+        };
+        let end = onset_sample
+            .checked_add(note.duration_samples)
+            .ok_or(past_the_end)?;
+        if end > MAX_SAMPLE {
+            return Err(past_the_end);
+        }
+
+        let admitted = TakeNote {
+            onset_sample,
+            pitch,
+            velocity,
+            cites: live::cite(&self.score, onset_sample, pitch)?,
+        };
+        // Room for the length first, so nothing can fail once the note is in
+        // the take.
+        self.live.try_reserve(1).map_err(|_| Refusal::OutOfMemory)?;
+        self.admit_under(&[admitted], None)
+            .map_err(|refusal| match refusal {
+                Refusal::TakeDuplicate { .. } => Refusal::LiveDuplicate {
+                    onset_sample,
+                    pitch,
+                    cites: admitted.cites.map(|id| id.0),
+                },
+                other => other,
+            })?;
+        let key = admitted.key();
+        let at = self.live.partition_point(|l| l.key < key);
+        self.live.insert(
+            at,
+            LiveLength {
+                key,
+                duration_samples: note.duration_samples,
+            },
+        );
+        Ok(admitted)
+    }
+
+    /// The committed frames of the quanta `first..=last`: every note-on of the
+    /// score, the take and the live take, and every beat, whose onset falls in
+    /// one of them (see [`Frames`]).
+    ///
+    /// Refused while the transport is stopped, for a window whose first
+    /// quantum is after its last, and for a window that reaches past the
+    /// committed horizon: only committed quanta are read. Reading changes
+    /// nothing.
+    pub fn frames(&self, first: u64, last: u64) -> Result<Frames, Refusal> {
+        let horizon = self.committed_horizon()?.ok_or(Refusal::FramesStopped)?;
+        if first > last {
+            return Err(Refusal::FramesWindow { first, last });
+        }
+        if last > horizon {
+            return Err(Refusal::FramesNotCommitted { last, horizon });
+        }
+        frames::collect(&self.score, &self.take, &self.live, first, last)
+    }
+
     /// Every note graded; see [`Verdict`] for the order.
     pub fn verdicts(&self) -> Result<Vec<Verdict>, Refusal> {
         grade::verdicts(&self.score, &self.take)
@@ -334,7 +463,7 @@ mod tests {
     use super::*;
     use crate::score::tests::{ingested, note};
     use crate::take::ScoreNoteId;
-    use crate::{QUANTUM_SAMPLES, SNAPSHOT_FORMAT, SNAPSHOT_MAGIC};
+    use crate::{LiveNote, QUANTUM_SAMPLES, SNAPSHOT_FORMAT, SNAPSHOT_MAGIC};
     use alloc::vec;
     use score_model::{IngestedScore, MeterChange, TempoChange};
 
@@ -561,6 +690,38 @@ mod tests {
             })
         );
         assert_eq!(l.steps(), u64::MAX - H, "a refused step does not move");
+    }
+
+    /// A live note's end is `onset + duration`, and it must stay at or before
+    /// the law's last sample, as every position the law holds does.
+    #[test]
+    fn a_live_note_that_ends_past_the_last_sample_is_refused() {
+        let mut l = law();
+        l.steps = u64::MAX - H - 1;
+        let onset = MAX_SAMPLE - 10;
+        assert!(l.committed_horizon().unwrap().unwrap() >= onset / Q);
+        let at = |duration_samples| LiveNote {
+            onset_sample: onset as i64,
+            pitch: 60,
+            velocity: 64,
+            duration_samples,
+        };
+        assert_eq!(
+            l.live(at(11)),
+            Err(Refusal::LiveEndOutOfRange {
+                onset_sample: onset,
+                duration_samples: 11
+            })
+        );
+        // The sum overflows a u64 as well as passing the last sample.
+        assert_eq!(
+            l.live(at(u64::MAX)),
+            Err(Refusal::LiveEndOutOfRange {
+                onset_sample: onset,
+                duration_samples: u64::MAX
+            })
+        );
+        assert!(l.live(at(10)).is_ok(), "ending on the last sample");
     }
 
     #[test]

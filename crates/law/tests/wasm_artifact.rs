@@ -175,8 +175,10 @@ fn the_release_wasm_exports_the_c_abi() {
         "law_ingest",
         "law_load_score",
         "law_admit_take",
+        "law_live_note",
         "law_step",
         "law_steps",
+        "law_horizon",
         "law_snapshot",
         "law_snapshot_ptr",
         "law_snapshot_len",
@@ -185,6 +187,9 @@ fn the_release_wasm_exports_the_c_abi() {
         "law_rows_len",
         "law_refusal_ptr",
         "law_refusal_len",
+        "law_frames",
+        "law_frames_ptr",
+        "law_frames_len",
     ]
     .into_iter()
     .map(String::from)

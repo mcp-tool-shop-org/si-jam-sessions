@@ -35,13 +35,26 @@
 //! `law_snapshot()` builds the snapshot, its SHA-256 and the rows. Then
 //! `law_snapshot_ptr/len`, `law_hash_ptr` (32 bytes) and `law_rows_ptr/len`
 //! (the rows joined by line feeds) read them. A pointer is valid until the
-//! next call that loads, admits or snapshots. Any call may grow linear memory,
+//! next call that loads, admits, notes a live note, snapshots or builds frames.
+//! Any call may grow linear memory,
 //! which detaches a JavaScript host's views, so a host re-creates its views
 //! after each call and copies bytes out before the next one.
 //!
 //! Loading a score or admitting a take clears the snapshot, the hash and the
 //! rows, so a stale hash is never read as current. Stepping leaves them: a
 //! step does not change the record.
+//!
+//! # The transport, live notes and frames
+//!
+//! `law_step()` steps one quantum and `law_horizon()` reads the committed
+//! horizon. `law_live_note(onset, pitch, velocity, duration)` is the live verb
+//! ([`Law::live`]): one note a person played, passed as scalars, admitted as a
+//! record at its own onset and never refused for lateness. `law_frames(first,
+//! last)` builds the committed frames of the quanta `first..=last`
+//! ([`Law::frames`], in the layout of [`crate::wire::decode_frames`]), and
+//! `law_frames_ptr/len` read them. Loading, ingesting, admitting and a live
+//! note clear the frames as they clear the snapshot, because a live note can
+//! land in a quantum that was already read.
 //!
 //! # Threads
 //!
@@ -69,7 +82,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::law::digest;
 use crate::refusal::{IngestRefusal, Refusal};
-use crate::{LAW_VERSION, Law, wire};
+use crate::{LAW_VERSION, Law, LiveNote, wire};
 
 struct State {
     law: Option<Law>,
@@ -77,13 +90,22 @@ struct State {
     hash: [u8; 32],
     rows: Vec<u8>,
     refusal: Vec<u8>,
+    frames: Vec<u8>,
 }
 
 impl State {
+    /// Clears what `law_snapshot` builds.
     fn clear_outputs(&mut self) {
         self.snapshot.clear();
         self.rows.clear();
         self.hash = [0; 32];
+    }
+
+    /// Clears every output, after a call that changed the record: the
+    /// snapshot, the hash, the rows and the frames.
+    fn record_changed(&mut self) {
+        self.clear_outputs();
+        self.frames.clear();
     }
 }
 
@@ -112,6 +134,7 @@ static SHARED: Shared = Shared {
         hash: [0; 32],
         rows: Vec::new(),
         refusal: Vec::new(),
+        frames: Vec::new(),
     }),
 };
 
@@ -165,8 +188,8 @@ fn refused(state: &mut State, code: u32, reason: &dyn core::fmt::Display) -> u32
 }
 
 /// A `u32` length for the host. Every buffer read out is built by
-/// [`law_snapshot`], which refuses one longer than `u32::MAX`, so the fallback
-/// is unreachable; it keeps the export total.
+/// [`law_snapshot`] or [`law_frames`], each of which refuses one longer than
+/// `u32::MAX`, so the fallback is unreachable; it keeps the export total.
 fn length(bytes: &[u8]) -> u32 {
     u32::try_from(bytes.len()).unwrap_or(0)
 }
@@ -263,7 +286,7 @@ pub unsafe extern "C" fn law_ingest(ptr: *const u8, len: u32) -> u32 {
             .and_then(Law::ingest)
             .map(|law| {
                 state.law = Some(law);
-                state.clear_outputs();
+                state.record_changed();
             });
         ingest_status(state, result)
     })
@@ -287,7 +310,7 @@ pub unsafe extern "C" fn law_load_score(ptr: *const u8, len: u32) -> u32 {
             .and_then(|score| Law::load(&score))
             .map(|law| {
                 state.law = Some(law);
-                state.clear_outputs();
+                state.record_changed();
             });
         status(state, result)
     })
@@ -310,7 +333,38 @@ pub unsafe extern "C" fn law_admit_take(ptr: *const u8, len: u32) -> u32 {
                 Some(law) => law.admit(&notes),
             });
         if result.is_ok() {
-            state.clear_outputs();
+            state.record_changed();
+        }
+        status(state, result)
+    })
+}
+
+/// The live verb ([`Law::live`]): one note a person played, admitted into the
+/// take as a record at its own onset, never refused for lateness. Its onset is
+/// on the law's sample clock and may be negative (played before the take
+/// started, which is refused); its pitch and velocity are wide so that a value
+/// out of range is refused rather than cut; its duration is from note-on to
+/// note-off, in samples. The law decides what the note cites.
+#[unsafe(no_mangle)]
+pub extern "C" fn law_live_note(
+    onset_sample: i64,
+    pitch: u32,
+    velocity: u32,
+    duration_samples: u64,
+) -> u32 {
+    with_status(|state| {
+        let note = LiveNote {
+            onset_sample,
+            pitch,
+            velocity,
+            duration_samples,
+        };
+        let result = match state.law.as_mut() {
+            None => Err(Refusal::NoScore),
+            Some(law) => law.live(note).map(|_| ()),
+        };
+        if result.is_ok() {
+            state.record_changed();
         }
         status(state, result)
     })
@@ -332,6 +386,21 @@ pub extern "C" fn law_step() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn law_steps() -> u64 {
     with_state(|state| state.law.as_ref().map_or(0, Law::steps)).unwrap_or(0)
+}
+
+/// The committed horizon, the last committed quantum; 0 while nothing is
+/// committed (no score, or the transport stopped). A running transport's
+/// horizon is at least H, so 0 is never a horizon.
+#[unsafe(no_mangle)]
+pub extern "C" fn law_horizon() -> u64 {
+    with_state(|state| {
+        state
+            .law
+            .as_ref()
+            .and_then(|law| law.committed_horizon().ok().flatten())
+            .unwrap_or(0)
+    })
+    .unwrap_or(0)
 }
 
 fn build_snapshot(state: &mut State) -> Result<(), Refusal> {
@@ -413,6 +482,42 @@ pub extern "C" fn law_refusal_len() -> u32 {
     with_state(|state| length(&state.refusal)).unwrap_or(0)
 }
 
+fn build_frames(state: &mut State, first: u64, last: u64) -> Result<(), Refusal> {
+    let law = state.law.as_ref().ok_or(Refusal::NoScore)?;
+    let bytes = wire::encode_frames(&law.frames(first, last)?)?;
+    if u32::try_from(bytes.len()).is_err() {
+        return Err(Refusal::Overflow);
+    }
+    state.frames = bytes;
+    Ok(())
+}
+
+/// Builds the committed frames of the quanta `first_quantum..=last_quantum`
+/// ([`Law::frames`]) for the getters below. Reading them changes nothing in
+/// the law. On a refusal the frames are empty.
+#[unsafe(no_mangle)]
+pub extern "C" fn law_frames(first_quantum: u64, last_quantum: u64) -> u32 {
+    with_status(|state| {
+        let result = build_frames(state, first_quantum, last_quantum);
+        if result.is_err() {
+            state.frames.clear();
+        }
+        status(state, result)
+    })
+}
+
+/// The frames [`law_frames`] built.
+#[unsafe(no_mangle)]
+pub extern "C" fn law_frames_ptr() -> *const u8 {
+    with_state(|state| state.frames.as_ptr()).unwrap_or(null())
+}
+
+/// The frames' length in bytes; 0 until [`law_frames`] succeeds.
+#[unsafe(no_mangle)]
+pub extern "C" fn law_frames_len() -> u32 {
+    with_state(|state| length(&state.frames)).unwrap_or(0)
+}
+
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
@@ -435,7 +540,7 @@ mod tests {
     fn reset() {
         with_state(|state| {
             state.law = None;
-            state.clear_outputs();
+            state.record_changed();
             state.refusal.clear();
         })
         .unwrap();
@@ -670,6 +775,121 @@ mod tests {
                  through {horizon} are committed",
                 horizon - q + 1
             )
+        );
+    }
+
+    /// The live verb, the horizon and the frame export through the C ABI: each
+    /// status is the Rust law's, the frames are the Rust law's frames in their
+    /// layout, and the snapshot after live notes is the Rust law's.
+    #[test]
+    fn the_live_and_frame_exports_agree_with_the_rust_law() {
+        let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        reset();
+        assert_eq!(law_live_note(0, 60, 64, 10), Refusal::NoScore.code());
+        assert_eq!(law_frames(0, 0), Refusal::NoScore.code());
+        assert_eq!(law_horizon(), 0);
+        assert_eq!(law_frames_len(), 0);
+
+        assert_eq!(
+            call(&wire::encode_score(&ingested()).unwrap(), law_load_score),
+            0
+        );
+        assert_eq!(law_horizon(), 0, "stopped: nothing is committed");
+        assert_eq!(law_live_note(0, 60, 64, 10), 160);
+        assert_eq!(
+            refusal_text(),
+            "live note refused: the transport is stopped, so no quantum is committed"
+        );
+        assert_eq!(law_frames(0, 0), 171);
+
+        let mut native = Law::load(&ingested()).unwrap();
+        for _ in 0..1_100 {
+            assert_eq!(law_step(), 0);
+            native.step().unwrap();
+        }
+        let horizon = 1_099 + u64::from(HORIZON_QUANTA);
+        assert_eq!(law_horizon(), horizon);
+        let ahead = (horizon + 1) * u64::from(QUANTUM_SAMPLES);
+        let notes: [(i64, u32, u32, u64, u32); 10] = [
+            (0, 60, 64, 12_000, 0),
+            (24_050, 62, 80, 100, 0),
+            (48_000, 66, 1, 7, 0),
+            (-1, 60, 64, 10, 161),
+            (0, 60, 90, 5, 167),
+            (30, 128, 64, 5, 163),
+            (30, 61, 0, 5, 164),
+            (30, 61, 64, 0, 165),
+            (ahead as i64, 61, 64, 5, 162),
+            (i64::MAX - 5, 61, 64, 5, 162),
+        ];
+        for (onset_sample, pitch, velocity, duration_samples, code) in notes {
+            let status = law_live_note(onset_sample, pitch, velocity, duration_samples);
+            let rust = native
+                .live(LiveNote {
+                    onset_sample,
+                    pitch,
+                    velocity,
+                    duration_samples,
+                })
+                .map_or_else(|r| r.code(), |_| 0);
+            assert_eq!((status, rust), (code, code), "onset {onset_sample}");
+        }
+        assert_eq!(
+            refusal_text(),
+            std::format!(
+                "live note refused: onset sample {} falls in quantum {}, after the committed \
+                 horizon {horizon}; a live note records what was played",
+                i64::MAX - 5,
+                (i64::MAX as u64 - 5) / 48
+            )
+        );
+
+        assert_eq!(law_frames(0, horizon), 0);
+        let frames = read(law_frames_ptr(), law_frames_len());
+        assert_eq!(
+            frames,
+            wire::encode_frames(&native.frames(0, horizon).unwrap()).unwrap()
+        );
+        let decoded = wire::decode_frames(&frames).unwrap();
+        assert_eq!(decoded.notes.len(), 4 + 3);
+        assert_eq!(law_frames(horizon + 1, horizon + 1), 172);
+        assert_eq!(
+            refusal_text(),
+            std::format!(
+                "frames refused: the window ends at quantum {}, after the committed horizon \
+                 {horizon}",
+                horizon + 1
+            )
+        );
+        assert_eq!(law_frames_len(), 0, "a refused export leaves no frames");
+        assert_eq!(law_frames(2, 1), 170);
+
+        // A live note clears the frames: it can land in a window already read.
+        assert_eq!(law_frames(0, 10), 0);
+        assert!(law_frames_len() > 0);
+        assert_eq!(law_live_note(200, 64, 50, 3), 0);
+        native
+            .live(LiveNote {
+                onset_sample: 200,
+                pitch: 64,
+                velocity: 50,
+                duration_samples: 3,
+            })
+            .unwrap();
+        assert_eq!(law_frames_len(), 0);
+
+        SHARED.busy.store(true, Ordering::SeqCst);
+        assert_eq!(law_live_note(0, 60, 64, 10), 63);
+        assert_eq!(law_frames(0, 0), 63);
+        assert!(law_frames_ptr().is_null());
+        assert_eq!(law_frames_len(), 0);
+        assert_eq!(law_horizon(), 0);
+        SHARED.busy.store(false, Ordering::SeqCst);
+
+        assert_eq!(law_snapshot(), 0);
+        assert_eq!(
+            read(law_snapshot_ptr(), law_snapshot_len()),
+            native.snapshot_bytes().unwrap()
         );
     }
 }

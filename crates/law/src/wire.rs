@@ -1,5 +1,5 @@
 //! The bytes a host passes in: a container for the ingest verb, an ingested
-//! score, and a take.
+//! score, and a take; and the bytes it reads out of the frame export.
 //!
 //! Every layout is explicit little-endian, versioned and exact. A decoder
 //! refuses a wrong magic, a wrong version, a truncation, and any byte after the
@@ -21,7 +21,18 @@
 //! take       "SJTK"; version u32 = 1;
 //!            note count u32, then per note: onset_sample u64; pitch u8; velocity u8;
 //!                cites tag u8 (0 an addition, 1 a citation); cites u32 (0 when tag is 0)
+//! frames     "SJFR"; frames version u32 = 1; first quantum u64; last quantum u64;
+//!            note count u32, then per note-on, in frame order (onset, voice,
+//!                pitch, an addition before a citation, note id):
+//!                onset_sample u64; voice u8 (score 0, take 1, live 2);
+//!                note tag u8 (1: note_id names a score note; 0: an addition, note_id 0);
+//!                note_id u32; pitch u8; velocity u8; duration_samples u64
+//!            beat count u32, then per beat, by onset:
+//!                onset_sample u64; bar u64; beat u8; downbeat u8 (1 on beat 0, else 0)
 //! ```
+//!
+//! The frames are the law's output ([`crate::Law::frames`]); their decoder is
+//! here for hosts, and it checks the layout and the tags, as the others do.
 //!
 //! The container is what the ingest verb reads ([`crate::Law::ingest`]): a
 //! receipt and every file it receipts, each file under its name in the
@@ -39,6 +50,7 @@ use alloc::vec::Vec;
 
 use score_model::{IngestedNote, IngestedScore, MeterChange, TempoChange};
 
+use crate::frames::{Beat, FrameNote, Frames, Voice};
 use crate::refusal::{Refusal, WireFault};
 use crate::take::{ScoreNoteId, TakeNote};
 
@@ -48,8 +60,12 @@ pub const CONTAINER_MAGIC: [u8; 4] = *b"SJIN";
 pub const SCORE_MAGIC: [u8; 4] = *b"SJSC";
 /// The first four bytes of a take.
 pub const TAKE_MAGIC: [u8; 4] = *b"SJTK";
-/// The wire version every layout carries.
+/// The wire version every input layout carries.
 pub const WIRE_VERSION: u32 = 1;
+/// The first four bytes of the frames the frame export writes.
+pub const FRAMES_MAGIC: [u8; 4] = *b"SJFR";
+/// The frame layout's version.
+pub const FRAMES_VERSION: u32 = 1;
 
 /// The fewest bytes a file of a container takes: its two lengths.
 const FILE_RECORD: usize = 8;
@@ -57,6 +73,13 @@ const TEMPO_RECORD: usize = 12;
 const METER_RECORD: usize = 10;
 const NOTE_RECORD: usize = 21;
 const TAKE_RECORD: usize = 15;
+/// A frame's note-on, in bytes.
+pub const FRAME_NOTE_RECORD: usize = 24;
+/// A frame's beat, in bytes.
+pub const FRAME_BEAT_RECORD: usize = 18;
+/// The frame layout's fixed part: magic, version, the two quanta and the two
+/// counts.
+const FRAMES_FIXED: usize = 32;
 
 /// A container, decoded: the receipt's bytes and each file under its name,
 /// all borrowed from the host's buffer.
@@ -136,12 +159,16 @@ impl<'a> Reader<'a> {
     }
 
     fn header(&mut self, magic: &[u8; 4]) -> Result<(), Refusal> {
+        self.versioned_header(magic, WIRE_VERSION)
+    }
+
+    fn versioned_header(&mut self, magic: &[u8; 4], version: u32) -> Result<(), Refusal> {
         let at_magic = self.fault(WireFault::Magic);
         if self.array::<4>()? != *magic {
             return Err(at_magic);
         }
         let at_version = self.fault(WireFault::Version);
-        if self.u32()? != WIRE_VERSION {
+        if self.u32()? != version {
             return Err(at_version);
         }
         Ok(())
@@ -377,6 +404,118 @@ pub fn encode_take(take: &[TakeNote]) -> Result<Vec<u8>, Refusal> {
         put(&mut out, &id.to_le_bytes())?;
     }
     Ok(out)
+}
+
+/// Encodes frames in the layout [`decode_frames`] reads. The frame export
+/// writes these bytes; the notes and beats go out in the order they are held,
+/// which [`crate::Law::frames`] makes the frame order.
+pub fn encode_frames(frames: &Frames) -> Result<Vec<u8>, Refusal> {
+    let size = frames
+        .notes
+        .len()
+        .checked_mul(FRAME_NOTE_RECORD)
+        .and_then(|n| {
+            frames
+                .beats
+                .len()
+                .checked_mul(FRAME_BEAT_RECORD)
+                .and_then(|b| n.checked_add(b))
+        })
+        .and_then(|n| n.checked_add(FRAMES_FIXED))
+        .ok_or(Refusal::Overflow)?;
+    let mut out = Vec::new();
+    out.try_reserve_exact(size)
+        .map_err(|_| Refusal::OutOfMemory)?;
+    put(&mut out, &FRAMES_MAGIC)?;
+    put(&mut out, &FRAMES_VERSION.to_le_bytes())?;
+    put(&mut out, &frames.first_quantum.to_le_bytes())?;
+    put(&mut out, &frames.last_quantum.to_le_bytes())?;
+    put(&mut out, &count(frames.notes.len(), Refusal::Overflow)?)?;
+    for n in &frames.notes {
+        let (tag, id) = match n.note {
+            None => (0u8, 0u32),
+            Some(id) => (1u8, id.0),
+        };
+        put(&mut out, &n.onset_sample.to_le_bytes())?;
+        put(&mut out, &[n.voice.code(), tag])?;
+        put(&mut out, &id.to_le_bytes())?;
+        put(&mut out, &[n.pitch, n.velocity])?;
+        put(&mut out, &n.duration_samples.to_le_bytes())?;
+    }
+    put(&mut out, &count(frames.beats.len(), Refusal::Overflow)?)?;
+    for b in &frames.beats {
+        put(&mut out, &b.onset_sample.to_le_bytes())?;
+        put(&mut out, &b.bar.to_le_bytes())?;
+        put(&mut out, &[b.beat, u8::from(b.downbeat)])?;
+    }
+    Ok(out)
+}
+
+/// Decodes frame bytes, as a host reads them out of the frame export.
+///
+/// Beyond the layout, it refuses a voice other than 0, 1 or 2, a score frame
+/// that does not name its own note, a note tag of 0 with an id or a tag above
+/// 1, and a downbeat flag that is not 1 exactly on beat 0.
+pub fn decode_frames(bytes: &[u8]) -> Result<Frames, Refusal> {
+    let mut r = Reader { bytes, at: 0 };
+    r.versioned_header(&FRAMES_MAGIC, FRAMES_VERSION)?;
+    let first_quantum = r.u64()?;
+    let last_quantum = r.u64()?;
+    let (count, mut notes) = r.records::<FrameNote>(FRAME_NOTE_RECORD)?;
+    for _ in 0..count {
+        let onset_sample = r.u64()?;
+        let at_voice = r.fault(WireFault::Voice);
+        let voice = match r.u8()? {
+            0 => Voice::Score,
+            1 => Voice::Take,
+            2 => Voice::Live,
+            _ => return Err(at_voice),
+        };
+        let at_tag = r.fault(WireFault::CitationTag);
+        let tag = r.u8()?;
+        let id = r.u32()?;
+        let note = match (tag, id) {
+            (0, 0) => None,
+            (1, id) => Some(ScoreNoteId(id)),
+            _ => return Err(at_tag),
+        };
+        if voice == Voice::Score && note.is_none() {
+            return Err(at_voice);
+        }
+        notes.push(FrameNote {
+            onset_sample,
+            voice,
+            note,
+            pitch: r.u8()?,
+            velocity: r.u8()?,
+            duration_samples: r.u64()?,
+        });
+    }
+    let (count, mut beats) = r.records::<Beat>(FRAME_BEAT_RECORD)?;
+    for _ in 0..count {
+        let onset_sample = r.u64()?;
+        let bar = r.u64()?;
+        let beat = r.u8()?;
+        let at_flag = r.fault(WireFault::Downbeat);
+        let downbeat = match (r.u8()?, beat) {
+            (1, 0) => true,
+            (0, b) if b != 0 => false,
+            _ => return Err(at_flag),
+        };
+        beats.push(Beat {
+            onset_sample,
+            bar,
+            beat,
+            downbeat,
+        });
+    }
+    r.finish()?;
+    Ok(Frames {
+        first_quantum,
+        last_quantum,
+        notes,
+        beats,
+    })
 }
 
 #[cfg(test)]
