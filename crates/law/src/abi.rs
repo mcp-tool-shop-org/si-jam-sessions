@@ -35,14 +35,20 @@
 //! `law_snapshot()` builds the snapshot, its SHA-256 and the rows. Then
 //! `law_snapshot_ptr/len`, `law_hash_ptr` (32 bytes) and `law_rows_ptr/len`
 //! (the rows joined by line feeds) read them. A pointer is valid until the
-//! next call that loads, admits, notes a live note, snapshots or builds frames.
-//! Any call may grow linear memory,
-//! which detaches a JavaScript host's views, so a host re-creates its views
-//! after each call and copies bytes out before the next one.
+//! next call that loads, ingests, admits, passes a live note-on or note-off,
+//! steps a live take's record forward (below), snapshots or builds frames.
+//! Any call may grow linear memory, which detaches a JavaScript host's views,
+//! so a host re-creates its views after each call and copies bytes out before
+//! the next one.
 //!
-//! Loading a score or admitting a take clears the snapshot, the hash and the
-//! rows, so a stale hash is never read as current. Stepping leaves them: a
-//! step does not change the record.
+//! Every call that changes the record clears the snapshot, the hash and the
+//! rows, so a stale hash is never read as current: loading or ingesting a
+//! score, admitting a take, a live note-on or note-off, and, in a live take, a
+//! step that makes a row final (a score note closes, or an addition becomes
+//! final). The first step with the take empty clears them too: it makes the
+//! take live and withdraws the rows a stopped law shows for an empty take,
+//! which were never committed. Any other step leaves them, because it does not
+//! change the record; a step never changes a proposed take's record.
 //!
 //! # The transport, live notes and frames
 //!
@@ -56,7 +62,7 @@
 //! [`crate::wire::decode_frames`]), and `law_frames_ptr/len` read them.
 //! Loading, ingesting, admitting and the live verbs clear the frames as they
 //! clear the snapshot, because a live note can land in a quantum that was
-//! already read.
+//! already read. A step leaves the frames: it changes no committed frame.
 //!
 //! These verbs came with law version 4 (`law_version()`); version 3 has none
 //! of them. In a live take (the transport started with the take empty),
@@ -390,7 +396,9 @@ pub extern "C" fn law_live_note_off(pitch: u32, off_sample: i64) -> u32 {
     })
 }
 
-/// Steps one quantum ([`Law::step`]).
+/// Steps one quantum ([`Law::step`]). A step that changes the record, in a
+/// live take, clears the snapshot, the hash and the rows (see the module
+/// documentation); the frames stay.
 #[unsafe(no_mangle)]
 pub extern "C" fn law_step() -> u32 {
     with_status(|state| {
@@ -398,6 +406,11 @@ pub extern "C" fn law_step() -> u32 {
             None => Err(Refusal::NoScore),
             Some(law) => law.step(),
         };
+        let result = result.map(|changed| {
+            if changed {
+                state.clear_outputs();
+            }
+        });
         status(state, result)
     })
 }
@@ -823,6 +836,64 @@ mod tests {
                 assert_eq!(admitted.cites.map(|id| id.0), cites, "onset {onset_sample}");
             }
         }
+    }
+
+    /// In a live take a step that makes rows final changes the record: it
+    /// clears the snapshot, the hash and the rows, so the old ones are never
+    /// read as current. So does the first step, which withdraws the rows a
+    /// stopped law shows for an empty take. A step that makes nothing final
+    /// leaves them, and no step clears the frames, which a step does not
+    /// change.
+    #[test]
+    fn a_step_that_makes_rows_final_clears_the_snapshot() {
+        let _turn = TURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        reset();
+        assert_eq!(
+            call(&wire::encode_score(&ingested()).unwrap(), law_load_score),
+            0
+        );
+        let mut native = Law::load(&ingested()).unwrap();
+        assert_eq!(same_record(&native).lines().count(), 4, "all never played");
+        step_both(&mut native, 1);
+        assert_eq!(law_snapshot_len(), 0, "the first step withdrew them");
+        assert_eq!(law_rows_len(), 0);
+        assert_eq!(same_record(&native), "");
+        live_notes(&mut native, &[(0, 60, 64, 0, Some(0))]);
+        // The playhead past 8,640: notes 0 and 1 have closed.
+        step_both(&mut native, 200);
+        let rows = same_record(&native);
+        assert_eq!(rows.lines().count(), 2);
+        let hash = read(law_hash_ptr(), 32);
+        assert_ne!(hash, [0; 32]);
+        assert_eq!(law_frames(0, 10), 0);
+        let frames = read(law_frames_ptr(), law_frames_len());
+        assert!(!frames.is_empty());
+
+        // Nothing closes on the next step: the record stands.
+        step_both(&mut native, 1);
+        assert_eq!(read(law_hash_ptr(), 32), hash);
+        assert_eq!(read(law_rows_ptr(), law_rows_len()), rows.as_bytes());
+
+        // Note 2 closes when the playhead passes 32,640: on that step the
+        // snapshot, the hash and the rows are cleared, and the frames stay.
+        let q = u64::from(QUANTUM_SAMPLES);
+        let before = read(law_snapshot_ptr(), law_snapshot_len());
+        assert!(!before.is_empty());
+        // Every step that leaves the playhead at or before 32,640 leaves the
+        // snapshot as it was.
+        while native.steps() * q <= 32_640 {
+            step_both(&mut native, 1);
+            assert_eq!(read(law_snapshot_ptr(), law_snapshot_len()), before);
+        }
+        step_both(&mut native, 1);
+        assert!((native.steps() - 1) * q > 32_640);
+        assert_eq!(law_snapshot_len(), 0);
+        assert_eq!(law_rows_len(), 0);
+        assert_eq!(read(law_hash_ptr(), 32), [0; 32]);
+        assert_eq!(read(law_frames_ptr(), law_frames_len()), frames);
+        let now = same_record(&native);
+        assert_eq!(now.lines().count(), 3);
+        assert!(now.starts_with(&rows));
     }
 
     /// The C ABI's snapshot and rows are the Rust law's; returns the rows.

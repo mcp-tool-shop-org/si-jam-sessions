@@ -57,9 +57,10 @@ pub struct LiveNoteOff {
 ///    (a pitch doubled on two tracks), the lowest id. Grading then says match,
 ///    early or late.
 /// 2. **Another pitch, within the gate.** Otherwise, among the score notes
-///    whose onset is at most [`GATE_SAMPLES`] away, the nearest in onset, then
-///    the nearest in pitch, then the lower pitch, then the lowest id. Grading
-///    says wrong pitch.
+///    whose onset is at most [`GATE_SAMPLES`] away, the nearest in onset; on a
+///    tie in distance, the one before the live note, as for the same pitch;
+///    then the nearest in pitch, then the lower pitch, then the lowest id.
+///    Grading says wrong pitch.
 /// 3. **Otherwise an addition.**
 ///
 /// **A score note is cited at most once.** A score note some take note already
@@ -97,8 +98,8 @@ pub(crate) fn cite(
     let start = notes.partition_point(|n| n.onset_sample < low);
     // (distance, after the live note, id)
     let mut same: Option<(u64, bool, u32)> = None;
-    // (distance, pitch distance, pitch, id)
-    let mut other: Option<(u64, u8, u8, u32)> = None;
+    // (distance, after the live note, pitch distance, pitch, id)
+    let mut other: Option<(u64, bool, u8, u8, u32)> = None;
     for (index, n) in notes.iter().enumerate().skip(start) {
         if n.onset_sample > high {
             break;
@@ -114,7 +115,13 @@ pub(crate) fn cite(
                 same = Some(key);
             }
         } else if distance <= gate {
-            let key = (distance, n.pitch.abs_diff(pitch), n.pitch, id);
+            let key = (
+                distance,
+                n.onset_sample > onset,
+                n.pitch.abs_diff(pitch),
+                n.pitch,
+                id,
+            );
             if other.is_none_or(|best| key < best) {
                 other = Some(key);
             }
@@ -122,7 +129,7 @@ pub(crate) fn cite(
     }
     Ok(match (same, other) {
         (Some((_, _, id)), _) => Some(ScoreNoteId(id)),
-        (None, Some((_, _, _, id))) => Some(ScoreNoteId(id)),
+        (None, Some((_, _, _, _, id))) => Some(ScoreNoteId(id)),
         (None, None) => None,
     })
 }

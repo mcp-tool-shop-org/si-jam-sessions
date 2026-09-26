@@ -248,9 +248,10 @@ pub const GATE_SAMPLES: u32 = 1_920;
 /// - a score note is cited at most once: one already cited is passed over,
 ///   so a second live note in its reach takes the next candidate or becomes an
 ///   addition;
-/// - ties break by the earlier onset, then the lowest id for the same pitch,
-///   and by the nearest pitch, then the lower pitch, then the lowest id for
-///   another pitch (`live::cite` states them in full);
+/// - ties in distance break toward the score note before the live note, for
+///   either pitch; then the lowest id for the same pitch, and the nearest
+///   pitch, then the lower pitch, then the lowest id for another pitch
+///   (`live::cite` states them in full);
 /// - same-pitch candidates are taken before other pitches, so every note of a
 ///   chord played at its own pitch finds its own score note.
 ///

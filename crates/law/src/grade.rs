@@ -210,6 +210,89 @@ pub(crate) fn verdicts(score: &LawScore, take: &[TakeNote]) -> Result<Vec<Verdic
     Ok(out)
 }
 
+/// The step from which a row whose onset is `onset` is final, and its close
+/// point, `onset + CLOSE_SAMPLES`: the first step whose playhead, `(steps - 1)
+/// * Q`, is past the close point, step `close / Q + 2`.
+pub(crate) fn final_step(onset: u64) -> Result<(u64, u64), Refusal> {
+    let point = onset
+        .checked_add(u64::from(CLOSE_SAMPLES))
+        .ok_or(Refusal::Overflow)?;
+    let step = point
+        .checked_div(u64::from(QUANTUM_SAMPLES))
+        .and_then(|n| n.checked_add(2))
+        .ok_or(Refusal::Overflow)?;
+    Ok((step, point))
+}
+
+/// The step from which an addition is final: its own close, or, when it was
+/// admitted at `admitted_at` after that (a live note delivered past its
+/// allowance), the step after its admission.
+fn addition_final_step(onset: u64, admitted_at: Option<u64>) -> Result<(u64, u64), Refusal> {
+    let (step, point) = final_step(onset)?;
+    match admitted_at {
+        None => Ok((step, point)),
+        Some(at) => Ok((step.max(at.checked_add(1).ok_or(Refusal::Overflow)?), point)),
+    }
+}
+
+/// The step a live note was admitted at, if the take note is a live note.
+fn admitted_at(live: &[LiveLength], t: &TakeNote) -> Option<u64> {
+    live.binary_search_by(|l| l.key.cmp(&t.key()))
+        .ok()
+        .and_then(|i| live.get(i))
+        .map(|l| l.admitted_at)
+}
+
+/// Whether step `steps` makes a row of a live take final, so that the rows
+/// [`final_verdicts`] shows after it are more than it showed before it.
+///
+/// A row with close point `c` is final from step `c / Q + 2`, so the rows
+/// that become final at step `n` are those with a close point in
+/// `[(n - 2) * Q, (n - 1) * Q)`, whose onsets lie `CLOSE_SAMPLES` earlier: a
+/// score note, or an addition not admitted after step `n - 1`; and any
+/// addition admitted at step `n - 1` after its own close point had passed.
+pub(crate) fn finalizes_at(
+    score: &LawScore,
+    take: &[TakeNote],
+    live: &[LiveLength],
+    steps: u64,
+) -> bool {
+    let late = live.iter().any(|l| {
+        l.key.2.is_none()
+            && l.admitted_at.checked_add(1) == Some(steps)
+            && final_step(l.key.0).is_ok_and(|(step, _)| step <= steps)
+    });
+    if late {
+        return true;
+    }
+    let Some(first) = steps.checked_sub(2) else {
+        return false;
+    };
+    let quantum = u64::from(QUANTUM_SAMPLES);
+    let close = u64::from(CLOSE_SAMPLES);
+    // Past u64 the whole range lies beyond every close point the law holds.
+    let Some(low) = first.checked_mul(quantum) else {
+        return false;
+    };
+    let high = first.saturating_add(1).saturating_mul(quantum);
+    let from = low.saturating_sub(close);
+    let to = high.saturating_sub(close);
+    let notes = score.notes();
+    let i = notes.partition_point(|n| n.onset_sample < from);
+    if notes.get(i).is_some_and(|n| n.onset_sample < to) {
+        return true;
+    }
+    let j = take.partition_point(|t| t.onset_sample < from);
+    take.iter()
+        .skip(j)
+        .take_while(|t| t.onset_sample < to)
+        .any(|t| {
+            t.cites.is_none()
+                && admitted_at(live, t)
+                    .is_none_or(|at| at.checked_add(1).is_some_and(|n| n <= steps))
+        })
+}
+
 /// A row's place in a live take's stream: the step from which it is final,
 /// its close point, score notes (0) before additions (1), then the score
 /// note's id and the take index, or the addition's take index. Every row has
@@ -243,16 +326,6 @@ pub(crate) fn final_verdicts(
     steps: u64,
 ) -> Result<Vec<Verdict>, Refusal> {
     let too_long = Refusal::TakeTooLong { count: take.len() };
-    let quantum = u64::from(QUANTUM_SAMPLES);
-    let close = u64::from(CLOSE_SAMPLES);
-    let final_from = |onset: u64| -> Result<(u64, u64), Refusal> {
-        let point = onset.checked_add(close).ok_or(Refusal::Overflow)?;
-        let step = point
-            .checked_div(quantum)
-            .and_then(|n| n.checked_add(2))
-            .ok_or(Refusal::Overflow)?;
-        Ok((step, point))
-    };
     let citations = citations(take)?;
     let notes = score.notes();
     let mut placed: Vec<(Place, Verdict)> = Vec::new();
@@ -261,7 +334,7 @@ pub(crate) fn final_verdicts(
         let id = ScoreNoteId(
             u32::try_from(index).map_err(|_| Refusal::TooManyNotes { count: notes.len() })?,
         );
-        let (step, point) = final_from(s.onset_sample)?;
+        let (step, point) = final_step(s.onset_sample)?;
         let shown = step <= steps;
         let mut played = false;
         while let Some(&&(cites, take_index)) = pending.peek() {
@@ -304,11 +377,7 @@ pub(crate) fn final_verdicts(
         if t.cites.is_some() {
             continue;
         }
-        let (mut step, point) = final_from(t.onset_sample)?;
-        if let Ok(i) = live.binary_search_by(|l| l.key.cmp(&t.key())) {
-            let admitted = live.get(i).ok_or(Refusal::Overflow)?.admitted_at;
-            step = step.max(admitted.checked_add(1).ok_or(Refusal::Overflow)?);
-        }
+        let (step, point) = addition_final_step(t.onset_sample, admitted_at(live, t))?;
         if step <= steps {
             let take_index = u32::try_from(index).map_err(|_| too_long)?;
             let place = (step, point, 1, u64::from(take_index), 0);

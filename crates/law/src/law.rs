@@ -78,7 +78,9 @@ pub struct Law {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TakeKind {
     /// No note, and the transport has not run. Read as law version 3 reads an
-    /// empty take: every score note never played.
+    /// empty take: every score note never played. Those rows are not
+    /// committed: nothing is committed before the first step, and the first
+    /// step, which makes the take live, withdraws them.
     Empty,
     /// Its notes were admitted before the transport ran ([`Law::admit`]): the
     /// constructed take, or a recorded take played back. Graded whole, as law
@@ -258,17 +260,27 @@ impl Law {
     /// Steps one quantum. Nothing is proposed or needed; the horizon moves
     /// forward by one quantum. A first step with the take empty makes it a
     /// live take ([`TakeKind`]).
-    pub fn step(&mut self) -> Result<(), Refusal> {
+    ///
+    /// Returns whether the step changed the record, the verdicts and rows:
+    /// in a live take, when it made a row final (a score note closed, or an
+    /// addition became final); and on the first step that makes the take live,
+    /// which withdraws the rows a stopped law with an empty take shows. A step
+    /// never changes a proposed take's record.
+    pub fn step(&mut self) -> Result<bool, Refusal> {
         let refused = Refusal::StepOverflow { steps: self.steps };
         let next = self.steps.checked_add(1).ok_or(refused)?;
         // After this step the first open quantum is next + H; it must be a
         // u64, so the horizon and every lateness stay representable.
         next.checked_add(u64::from(HORIZON_QUANTA)).ok_or(refused)?;
         self.steps = next;
-        if self.kind == TakeKind::Empty {
-            self.kind = TakeKind::Live;
-        }
-        Ok(())
+        Ok(match self.kind {
+            TakeKind::Empty => {
+                self.kind = TakeKind::Live;
+                !self.score.notes().is_empty()
+            }
+            TakeKind::Live => grade::finalizes_at(&self.score, &self.take, &self.live, next),
+            TakeKind::Proposed => false,
+        })
     }
 
     /// Admits `notes` into the take, all of them or none.
@@ -510,8 +522,11 @@ impl Law {
         Ok(admitted)
     }
 
-    /// The live note-off: ends the latest held live note of the pitch, whose
-    /// length becomes `off_sample` minus its onset.
+    /// The live note-off: ends the earliest held live note of the pitch, the
+    /// first in the take's order (onset, pitch, citation), whose length
+    /// becomes `off_sample` minus its onset. Two notes of one pitch held at
+    /// once end in the order they began, as keys released in the order they
+    /// were pressed do.
     ///
     /// The checks run in this order:
     /// 1. the transport runs ([`Refusal::LiveStopped`]);
@@ -531,13 +546,15 @@ impl Law {
             .filter(|&p| p <= 127)
             .ok_or(Refusal::LivePitch { pitch: off.pitch })?;
         let off_sample = Law::live_sample(off.off_sample, horizon)?;
-        let held = self
+        let (at, key) = self
             .live
-            .iter_mut()
-            .filter(|l| l.key.1 == pitch && l.duration_samples.is_none())
-            .max_by_key(|l| l.key)
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.key.1 == pitch && l.duration_samples.is_none())
+            .min_by_key(|(_, l)| l.key)
+            .map(|(at, l)| (at, l.key))
             .ok_or(Refusal::LiveNotHeld { pitch })?;
-        let onset_sample = held.key.0;
+        let onset_sample = key.0;
         let length = off_sample
             .checked_sub(onset_sample)
             .filter(|&n| n > 0)
@@ -545,14 +562,17 @@ impl Law {
                 onset_sample,
                 off_sample,
             })?;
-        held.duration_samples = Some(length);
-        let key = held.key;
-        self.take
+        // Every check before the write: a refusal leaves the note held.
+        let ended = self
+            .take
             .binary_search_by(|t| t.key().cmp(&key))
             .ok()
             .and_then(|i| self.take.get(i))
             .copied()
-            .ok_or(Refusal::Overflow)
+            .ok_or(Refusal::Overflow)?;
+        let held = self.live.get_mut(at).ok_or(Refusal::Overflow)?;
+        held.duration_samples = Some(length);
+        Ok(ended)
     }
 
     /// The committed frames of the quanta `first..=last`: every note-on of the
@@ -591,6 +611,13 @@ impl Law {
     /// step begin with the verdicts after every earlier step, unchanged: a row
     /// once shown is a printout of what the law committed, and it stays as it
     /// was shown.
+    ///
+    /// What stays is the row's text and the verdict's kind, score note, onset,
+    /// difference and pitches. A verdict's `take` field is the take note's
+    /// index in the take's key order, and a live note delivered past its
+    /// allowance, with an onset before notes already shown, moves the indices
+    /// after it; a live take's rows name an addition by onset and pitch, never
+    /// by index, so no row moves with them.
     pub fn verdicts(&self) -> Result<Vec<Verdict>, Refusal> {
         match self.kind {
             TakeKind::Live => {
@@ -878,7 +905,11 @@ mod tests {
     fn the_transport_refuses_to_step_past_its_last_quantum() {
         let mut l = law();
         l.steps = u64::MAX - H - 1;
-        assert_eq!(l.step(), Ok(()));
+        assert_eq!(
+            l.step(),
+            Ok(true),
+            "the first step makes the empty take live"
+        );
         assert_eq!(l.committed_horizon(), Ok(Some(u64::MAX - 1)));
         assert_eq!(
             l.step(),
@@ -887,6 +918,31 @@ mod tests {
             })
         );
         assert_eq!(l.steps(), u64::MAX - H, "a refused step does not move");
+    }
+
+    /// A note-off checks everything before it writes: when the take note of
+    /// the held note cannot be found (no path reaches this today), the refusal
+    /// leaves the note held, as every refused note-off does.
+    #[test]
+    fn a_refused_note_off_writes_nothing() {
+        let mut l = law();
+        l.step().unwrap();
+        l.live(LiveNote {
+            onset_sample: 100,
+            pitch: 60,
+            velocity: 64,
+        })
+        .unwrap();
+        // Break the invariant by hand: the take no longer holds the live note.
+        l.take.clear();
+        assert_eq!(
+            l.live_off(LiveNoteOff {
+                pitch: 60,
+                off_sample: 200
+            }),
+            Err(Refusal::Overflow)
+        );
+        assert_eq!(l.live[0].duration_samples, None, "still held");
     }
 
     /// A live note can sound to the law's last sample. A note-off's release is

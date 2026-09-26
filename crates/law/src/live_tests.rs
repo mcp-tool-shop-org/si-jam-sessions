@@ -352,8 +352,26 @@ fn a_same_pitch_note_answers_the_nearest() {
     assert_eq!(on(100_000), Some(0), "the doubled pitch: the lower id");
 }
 
+/// Two score notes of other pitches, equally far from a live note, one before
+/// it and one after: the one before answers, as for the same pitch, before
+/// pitch distance is looked at.
+#[test]
+fn an_equidistant_wrong_pitch_takes_the_score_note_before_the_live_one() {
+    // 64 at 49,000 (id 0), before the live note; 61 at 51,000 (id 1), after it
+    // and a semitone nearer in pitch. A 60 is played at 50,000.
+    let score = [(49_000, 64), (51_000, 61)];
+    assert_eq!(fresh(&score, 50_000, 60), Some(0));
+    // Mirrored in pitch, the one before still answers.
+    let score = [(49_000, 61), (51_000, 64)];
+    assert_eq!(fresh(&score, 50_000, 60), Some(0));
+    let mut law = law_of(&[(49_000, 64), (51_000, 61)]);
+    cites(&mut law, 50_000, 60);
+    assert_eq!(closed_words(&mut law), ["wrong pitch", "never played"]);
+}
+
 /// Another pitch answers a score note only within the gate: the nearest onset,
-/// then the nearest pitch, then the lower pitch, then the lowest id.
+/// then the one before the live note, then the nearest pitch, then the lower
+/// pitch, then the lowest id.
 #[test]
 fn another_pitch_answers_within_the_gate() {
     // A chord of 57, 60 and 64 at 200,000 (ids 0, 1, 2); 62 alone at 202,000
@@ -704,18 +722,19 @@ fn a_take_admitted_as_a_batch_is_graded_as_version_3() {
 
 // --- The note-off ----------------------------------------------------------------
 
-/// A note-off ends the latest held note of its pitch, and the frames carry
-/// the length from the note-on to it.
+/// A note-off ends the earliest held note of its pitch, and the frames carry
+/// the length from the note-on to it: two notes of one pitch pressed and
+/// released in order, overlapping, each keep their own length.
 #[test]
-fn a_note_off_ends_the_latest_held_note_of_its_pitch() {
+fn a_note_off_ends_the_earliest_held_note_of_its_pitch() {
     let mut law = law_of(&[(1_000, 60)]);
     commit_through(&mut law, 100);
     let first = law.live(played(1_000, 60)).unwrap();
     let second = law.live(played(2_000, 60)).unwrap();
     assert_eq!(first.cites, Some(ScoreNoteId(0)));
     assert_eq!(second.cites, None, "0 is cited");
-    assert_eq!(law.live_off(off(60, 2_500)), Ok(second));
-    assert_eq!(law.live_off(off(60, 3_000)), Ok(first));
+    assert_eq!(law.live_off(off(60, 2_500)), Ok(first));
+    assert_eq!(law.live_off(off(60, 3_000)), Ok(second));
     assert_eq!(
         law.live_off(off(60, 3_500)),
         Err(Refusal::LiveNotHeld { pitch: 60 })
@@ -731,8 +750,8 @@ fn a_note_off_ends_the_latest_held_note_of_its_pitch() {
         lengths,
         [
             (1_000, Voice::Score, 1_000),
-            (1_000, Voice::Live, 2_000),
-            (2_000, Voice::Live, 500),
+            (1_000, Voice::Live, 1_500),
+            (2_000, Voice::Live, 1_000),
         ]
     );
 }
@@ -851,6 +870,40 @@ fn live_notes_grade_as_the_same_notes_admitted_as_a_take() {
     );
 }
 
+/// A step says whether it changed the record: never in a proposed take; in a
+/// live take on the first step (which withdraws a stopped law's rows) and on
+/// each step that makes a row final, and on no other.
+#[test]
+fn a_step_says_when_it_changes_the_record() {
+    let mut proposed = law_of(&[(96_000, 60)]);
+    proposed
+        .admit(&[TakeNote {
+            onset_sample: 96_000,
+            pitch: 60,
+            velocity: 90,
+            cites: Some(ScoreNoteId(0)),
+        }])
+        .unwrap();
+    for _ in 0..3_000 {
+        assert_eq!(proposed.step(), Ok(false));
+    }
+
+    // Score note 0 closes when the playhead passes 104,640, the addition
+    // played at 150,000 when it passes 158,640.
+    let mut live = law_of(&[(96_000, 60)]);
+    assert_eq!(live.step(), Ok(true));
+    let mut changed_at = Vec::new();
+    while live.playhead_sample().unwrap() < 170_000 {
+        if live.playhead_sample() == Some(150_000) {
+            assert_eq!(live.live(played(150_000, 70)).map(|t| t.cites), Ok(None));
+        }
+        if live.step().unwrap() {
+            changed_at.push(live.playhead_sample().unwrap());
+        }
+    }
+    assert_eq!(changed_at, [104_688, 158_688]);
+}
+
 /// A small deterministic generator for the property tests below.
 struct Lcg(u64);
 
@@ -868,9 +921,10 @@ impl Lcg {
 /// samples, are played live, most on or near their onset and some a
 /// semitone off; each note is delivered after a random lag, nine in ten
 /// inside the allowance and one in ten up to twice past it (a late record is
-/// still admitted: it cites a note still open, or is an addition). After
-/// every step the rows are the rows after the step before, with rows added
-/// at the end, and at the end every note has a row.
+/// still admitted: it cites a note still open, or is an addition). A delivery
+/// shows no row at once; after every step the rows are the rows after the
+/// step before, with rows added at the end, and the step says it changed the
+/// record exactly when rows were added. At the end every note has a row.
 #[test]
 fn the_row_stream_only_grows() {
     for seed in 1..=4u64 {
@@ -894,10 +948,12 @@ fn the_row_stream_only_grows() {
             })
             .collect();
         due.sort();
-        let mut seen: Vec<String> = Vec::new();
         let mut next = 0;
         let end = notes.last().unwrap().0 + 2 * CLOSE;
-        law.step().unwrap();
+        assert_eq!(rows(&law).len(), notes.len(), "stopped: all never played");
+        assert_eq!(law.step(), Ok(true), "the first step withdraws them");
+        let mut seen: Vec<String> = rows(&law);
+        assert!(seen.is_empty());
         while law.playhead_sample().unwrap() < end {
             let at = law.playhead_sample().unwrap();
             while next < due.len() && due[next].0 <= at {
@@ -906,13 +962,23 @@ fn the_row_stream_only_grows() {
                 assert!(admitted.is_ok(), "seed {seed}: {admitted:?}");
                 next += 1;
             }
+            assert_eq!(
+                rows(&law),
+                seen,
+                "seed {seed}: a delivery shows no row at once"
+            );
+            let changed = law.step().unwrap();
             let now = rows(&law);
             assert!(
                 now.starts_with(&seen),
                 "seed {seed}: the rows after playhead {at} do not begin with the rows before"
             );
+            assert_eq!(
+                changed,
+                now.len() > seen.len(),
+                "seed {seed}: the step after playhead {at}"
+            );
             seen = now;
-            law.step().unwrap();
         }
         assert_eq!(next, due.len());
         let rows_now = rows(&law);
