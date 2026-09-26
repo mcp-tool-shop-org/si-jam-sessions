@@ -4,6 +4,9 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
+// Tests may call `Smf::parse`: only the crate itself must stay free of its floating point.
+use midly::Smf;
+
 use super::*;
 
 /// An SMF variable-length quantity.
@@ -542,9 +545,13 @@ fn score_model_refusals_pass_through() {
 // re-run by an independent verifier). Without `strict` midly parses all three as `Ok`:
 // one track holding end-of-track; one track with no events; one track whose MIDI channel
 // is masked to 15. That half cannot be re-measured here: Cargo unifies features across
-// the build, so every midly in this workspace has `strict`. With `strict` each is
-// `Malformed`, an error kind midly emits only when `strict` is on, and ingest passes that
-// refusal through. So these results are the feature's fingerprint.
+// the build, so every midly in this workspace has `strict`.
+//
+// The truncated track and the malformed event are refused by midly's `strict` chunk and
+// event readers, which the lazy parser still runs: `Malformed`, an error kind midly emits
+// only when `strict` is on, so those two results are the feature's fingerprint. The
+// track-count mismatch is refused by ingest's own check instead: only `Smf::parse` counted
+// tracks, and ingest no longer calls it, because its capacity estimate is floating point.
 
 fn hex(text: &str) -> Vec<u8> {
     text.split_ascii_whitespace()
@@ -553,17 +560,20 @@ fn hex(text: &str) -> Vec<u8> {
 }
 
 #[test]
-fn strict_refuses_a_file_declaring_a_track_it_lacks() {
-    // Format 1 declares 2 tracks; 1 is present.
+fn a_file_declaring_a_track_it_lacks_is_refused_by_the_count_check() {
+    // Format 1 declares 2 tracks; 1 is present. midly's `Smf::parse` refused this as
+    // `Malformed("file has a different amount of tracks than declared")`; the lazy parser
+    // does not count tracks, so ingest's own check refuses it, by its own name.
     let file = hex("4D 54 68 64 00 00 00 06 00 01 00 02 00 60 4D 54 72 6B 00 00 00 04 00 FF 2F 00");
     assert_eq!(
         ingest_smf(&file),
-        Err(IngestError::Malformed(
-            "file has a different amount of tracks than declared"
-        ))
+        Err(IngestError::TrackCountMismatch {
+            declared: 2,
+            found: 1
+        })
     );
-    // The same bytes declaring 1 track get past midly; only score-model refuses them, for
-    // holding no notes.
+    // The same bytes declaring 1 track pass every layout check; only score-model refuses
+    // them, for holding no notes.
     let mut declared_one = file.clone();
     declared_one[11] = 1;
     assert_eq!(
@@ -591,6 +601,24 @@ fn strict_refuses_an_out_of_range_meta_value() {
         ingest_smf(&file),
         Err(IngestError::Malformed("malformed event"))
     );
+}
+
+#[test]
+fn a_format_0_file_must_hold_exactly_one_track() {
+    // The other check `Smf::parse` made after reading, now made by ingest. Each file
+    // declares exactly the tracks it holds, so only this rule can refuse it.
+    let track = || Track::default().on(0, 0, 60, 1).off(96, 0, 60).end();
+    assert_eq!(
+        ingest_smf(&smf(0, 96, &[track(), track()])),
+        Err(IngestError::SingleTrackFormat { tracks: 2 })
+    );
+    assert_eq!(
+        ingest_smf(&smf(0, 96, &[])),
+        Err(IngestError::SingleTrackFormat { tracks: 0 })
+    );
+    // One track in format 0, or two in format 1, is fine.
+    assert!(ingest_smf(&smf(0, 96, &[track()])).is_ok());
+    assert!(ingest_smf(&smf(1, 96, &[track(), Track::default().end()])).is_ok());
 }
 
 #[test]
@@ -797,13 +825,14 @@ fn the_largest_track_count_a_header_can_declare_fits_a_track_index() {
     // A header declares at most u16::MAX tracks, so the last index is u16::MAX - 1.
     let score = ingest_smf(&many_tracks(u16::MAX, usize::from(u16::MAX))).unwrap();
     assert_eq!(score.notes, vec![note(0, 60, u16::MAX - 1, 0, 96, 1)]);
-    // One track more than any header can declare is refused by midly's strict parser
+    // One track more than any header can declare is refused by the track-count check
     // before ingest indexes a single track.
     assert_eq!(
         ingest_smf(&many_tracks(u16::MAX, usize::from(u16::MAX) + 1)),
-        Err(IngestError::Malformed(
-            "file has a different amount of tracks than declared"
-        ))
+        Err(IngestError::TrackCountMismatch {
+            declared: usize::from(u16::MAX),
+            found: usize::from(u16::MAX) + 1
+        })
     );
 }
 
@@ -829,4 +858,81 @@ fn a_tick_beyond_u64_is_refused_by_name() {
         advance(u64::MAX, (1 << 28) - 1, 7),
         Err(IngestError::TickOverflow { track: 7 })
     );
+}
+
+// ---------------------------------------------------------------------------------------
+// `read_tracks` is `Smf::parse` without its floating-point capacity guess. (Adapted from
+// a reference patch made for PR #4, the golden hash; here the two count checks refuse by
+// their own names.)
+
+/// What `Smf::parse` would have said for a refusal of `read_tracks`.
+fn as_smf_parse_says(ours: IngestError) -> IngestError {
+    match ours {
+        IngestError::TrackCountMismatch { .. } => {
+            IngestError::Malformed("file has a different amount of tracks than declared")
+        }
+        IngestError::SingleTrackFormat { .. } => {
+            IngestError::Malformed("singletrack format file has multiple tracks")
+        }
+        other => other,
+    }
+}
+
+/// Parses `bytes` both ways and requires the same header and events, or the same refusal.
+fn reads_as_smf_parse_does(bytes: &[u8]) {
+    match (read_tracks(bytes), Smf::parse(bytes)) {
+        (Ok((header, tracks)), Ok(smf)) => {
+            assert_eq!(header, smf.header);
+            assert_eq!(tracks, smf.tracks);
+        }
+        (Err(ours), Err(theirs)) => assert_eq!(as_smf_parse_says(ours), from_midly(theirs)),
+        (ours, theirs) => panic!(
+            "read_tracks gave {:?} and Smf::parse gave {:?}",
+            ours.map(|_| ()),
+            theirs.map(|_| ())
+        ),
+    }
+}
+
+#[test]
+fn read_tracks_reads_what_smf_parse_reads() {
+    let file = ENTERTAINER;
+    reads_as_smf_parse_does(file);
+    // Truncations, which end inside every kind of event and chunk.
+    for len in (0..file.len()).step_by(7) {
+        reads_as_smf_parse_does(&file[..len]);
+    }
+    // Byte changes in the format and the declared track count, and throughout the tracks.
+    // The division (bytes 12 and 13) is left alone: midly panics on a division of 0x80xx,
+    // which ingest refuses before either parser runs.
+    for at in (8..12).chain((14..file.len()).step_by(23)) {
+        for flip in [0x01, 0x40, 0x80, 0xFF] {
+            let mut changed = file.to_vec();
+            changed[at] ^= flip;
+            reads_as_smf_parse_does(&changed);
+        }
+    }
+}
+
+#[test]
+fn read_tracks_repeats_smf_parses_two_track_count_checks() {
+    let track = || Track::default().on(0, 0, 60, 1).off(96, 0, 60).end();
+    let more_declared = smf_declaring(1, 96, 3, &[track(), track()]);
+    assert_eq!(
+        read_tracks(&more_declared).map(|_| ()),
+        Err(IngestError::TrackCountMismatch {
+            declared: 3,
+            found: 2
+        })
+    );
+    reads_as_smf_parse_does(&more_declared);
+    let single_with_two = smf_declaring(0, 96, 2, &[track(), track()]);
+    assert_eq!(
+        read_tracks(&single_with_two).map(|_| ()),
+        Err(IngestError::SingleTrackFormat { tracks: 2 })
+    );
+    reads_as_smf_parse_does(&single_with_two);
+    let fine = smf_declaring(1, 96, 2, &[track(), track()]);
+    assert_eq!(read_tracks(&fine).map(|(_, t)| t.len()), Ok(2));
+    reads_as_smf_parse_does(&fine);
 }

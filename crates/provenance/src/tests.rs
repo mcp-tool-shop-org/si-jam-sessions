@@ -1025,13 +1025,31 @@ fn an_unreadable_file_is_refused() {
             why: Unreadable::UnterminatedString
         }
     );
+    // The header declares two tracks and the file holds one: this reader's own count check.
     let mut f = Fixture::new();
     f.mid = smf_with(&[], 2);
     f.refresh();
-    assert!(matches!(
+    assert_eq!(
         f.refused(),
-        Refusal::Unreadable { name, why: Unreadable::Smf(_) } if name == MID_NAME
-    ));
+        Refusal::Unreadable {
+            name: named(MID_NAME),
+            why: Unreadable::TrackCountMismatch {
+                declared: 2,
+                found: 1
+            }
+        }
+    );
+    // The last track one byte short of its declared length: midly's strict chunk reader.
+    let mut f = Fixture::new();
+    f.mid.pop();
+    f.refresh();
+    assert_eq!(
+        f.refused(),
+        Refusal::Unreadable {
+            name: named(MID_NAME),
+            why: Unreadable::Smf("invalid chunk")
+        }
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1318,4 +1336,83 @@ fn the_rules_are_those_of_2026() {
     assert_eq!(PREDICATE_VERSION, 1);
     assert_eq!(CANONICAL_VERSION, 1);
     assert_eq!(RECEIPT_SCHEMA, 1);
+}
+
+// ---------------------------------------------------------------------------------------
+// The SMF reader's `read_tracks` is `Smf::parse` without its floating-point capacity
+// guess. (Adapted from a reference patch made for PR #4, the golden hash; here the two
+// count checks refuse by their own names.)
+
+/// What `Smf::parse` would have said for a refusal of `read_tracks`.
+fn as_smf_parse_says(ours: Unreadable) -> Unreadable {
+    match ours {
+        Unreadable::TrackCountMismatch { .. } => {
+            Unreadable::Smf("file has a different amount of tracks than declared")
+        }
+        Unreadable::SingleTrackFormat { .. } => {
+            Unreadable::Smf("singletrack format file has multiple tracks")
+        }
+        other => other,
+    }
+}
+
+/// Parses `bytes` both ways and requires the same header and events, or the same refusal.
+fn reads_as_smf_parse_does(bytes: &[u8]) {
+    match (crate::infile::read_tracks(bytes), midly::Smf::parse(bytes)) {
+        (Ok((header, tracks)), Ok(smf)) => {
+            assert_eq!(header, smf.header);
+            assert_eq!(tracks, smf.tracks);
+        }
+        (Err(ours), Err(theirs)) => assert_eq!(
+            as_smf_parse_says(ours),
+            Unreadable::Smf(theirs.kind().message())
+        ),
+        (ours, theirs) => panic!(
+            "read_tracks gave {:?} and Smf::parse gave {:?}",
+            ours.map(|_| ()),
+            theirs.map(|_| ())
+        ),
+    }
+}
+
+#[test]
+fn read_tracks_reads_what_smf_parse_reads() {
+    reads_as_smf_parse_does(REAL_MID);
+    // Truncations, which end inside every kind of event and chunk.
+    for len in (0..REAL_MID.len()).step_by(7) {
+        reads_as_smf_parse_does(&REAL_MID[..len]);
+    }
+    // Byte changes in the format and the declared track count, and throughout the tracks.
+    // The division (bytes 12 and 13) is left alone: midly panics on a division of 0x80xx,
+    // which this reader refuses before either parser runs.
+    for at in (8..12).chain((14..REAL_MID.len()).step_by(23)) {
+        for flip in [0x01, 0x40, 0x80, 0xFF] {
+            let mut changed = REAL_MID.to_vec();
+            changed[at] ^= flip;
+            reads_as_smf_parse_does(&changed);
+        }
+    }
+}
+
+#[test]
+fn read_tracks_repeats_smf_parses_two_track_count_checks() {
+    let one_declared_two = smf_with(&[], 2);
+    assert_eq!(
+        crate::infile::read_tracks(&one_declared_two).map(|_| ()),
+        Err(Unreadable::TrackCountMismatch {
+            declared: 2,
+            found: 1
+        })
+    );
+    reads_as_smf_parse_does(&one_declared_two);
+    // Format 0 declaring and holding two tracks.
+    let mut two = smf_with(&[], 2);
+    let track = two[14..].to_vec();
+    two.extend_from_slice(&track);
+    assert_eq!(
+        crate::infile::read_tracks(&two).map(|_| ()),
+        Err(Unreadable::SingleTrackFormat { tracks: 2 })
+    );
+    reads_as_smf_parse_does(&two);
+    reads_as_smf_parse_does(&smf_with(&[(0x02, b"(c) 1902")], 1));
 }

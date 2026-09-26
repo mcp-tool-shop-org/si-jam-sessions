@@ -25,7 +25,10 @@
 //! sees, so both are unreadable. A timecode division is unreadable too, and is refused
 //! before midly sees it: midly 0.5.3 negates the division's high byte as an `i8`, which
 //! overflows for `0x80` and panics under overflow checks. The rest, including a ragged end,
-//! is parsed with midly's `strict` feature; a file it rejects is unreadable.
+//! is parsed with midly's `strict` feature; a file it rejects is unreadable. It is read as
+//! `Smf::parse` reads it, minus the one floating-point computation `Smf::parse` makes (see
+//! [`read_tracks`]), because this crate runs inside the law's wasm and the law's binary
+//! carries no floating point.
 //!
 //! Statements are returned in file order, each with its text verbatim (the markup text is
 //! the one exception, as described). They must be UTF-8.
@@ -33,7 +36,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use midly::{MetaMessage, Smf, TrackEventKind};
+use midly::{Format, Header, MetaMessage, TrackEvent, TrackEventKind};
 
 use crate::licence;
 use crate::receipt::{Media, Statement, StatementField};
@@ -59,6 +62,15 @@ pub enum Unreadable {
     TimecodeDivision,
     /// midly rejected the SMF. The message is midly's.
     Smf(&'static str),
+    /// The SMF header declares a different number of tracks than the file holds.
+    TrackCountMismatch {
+        declared: usize,
+        found: usize,
+    },
+    /// A format-0 (single-track) SMF that holds other than one track.
+    SingleTrackFormat {
+        tracks: usize,
+    },
     /// An SMF licence statement that is not UTF-8.
     SmfTextNotUtf8,
 }
@@ -76,9 +88,9 @@ fn smf(bytes: &[u8]) -> Result<Vec<Statement>, Unreadable> {
     if division & 0x8000 != 0 {
         return Err(Unreadable::TimecodeDivision);
     }
-    let smf = Smf::parse(bytes).map_err(|e| Unreadable::Smf(e.kind().message()))?;
+    let (_, tracks) = read_tracks(bytes)?;
     let mut out = Vec::new();
-    for track in &smf.tracks {
+    for track in &tracks {
         for event in track {
             let TrackEventKind::Meta(meta) = event.kind else {
                 continue;
@@ -107,6 +119,56 @@ fn smf(bytes: &[u8]) -> Result<Vec<Statement>, Unreadable> {
         }
     }
     Ok(out)
+}
+
+/// The tracks of an SMF, each a list of its events.
+pub(crate) type Tracks<'a> = Vec<Vec<TrackEvent<'a>>>;
+
+/// Reads an SMF as midly's `Smf::parse` does with `strict`, without its floating point.
+///
+/// `Smf::parse` is three steps:
+/// 1. the lazy `midly::parse`;
+/// 2. `EventIter::into_vec` on each track, which sizes its vector with
+///    `(bytes as f32 * (1.0 / 3.0)) as usize`;
+/// 3. two checks on the track count.
+///
+/// Step 2's capacity guess puts f32 instructions into any wasm that links it, and the
+/// law's binary carries none. Iterating each `EventIter` instead reads the same events
+/// with the same strict error. Step 3 is repeated here, in the same order and against the
+/// same number: before any track is read, midly's track iterator reports the header's
+/// declared count as its size hint, which is what `Smf::parse` compares with. The two
+/// checks refuse by their own names. The ingest crate reads SMF the same way; `tests.rs`
+/// compares this function with `Smf::parse` on the committed score and on truncations and
+/// byte changes of it.
+///
+/// A timecode division must be refused before this is called: midly's header reader panics
+/// on a division of `0x80xx` under overflow checks.
+pub(crate) fn read_tracks(bytes: &[u8]) -> Result<(Header, Tracks<'_>), Unreadable> {
+    fn refused(e: midly::Error) -> Unreadable {
+        Unreadable::Smf(e.kind().message())
+    }
+    let (header, track_iter) = midly::parse(bytes).map_err(refused)?;
+    let declared = track_iter.size_hint().0;
+    let mut tracks = Vec::new();
+    for track in track_iter {
+        let events = track
+            .map_err(refused)?
+            .collect::<Result<Vec<TrackEvent<'_>>, midly::Error>>()
+            .map_err(refused)?;
+        tracks.push(events);
+    }
+    if tracks.len() != declared {
+        return Err(Unreadable::TrackCountMismatch {
+            declared,
+            found: tracks.len(),
+        });
+    }
+    if header.format == Format::SingleTrack && tracks.len() != 1 {
+        return Err(Unreadable::SingleTrackFormat {
+            tracks: tracks.len(),
+        });
+    }
+    Ok((header, tracks))
 }
 
 /// Makes the layout checks midly does not make, and returns the header's division word:
@@ -459,6 +521,9 @@ fn skip_list(s: &[u8], open: usize) -> Result<usize, Unreadable> {
 mod tests {
     use super::*;
     use alloc::vec;
+    // Tests may call `Smf::parse`: only the crate itself must stay free of its floating
+    // point.
+    use midly::Smf;
 
     fn st(field: StatementField, text: &str) -> Statement {
         Statement {
@@ -693,13 +758,26 @@ mod tests {
     #[test]
     fn smf_that_strict_rejects_is_unreadable() {
         // The knowledge base's three malformed files (midi-notation-ingest lane, wave 5).
-        // Without `strict` midly parses each as `Ok`; with it, each is `Malformed`. Cargo
-        // unifies features, so only the strict half can run in this workspace.
-        let cases = [
-            (
-                "4D 54 68 64 00 00 00 06 00 01 00 02 00 60 4D 54 72 6B 00 00 00 04 00 FF 2F 00",
-                "file has a different amount of tracks than declared",
+        // Without `strict` midly parses each as `Ok`. Cargo unifies features, so only the
+        // strict half can run in this workspace.
+        //
+        // The track-count mismatch is refused by this reader's own count check:
+        // `Smf::parse` counted tracks, and this reader no longer calls it, because its
+        // capacity estimate is floating point. midly's `strict` chunk and event readers
+        // still refuse the other two, as `Malformed`.
+        assert_eq!(
+            statements(
+                Media::Smf,
+                &hex(
+                    "4D 54 68 64 00 00 00 06 00 01 00 02 00 60 4D 54 72 6B 00 00 00 04 00 FF 2F 00"
+                )
             ),
+            Err(Unreadable::TrackCountMismatch {
+                declared: 2,
+                found: 1
+            })
+        );
+        let cases = [
             (
                 "4D 54 68 64 00 00 00 06 00 00 00 01 00 60 4D 54 72 6B 00 00 00 10 00 FF",
                 "invalid chunk",

@@ -12,8 +12,14 @@
 //!   division's high byte as an `i8`, which overflows for `0x80` and panics under
 //!   overflow checks. An SMPTE-offset event in a metrical file is refused too, because it
 //!   pins the music to a timecode rather than to the tick grid.
-//! - **Parsing.** midly with its `strict` feature: a malformed file is refused, never
-//!   silently shortened.
+//! - **Parsing.** midly's lazy parser (`midly::parse`) with its `strict` feature, which
+//!   refuses a truncated chunk or a malformed event: a malformed file is refused, never
+//!   silently shortened. Every track is read in full before any is interpreted, so a
+//!   malformed file is always refused as malformed. `Smf::parse` is not used: it sizes each
+//!   track's event list with an `f32` estimate, and the law's wasm holds no floating point.
+//!   What `Smf::parse` checked after reading the tracks is checked here instead: the
+//!   header's track count must equal the tracks present, and a format-0 file must hold
+//!   exactly one track.
 //! - **Format.** Formats 0 and 1 are read. Format 2 holds independent sequences with no
 //!   shared timeline and is refused.
 //! - **Notes.** A note is paired per (track, channel, pitch). A note-on with velocity 0 is
@@ -41,7 +47,9 @@ extern crate alloc;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 
-use midly::{ErrorKind, Format, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
+use midly::{
+    ErrorKind, Format, Header, MetaMessage, MidiMessage, Timing, TrackEvent, TrackEventKind,
+};
 use score_model::{
     DEFAULT_US_PER_QUARTER, IngestedNote, IngestedScore, MeterChange, ModelError, TempoChange,
 };
@@ -59,6 +67,10 @@ pub enum IngestError {
     Invalid(&'static str),
     /// midly's strict mode found the SMF malformed. The message is midly's.
     Malformed(&'static str),
+    /// The header declares a different number of tracks than the file holds.
+    TrackCountMismatch { declared: usize, found: usize },
+    /// A format-0 (single-track) file that holds other than one track.
+    SingleTrackFormat { tracks: usize },
     /// The file is timed in SMPTE frames, not ticks per quarter note.
     SmpteTiming,
     /// A metrical file with an SMPTE-offset event.
@@ -66,7 +78,7 @@ pub enum IngestError {
     /// Format 2: independent sequences.
     SequentialFormat,
     /// More tracks than a `u16` can index. No file reaches this: an SMF header declares at
-    /// most `u16::MAX` tracks and midly's strict parser holds the file to its declaration,
+    /// most `u16::MAX` tracks and the track-count check holds the file to its declaration,
     /// so the last index is `u16::MAX - 1`. It stays a refusal because the law refuses
     /// rather than truncates.
     TooManyTracks,
@@ -109,22 +121,19 @@ pub fn ingest_smf(bytes: &[u8]) -> Result<IngestedScore, IngestError> {
     if division & 0x8000 != 0 {
         return Err(IngestError::SmpteTiming);
     }
-    let smf = Smf::parse(bytes).map_err(|e| match e.kind() {
-        ErrorKind::Invalid(message) => IngestError::Invalid(message),
-        ErrorKind::Malformed(message) => IngestError::Malformed(message),
-    })?;
-    let source_ppq = match smf.header.timing {
+    let (header, tracks) = read_tracks(bytes)?;
+    let source_ppq = match header.timing {
         Timing::Metrical(ppq) => ppq.as_int(),
         Timing::Timecode(..) => return Err(IngestError::SmpteTiming),
     };
-    if smf.header.format == Format::Sequential {
+    if header.format == Format::Sequential {
         return Err(IngestError::SequentialFormat);
     }
 
     let mut tempo: BTreeMap<u64, u32> = BTreeMap::new();
     let mut meter: BTreeMap<u64, (u8, u8)> = BTreeMap::new();
     let mut notes: Vec<IngestedNote> = Vec::new();
-    for (index, events) in smf.tracks.iter().enumerate() {
+    for (index, events) in tracks.iter().enumerate() {
         let track = track_index(index)?;
         let found = read_track(track, events, &mut notes)?;
         merge(&mut tempo, found.tempo, |tick| {
@@ -161,6 +170,60 @@ pub fn ingest_smf(bytes: &[u8]) -> Result<IngestedScore, IngestError> {
     };
     score.validate().map_err(IngestError::Model)?;
     Ok(score)
+}
+
+/// The tracks of an SMF, each a list of its events.
+type Tracks<'a> = Vec<Vec<TrackEvent<'a>>>;
+
+/// Reads an SMF as midly's `Smf::parse` does with `strict`, without its floating point.
+///
+/// `Smf::parse` is three steps:
+/// 1. the lazy `midly::parse`;
+/// 2. `EventIter::into_vec` on each track, which sizes its vector with
+///    `(bytes as f32 * (1.0 / 3.0)) as usize`;
+/// 3. two checks on the track count.
+///
+/// Step 2's capacity guess puts f32 instructions into any wasm that links it, and the
+/// law's binary carries none. Iterating each `EventIter` instead reads the same events
+/// with the same strict error. Step 3 is repeated here, in the same order and against the
+/// same number: before any track is read, midly's track iterator reports the header's
+/// declared count as its size hint, which is what `Smf::parse` compares with. The two
+/// checks refuse by their own names, not midly's messages. `tests.rs` compares this
+/// function with `Smf::parse` on the committed score and on truncations and byte changes
+/// of it.
+///
+/// A timecode division must be refused before this is called: midly's header reader panics
+/// on a division of `0x80xx` under overflow checks.
+fn read_tracks(bytes: &[u8]) -> Result<(Header, Tracks<'_>), IngestError> {
+    let (header, track_iter) = midly::parse(bytes).map_err(from_midly)?;
+    let declared = track_iter.size_hint().0;
+    let mut tracks = Vec::new();
+    for track in track_iter {
+        let events = track
+            .map_err(from_midly)?
+            .collect::<Result<Vec<TrackEvent<'_>>, midly::Error>>()
+            .map_err(from_midly)?;
+        tracks.push(events);
+    }
+    if tracks.len() != declared {
+        return Err(IngestError::TrackCountMismatch {
+            declared,
+            found: tracks.len(),
+        });
+    }
+    if header.format == Format::SingleTrack && tracks.len() != 1 {
+        return Err(IngestError::SingleTrackFormat {
+            tracks: tracks.len(),
+        });
+    }
+    Ok((header, tracks))
+}
+
+fn from_midly(e: midly::Error) -> IngestError {
+    match e.kind() {
+        ErrorKind::Invalid(message) => IngestError::Invalid(message),
+        ErrorKind::Malformed(message) => IngestError::Malformed(message),
+    }
 }
 
 /// Makes the layout checks midly does not make, and returns the header's division word.
