@@ -1070,6 +1070,63 @@ fn plain_public_domain_and_the_entertainer_are_still_admitted() {
     assert_eq!(hex(&admitted.receipt_digest), REAL_DIGEST);
 }
 
+/// The second external review, at `390336b`: CC forms written with spaces, and AI wording
+/// beyond the listed forms, passed the phrase scan. A markup that held them was admitted.
+/// Each is now refused by its class, wherever it is read.
+#[test]
+fn spaced_cc_forms_and_wider_ai_wording_are_refused_by_their_class() {
+    use LicenceRefusal::*;
+    let markups = [
+        ("Placed in the public domain (CC BY ND)", NoDerivatives),
+        ("Placed in the public domain (CC BY NC)", NonCommercial),
+        ("Placed in the public domain (CC BY SA)", ShareAlike),
+        ("Placed in the public domain (CC BY NC ND)", NonCommercial),
+        ("Placed in the public domain (CC BY NC SA)", NonCommercial),
+        ("Placed in the public domain; no neural nets", AiRestricted),
+        (
+            "Placed in the public domain, not for training models",
+            AiRestricted,
+        ),
+        (
+            "Placed in the public domain; neural networks excluded",
+            AiRestricted,
+        ),
+    ];
+    let mut wrong = Vec::new();
+    let mut check = |place: &str, f: Fixture, class: LicenceRefusal| {
+        let got = f.admit().map(|a| a.tier);
+        if got != Err(Refusal::Licence(class)) {
+            wrong.push(format!("{place}: {got:?}, not {class:?}"));
+        }
+    };
+    for (markup, class) in markups {
+        let mut f = Fixture::new();
+        f.ly_header(&format!(
+            "  license = \"Public Domain\"\n  copyright = \\markup {{ \"{markup}\" }}\n"
+        ));
+        check(markup, f, class);
+    }
+    // A licence string in the file.
+    let mut f = Fixture::new();
+    f.ly_header("  license = \"Public Domain (CC BY NC)\"\n");
+    check("licence string", f, NonCommercial);
+    // The terms quote, around a clean terms text.
+    let mut f = Fixture::new();
+    f.evidence_mut("terms").quotes = vec![named("Dedicated to the public domain. CC BY SA.")];
+    check("terms quote", f, ShareAlike);
+    // A text event in the MIDI file.
+    let mut f = Fixture::new();
+    f.mid = smf_with(&[(0x01, b"Free to use, no neural nets")], 1);
+    f.refresh();
+    check("smf text event", f, AiRestricted);
+    let total = markups.len() + 3;
+    assert!(
+        wrong.is_empty(),
+        "{} of {total} wrong: {wrong:#?}",
+        wrong.len()
+    );
+}
+
 #[test]
 fn some_file_must_state_the_licence_outright() {
     // No statement anywhere.

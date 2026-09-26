@@ -29,10 +29,12 @@
 //! normalise refuses.
 //!
 //! - **Restriction phrases** (AI use, all rights reserved, no redistribution,
-//!   non-commercial, no derivatives, share-alike) are looked for in every licence text the
-//!   predicate reads. AI wording must be whole words; the other classes match from the
-//!   start of a word, so a stem finds its inflections (`noncommercially`). One found
-//!   anywhere refuses by its class. The rule is documented in `licence.rs`.
+//!   non-commercial, no derivatives, share-alike) are looked for in the words of every
+//!   licence text the predicate reads, so separators do not matter (`CC BY NC` reads as
+//!   `cc-by-nc`). AI wording's short tokens (`ai`, `a.i.`, `tdm`, `llm`) must be whole
+//!   words; every other phrase matches from the start of a word, so a stem finds its
+//!   inflections (`noncommercially`, `neural nets`). One found anywhere refuses by its
+//!   class. The rule is documented in `licence.rs`.
 //! - **A statement** read from a file must equal the page's licence exactly.
 //! - **A LilyPond copyright markup**, which is prose, must hold the page's licence as a
 //!   whole phrase and affirm it: no negating, limiting, lapsing or hedging word and no
@@ -98,20 +100,25 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 /// - It refuses more. An own engraving's files may state no licence. A copyright markup
 ///   or an evidence quote that holds the licence but negates it does not affirm it, and
 ///   an evidence quote must hold its text as whole words. AI wording refuses in every
-///   licence text read, the non-commercial, no-redistribution and no-derivatives phrases
-///   find more wording, and every restriction phrase is looked for in the page and terms
-///   quotes and in MIDI text events.
+///   licence text read, the other classes find more wording than version 1's lists, and
+///   every restriction phrase is looked for in the page and terms quotes and in MIDI text
+///   events.
 /// - It names some refusals differently. An in-file statement that holds a restriction
 ///   phrase is refused by that restriction, AI wording is named before any other
 ///   restriction, and the SMF track-count checks refuse by their own names.
-/// - It matches AI wording as whole words, and every other restriction phrase from the
-///   start of a word, where version 1 matched anywhere. So a stem still finds its
-///   inflections (`noncommercially`), but a phrase that starts inside a word, as
-///   `no derivatives` does in `piano derivatives`, no longer refuses.
+/// - It matches restriction phrases on a text's words, so separators do not matter
+///   (`CC BY NC`, `cc-by-nc`). AI wording's short tokens must be whole words, and every
+///   other phrase matches from the start of a word, where version 1 matched anywhere. So a
+///   stem still finds its inflections (`noncommercially`, `neural networks`), but a phrase
+///   that starts inside a word, as `no derivatives` does in `piano derivatives`, no longer
+///   refuses.
 ///
-/// The matching rule was settled before version 2 shipped. Version 2 was first pushed with
-/// whole-word matching for every class, which let inflections through, and was corrected
-/// before any branch but its own held it.
+/// The matching rule was settled in two steps before version 2 shipped. Version 2 was
+/// first pushed with whole-word matching for every class, which let inflections through,
+/// so every class but AI wording became stems. The second external review then found CC
+/// forms written with spaces (`CC BY ND`) and AI wording beyond the list (`neural nets`)
+/// passing, so phrases are now matched on a text's words, and AI wording beyond its short
+/// tokens is stems too.
 pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {
