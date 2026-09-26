@@ -379,8 +379,10 @@ pub extern "C" fn law_live_note(onset_sample: i64, pitch: u32, velocity: u32) ->
 }
 
 /// The live note-off ([`Law::live_off`]): the key of `pitch` came up at
-/// `off_sample`, which ends the latest held live note of that pitch. The
-/// length is kept for the committed frames; it is not graded or hashed.
+/// `off_sample`, which ends the earliest held live note of that pitch, first
+/// in the take's order: two notes of one pitch held at once end in the order
+/// they began, as keys released in the order they were pressed do. The length
+/// is kept for the committed frames; it is not graded or hashed.
 #[unsafe(no_mangle)]
 pub extern "C" fn law_live_note_off(pitch: u32, off_sample: i64) -> u32 {
     with_status(|state| {
