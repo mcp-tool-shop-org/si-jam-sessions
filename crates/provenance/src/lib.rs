@@ -146,6 +146,8 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 /// - `dede20b`: the AI class fails closed on its topic. A text that names AI, training,
 ///   models, mining, datasets, generative or neural systems is refused, plain text
 ///   included.
+/// - `67228d5`: AI product names join the AI vocabulary (chatgpt, gpt, openai, ml and
+///   others), and a text that prohibits or limits anything no longer affirms its licence.
 pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {
