@@ -89,8 +89,22 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 
 /// The version of this predicate: its rules, its admitted-licence list, its refusal
 /// phrases, its in-file readers and the canonical encoding. The law folds it into its own
-/// version; any change to what is admitted or refused bumps it.
-pub const PREDICATE_VERSION: u32 = 1;
+/// version. Any change to what is admitted or refused, or to the refusal a file is given,
+/// bumps it.
+///
+/// Version 2 differs from version 1:
+/// - It refuses more. An own engraving's files may state no licence. A copyright markup
+///   or an evidence quote that holds the licence but negates it does not affirm it, and
+///   an evidence quote must hold its text as whole words. AI wording refuses in every
+///   licence text read, and every restriction phrase is looked for in the page and terms
+///   quotes and in MIDI text events.
+/// - It names some refusals differently. An in-file statement that holds a restriction
+///   phrase is refused by that restriction, AI wording is named before any other
+///   restriction, and the SMF track-count checks refuse by their own names.
+/// - It matches restriction phrases as whole words where version 1 matched substrings,
+///   so a markup whose only restriction word is inflected, such as "noncommercially", is
+///   no longer refused.
+pub const PREDICATE_VERSION: u32 = 2;
 
 impl Receipt {
     /// Loads a receipt from JSON in the strict subset (see `json.rs`), refusing unknown or

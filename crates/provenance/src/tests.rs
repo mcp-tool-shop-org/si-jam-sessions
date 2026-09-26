@@ -1333,7 +1333,7 @@ fn the_rules_are_those_of_2026() {
     assert_eq!(US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR, 1930);
     assert_eq!(EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR, 1955);
     assert_eq!(LAST_OUT_OF_TERM_EDITION_YEAR, 2000);
-    assert_eq!(PREDICATE_VERSION, 1);
+    assert_eq!(PREDICATE_VERSION, 2);
     assert_eq!(CANONICAL_VERSION, 1);
     assert_eq!(RECEIPT_SCHEMA, 1);
 }
