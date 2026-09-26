@@ -1,0 +1,104 @@
+# The Rust gate: format, lints, tests, the wasm law, licences, and the law's
+# empty import section. Every action is pinned by commit SHA; the toolchain is
+# pinned once, by rust-toolchain.toml.
+#
+# Push is limited to main so a branch with an open pull request runs once, on
+# the pull_request event; workflow_dispatch runs any branch by hand.
+#
+# Standards compliance (the studio's six workflow standards, scored 0-3):
+# - PIN_PER_STEP 2: actions by commit SHA; the toolchain by rust-toolchain.toml;
+#   dependencies by Cargo.lock under --locked; cargo-deny by version, checked
+#   against install-action's recorded sha256.
+# - ANDON_AUTHORITY 2: every step is a gate and the first failure stops the
+#   job; nothing downstream of it runs.
+# - NAMED_COMPENSATORS: this workflow makes no irreversible call. It publishes,
+#   tags and pushes nothing, so there is nothing to undo.
+# - DECOMPOSE_BY_SECRETS 2: a read-only token, credentials not persisted, no
+#   secrets; the law's wasm is checked to import nothing.
+# - UNCERTAINTY_GATED_HUMANS 1. skip: a gate that only passes or fails has no
+#   uncertain output to route to a person; a person merges, and the workflow
+#   never does.
+# - EXTERNAL_VERIFIER 2: the import section is checked twice, by the Rust
+#   test's own parser and by the JavaScript engine's; no model grades anything.
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - deny.toml
+      - crates/**
+      - .github/workflows/**
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - deny.toml
+      - crates/**
+      - .github/workflows/**
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # With no argument, rustup installs what rust-toolchain.toml names: the
+      # channel, rustfmt, clippy and the wasm32-unknown-unknown target.
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install --no-self-update
+          rustup show active-toolchain
+          rustc --version
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      # Includes crates/law/tests/wasm_artifact.rs, which builds the release
+      # wasm and checks it imports nothing, exports the C ABI and holds no
+      # floating point, and tests/no_float.rs, which scans the law's source.
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Build the wasm law
+        run: cargo build -p law --target wasm32-unknown-unknown --release --locked
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: Licences
+        run: cargo deny --locked check licenses
+
+      # The same assertion as the Rust test, made by the JavaScript engine's own
+      # wasm parser on the artifact the build step produced.
+      - name: The wasm law imports nothing
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "target/wasm32-unknown-unknown/release/law.wasm";
+            const bytes = fs.readFileSync(path);
+            const module = new WebAssembly.Module(bytes);
+            const imports = WebAssembly.Module.imports(module);
+            console.log(path, bytes.length, "bytes; imports:", JSON.stringify(imports));
+            if (imports.length !== 0) process.exit(1);
+          '

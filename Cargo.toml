@@ -8,3 +8,16 @@ rust-version = "1.98.1"
 license = "MIT"
 repository = "https://github.com/mcp-tool-shop-org/si-jam-sessions"
 publish = false
+
+# A panic aborts: in wasm it is an `unreachable` trap, never an unwind into the
+# host. Tests ignore this setting; the test harness needs unwinding.
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+# The release default wraps on overflow. The law uses checked arithmetic
+# throughout; this keeps any operator that slips past review from wrapping.
+overflow-checks = true
+# One codegen unit, so the artifact does not depend on how the crate is split.
+codegen-units = 1
