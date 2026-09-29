@@ -133,8 +133,10 @@ How the reviews run:
   3. `Midi::watch` no longer latches; held keys are released on every poll while the port count is low.
 - Issue #15 is done: the exemplar engine checks run under each JavaScript engine in CI, and
   `notes`, `render` and `preview` refuse to overwrite an existing file.
-- In piano mode the take and live notes still sound on the oscillator. The host's `help` text documents
-  this (`The take, your live notes and the click are oscillators either way`). Confirm or change it.
+- In piano mode the take and live notes still sound on the oscillator. **Confirmed:** the host's
+  `help` text and handbook document this, and the separation makes wrong-pitch and timing errors
+  audible by timbre. Changing it would need the piano to load samples for every possible live
+  pitch or accept silent misses.
 - CC0's SPDX forms (`CC0-1.0` and `Creative Commons Zero v1.0 Universal`) are admitted.
 - Two readings the 1862 scans leave open: the octave of the A at bar 19, beat 4, and the alto's last note in
   bar 13.

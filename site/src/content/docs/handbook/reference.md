@@ -34,7 +34,8 @@ Run any command as `cargo run -p host --release -- <command>`. `host help` print
   - The default is the piano, when `fetch-piano` has put verified samples in the cache or in the directory
     `--samples` names.
   - Otherwise it is the oscillator.
-  - The take, your live notes and the click are oscillators either way.
+  - The take, your live notes and the click are oscillators either way: the difference in timbre lets you
+    hear wrong-pitch and timing errors at once.
 - **The click** sounds only against a take: *The Entertainer*'s constructed take in `play` and `render`, and
   your live take in `jam`.
 - **The credit:** the piano prints its credit whenever it plays.
