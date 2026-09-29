@@ -55,12 +55,10 @@ jobs:
         with:
           persist-credentials: false
 
-      # A pull request loads the image into the local docker, which the
-      # container driver does not do. A tag push uses the container driver so
-      # the cache export and the registry push both work.
+      # The container driver can export a cache and push. A pull request
+      # writes a tar and loads it, because `load` and a cache export cannot
+      # share the docker driver.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver: ${{ github.event_name == 'pull_request' && 'docker' || 'docker-container' }}
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -69,6 +67,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -79,24 +80,40 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
 
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - name: Build for the pull request
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          load: ${{ github.event_name == 'pull_request' }}
-          tags: ${{ github.event_name == 'pull_request' && 'si-jam-sessions:ci' || steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ github.event_name == 'pull_request' && '' || 'type=gha' }}
-          cache-to: ${{ github.event_name == 'pull_request' && '' || 'type=gha,mode=max' }}
+          push: false
+          tags: si-jam-sessions:ci
+          outputs: type=docker,dest=/tmp/si-jam-sessions.tar
+          provenance: false
+          sbom: false
           build-args: |
-            VERSION=${{ github.ref_type == 'tag' && github.ref_name || '0.2.0' }}
+            VERSION=${{ steps.ver.outputs.version }}
             REVISION=${{ github.sha }}
-          provenance: ${{ github.event_name != 'pull_request' }}
-          sbom: ${{ github.event_name != 'pull_request' }}
+
+      - name: Build and push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+          build-args: |
+            VERSION=${{ steps.ver.outputs.version }}
+            REVISION=${{ github.sha }}
 
       - name: Smoke
         if: github.event_name == 'pull_request'
         run: |
+          docker load -i /tmp/si-jam-sessions.tar
           docker run --rm si-jam-sessions:ci help
           docker run --rm si-jam-sessions:ci notes /tmp/out.json
 
