@@ -1079,18 +1079,21 @@ struct Midi {
 
 #[cfg(windows)]
 impl Midi {
-    /// Says once if WinMM lists fewer MIDI input ports than when the jam
-    /// began, and returns true then.
+    /// Returns true whenever WinMM lists fewer MIDI input ports than when the
+    /// jam began, so held keys are released on every poll while the port count
+    /// is low. The message prints once.
     fn watch(&mut self) -> bool {
         let now = host::winmm::port_count();
-        if !self.told && now < self.ports {
-            self.told = true;
-            println!(
-                "  WinMM now lists {now} MIDI input ports, {} when the jam began. If the \
-                 keyboard was unplugged, its notes stopped arriving; WinMM does not say so \
-                 otherwise. The keys held now are released in the monitor.",
-                self.ports
-            );
+        if now < self.ports {
+            if !self.told {
+                self.told = true;
+                println!(
+                    "  WinMM now lists {now} MIDI input ports, {} when the jam began. If the \
+                     keyboard was unplugged, its notes stopped arriving; WinMM does not say so \
+                     otherwise. The keys held now are released in the monitor.",
+                    self.ports
+                );
+            }
             return true;
         }
         false

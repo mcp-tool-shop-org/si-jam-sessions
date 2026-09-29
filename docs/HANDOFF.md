@@ -126,11 +126,15 @@ How the reviews run:
 
 ## Open items
 
-- Issue #12: three LOW host findings from round 8.
+- Issue #12, two of three LOW host findings from round 8 are fixed:
+  1. The unpacked-samples trust boundary is stated in `fetch.rs`.
+  3. `Midi::watch` no longer latches; held keys are released on every poll while the port count is low.
+  2. The cross-platform byte pin still covers the piano alone; a full mix fixture render on both platforms
+     is not yet added.
 - Issue #15 is done: the exemplar engine checks run under each JavaScript engine in CI, and
   `notes`, `render` and `preview` refuse to overwrite an existing file.
-- In piano mode the take and live notes still sound on the oscillator. That was the host agent's choice;
-  confirm or change it.
+- In piano mode the take and live notes still sound on the oscillator. The host's `help` text documents
+  this (`The take, your live notes and the click are oscillators either way`). Confirm or change it.
 - CC0's SPDX forms (`CC0-1.0` and `Creative Commons Zero v1.0 Universal`) are admitted.
 - Two readings the 1862 scans leave open: the octave of the A at bar 19, beat 4, and the alto's last note in
   bar 13.

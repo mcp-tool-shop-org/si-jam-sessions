@@ -774,6 +774,46 @@ mod tests {
         assert!(taker.held.holds(62) && taker.held.holds(67));
     }
 
+    /// A press that reaches the ring after an earlier release_all, while the
+    /// input is still gone, is released in the next step: gone is not latched.
+    #[test]
+    fn a_press_arriving_after_release_is_released_while_the_input_is_gone() {
+        use rtrb::RingBuffer;
+
+        let piece = Piece::entertainer(&root()).unwrap();
+        let mut law = Law::acquire();
+        law.ingest(&piece.container).unwrap();
+        while law.steps() < 2_000 {
+            law.step().unwrap();
+        }
+        let (mut readings_in, mut readings) = RingBuffer::new(64);
+        let (mut presses_in, mut presses) = RingBuffer::new(64);
+        let (mut hush, mut released) = RingBuffer::new(64);
+        readings_in
+            .push(Reading {
+                sample: 0,
+                nanos: heard_at(0),
+            })
+            .unwrap();
+        let mut taker = Taker::default();
+        // First key held and taken before the input goes away.
+        let (press_62, _) = key(true, 62, 1_000);
+        presses_in.push(press_62).unwrap();
+        taker.step(&mut law, &mut readings, &mut presses, false, &mut hush);
+        // Input goes away; release_all runs.
+        taker.step(&mut law, &mut readings, &mut presses, true, &mut hush);
+        // A second press arrives in the ring after the first release_all.
+        let (press_67, _) = key(true, 67, 1_000);
+        presses_in.push(press_67).unwrap();
+        // It must be released because the input is still gone.
+        taker.step(&mut law, &mut readings, &mut presses, true, &mut hush);
+        let mut offs = Vec::new();
+        while let Ok(Monitor::Off { pitch }) = released.pop() {
+            offs.push(pitch);
+        }
+        assert_eq!(offs, [62, 67], "every key the monitor sounds is released");
+    }
+
     /// The keys held down follow the presses, and releasing them all names
     /// each held key once, lowest first.
     #[test]
