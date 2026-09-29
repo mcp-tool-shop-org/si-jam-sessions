@@ -63,8 +63,12 @@ export const config: SiteConfig = {
       id: 'try',
       title: 'Try it',
       subtitle:
-        'You need Rust; the repository pins 1.98.1 and rustup installs it. Windows runs everything, though live input has not yet met a real MIDI keyboard; on Linux, CI builds, tests and renders, and live input is Windows-only for now.',
+        'Rust 1.98.1, which rustup installs, or the container, which already holds the host. Windows runs everything, though live input has not yet met a real MIDI keyboard. On Linux, CI builds, tests and renders, and live input is Windows-only for now.',
       cards: [
+        {
+          title: 'Or use the container',
+          code: 'docker run --rm -v "$PWD:/out" \\\n  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \\\n  notes /out/notes.json',
+        },
         {
           title: 'Get the grand piano once',
           code: 'git clone https://github.com/mcp-tool-shop-org/si-jam-sessions\ncd si-jam-sessions\ncargo run -p host --release -- fetch-piano  # 742 MB, checked by SHA-256',
@@ -90,9 +94,9 @@ export const config: SiteConfig = {
       subtitle: 'Every claim on this page is a hash you can check.',
       columns: ['What', 'SHA-256'],
       rows: [
-        ['The Entertainer: the golden take, graded', '66b59807261ff93086eed6b0c17cb4a7673e40937a83e0bd32db7ae25ef02946'],
-        ['Battle Hymn, glm-5.3: the law’s snapshot', '1c0789b11d61914879dd39630b763f44d2955955d1d97cef42c695e0fdd6ad24'],
-        ['Battle Hymn, kimi-k3: the law’s snapshot', '0f93de92b08ed6534a79462744035dcc553a91d8c05b3475750e83b440b89391'],
+        ['The Entertainer: the golden take, graded', 'b43db3787577b4f959f611ae6e7d84c0b92e69d34c31bcbfe927a9f67f0eda11'],
+        ['Battle Hymn, glm-5.3: the law’s snapshot', '409a3341a35af9e7ad203ef573a28e475600b27e183cc08d1b8b0cfbb03d2f97'],
+        ['Battle Hymn, kimi-k3: the law’s snapshot', 'e792361b22413de14e1cd0740947af2a34725970ef0d126be1e720f96b06395f'],
         ['Battle Hymn, glm-5.3: the WAV', '85b2d56723cacc6c87895a2784d2cd034dea1142e62de6d8a1a9d2867dad2eed'],
         ['Battle Hymn, kimi-k3: the WAV', 'bf49d310de5e94975b277cd1e7c57134388a0232d53bb059f12e7727baeba017'],
         ['The Salamander piano archive', 'b7760e168494cf095344e217b0af013fc449ad033abbbdf1c65211cf11dc038b'],

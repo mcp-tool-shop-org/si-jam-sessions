@@ -1,6 +1,6 @@
 [package]
 name = "law"
-version = "0.1.0"
+version = "0.2.0"
 description = "The deterministic law of si-jam-sessions: integer musical time, the take, grading, and a hashed snapshot."
 edition.workspace = true
 rust-version.workspace = true

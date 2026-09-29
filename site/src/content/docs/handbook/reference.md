@@ -77,7 +77,7 @@ Every error is printed on standard error, starting `host: `.
   "title": "Battle Hymn of the Republic, arranged by glm-5.3",
   "law_version": 5,
   "sample_rate": 48000,
-  "golden": "1c0789b1…",
+  "golden": "409a3341…",
   "end": 14451739,
   "note_fields": ["onset", "length", "pitch", "velocity", "track"],
   "beat_fields": ["onset", "bar", "beat"],

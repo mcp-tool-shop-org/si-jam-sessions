@@ -4,9 +4,10 @@
 
 | Version | Supported |
 |---|---|
-| 0.1.x (`main`) | Yes |
+| 0.2.x (`main`) | Yes |
+| 0.1.0 | Yes. The two Battle Hymn recordings stay on that release |
 
-There are no earlier releases.
+There is no earlier release than 0.1.0.
 
 ## Reporting a vulnerability
 

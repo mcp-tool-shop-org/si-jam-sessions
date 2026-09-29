@@ -1,0 +1,98 @@
+# Publish @si-jam-sessions/si-jam-sessions when a version tag is pushed.
+# Trusted Publishing (OIDC). There is no registry token in this workflow.
+#
+# The package is the release record: README, changelog and licence. The host
+# binary ships as the container this tag also builds, and as source.
+#
+# A tag is cut only after CI on main is green. This workflow does not rebuild
+# the law. It refuses a tag whose number is not the number in package.json
+# and in every crate.
+#
+# Compensators (PHASE-0): within 72 hours, `npm unpublish <name>@<version>`;
+# after that, `npm deprecate`. `gh release delete <tag>` removes the release
+# page. Deleting the tag does not unpublish npm.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  npm:
+    name: Publish to npm and open the GitHub release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install npm >=11.5 in a sandbox for OIDC trusted publishing
+        run: |
+          SANDBOX="$HOME/.npm-cli-sandbox"
+          mkdir -p "$SANDBOX"
+          pushd "$SANDBOX" >/dev/null
+          echo '{"name":"npm-cli-sandbox","version":"0.0.0","private":true}' > package.json
+          npm install --no-save --no-audit --no-fund --silent npm@latest
+          popd >/dev/null
+          echo "$SANDBOX/node_modules/.bin" >> "$GITHUB_PATH"
+          "$SANDBOX/node_modules/.bin/npm" --version
+
+      - name: The tag, package.json and every crate name the same version
+        run: |
+          set -eu
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Tag: ${GITHUB_REF_NAME} → ${TAG_VERSION}"
+          echo "Package: ${PKG_VERSION}"
+          if [ "${PKG_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "::error::Tag ${TAG_VERSION} does not match package.json version ${PKG_VERSION}"
+            exit 1
+          fi
+          for manifest in crates/*/Cargo.toml; do
+            crate_version=$(sed -n 's/^version = "\(.*\)"/\1/p' "$manifest" | head -n 1)
+            if [ "${crate_version}" != "${TAG_VERSION}" ]; then
+              echo "::error::${manifest} is ${crate_version}, not ${TAG_VERSION}"
+              exit 1
+            fi
+          done
+
+      - name: Pack dry-run
+        run: npm pack --dry-run
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v ver="$ver" '
+            $0 ~ "^## \\[" ver "\\]" { flag=1; print; next }
+            /^## \[/ { if (flag) exit }
+            flag { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "::error::CHANGELOG.md has no section for ${ver}"
+            exit 1
+          fi
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "release ${GITHUB_REF_NAME} already exists"
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "si-jam-sessions ${GITHUB_REF_NAME}" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              --verify-tag
+          fi

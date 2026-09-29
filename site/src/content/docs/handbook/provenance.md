@@ -9,7 +9,9 @@ Music enters si-jam-sessions only with evidence. Every score comes with a **rece
 the composition, the edition and the files came from. The **licence predicate**, in `crates/provenance`, reads
 the receipt and the files and admits the score or refuses it with a reason. The law ingests nothing else.
 
-The predicate is version 3, in law version 5. Its rules year is 2026.
+The predicate is version 4, in law version 5. Its rules year is 2026. Version 4 ships in 0.2.0. The snapshot
+header carries the predicate's version, so this move changed the golden digest and left the committed notes
+where they were.
 
 ## What a score must show
 
@@ -41,8 +43,12 @@ supplied once, with its size and SHA-256 equal to the receipt's, and nothing els
 - **Unknown or missing evidence.** A claim without evidence is not a claim.
 - **Share-alike, non-commercial and AI-restricted licences.** Wording that restricts use by AI is named first,
   so a mixed notice is refused for that reason.
-- **A statement that negates itself.** A notice such as "No known copyright restrictions" contains a negating
-  word, and it is refused until it is curated.
+- **A statement that negates itself.** A notice that takes back a grant is refused. Two wordings are curated
+  admissions, and only when the text is exactly that wording: "no known copyright restrictions" and
+  "no copyright - united states". Either one is public domain. Adding words around it is still a negation.
+- **Automated access.** A term that limits scraping, crawling, spidering, harvesting, bots, or automated
+  access or retrieval is refused as its own class. The words are matched whole, so an ordinary word that
+  merely begins the same way is not a match.
 - **Anything published after 1930,** whatever its composer. *God Bless America* was the first wish for the
   exemplar. It was published in 1938, and Irving Berlin died in 1989, so it stays protected in the US until 2034
   and in the EU until 2060. The law refuses it.

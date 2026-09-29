@@ -208,6 +208,8 @@ Scored 0–3 against the studio's six workflow standards. Slice 1 raised two of 
 | Crate publish | `cargo yank --version V` (does not delete) | New resolves avoid it; lockfiles keep working | crate publisher |
 | GitHub release | `gh release delete TAG -y`, tag removed separately | Release gone; downloaded assets not recalled | repository admin |
 | Pages deploy | Unpublish from the repository's Pages settings | Site offline; content kept | repository admin |
+| npm publish of `@si-jam-sessions/si-jam-sessions` | `npm unpublish @si-jam-sessions/si-jam-sessions@VERSION` within 72 hours; after that `npm deprecate @si-jam-sessions/si-jam-sessions@VERSION 'reason'`. Unpublishing the only version also locks the name for 24 hours | Within 72 hours the version is gone. After that it stays, with a warning. A provenance attestation on Sigstore is not revoked | package publisher |
+| GHCR image `ghcr.io/mcp-tool-shop-org/si-jam-sessions` | Delete that package version in the package settings, or `gh api --method DELETE` on its version id | That tag's manifest is gone. A copy already pulled is not recalled | repository admin |
 
 ## Decisions the Director may override
 

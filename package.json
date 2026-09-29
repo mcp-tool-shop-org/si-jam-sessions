@@ -1,0 +1,34 @@
+{
+  "name": "@si-jam-sessions/si-jam-sessions",
+  "version": "0.2.0",
+  "description": "A deterministic, hashed music law: a model proposes, a checker admits, every take is graded exactly and replays from its log.",
+  "license": "MIT",
+  "author": "mcp-tool-shop <64996768+mcp-tool-shop@users.noreply.github.com>",
+  "homepage": "https://mcp-tool-shop-org.github.io/si-jam-sessions/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcp-tool-shop-org/si-jam-sessions.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mcp-tool-shop-org/si-jam-sessions/issues"
+  },
+  "keywords": [
+    "music",
+    "midi",
+    "rust",
+    "webassembly",
+    "provenance",
+    "deterministic"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

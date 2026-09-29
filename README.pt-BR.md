@@ -21,69 +21,89 @@ Toque uma frase no ritmo e o motor registra cada nota da gravação:
 - quando ela foi tocada, em amostras inteiras;
 - qual nota da partitura ela corresponde.
 
-Em seguida, ele avalia cada nota em relação à partitura. Duas máquinas que avaliam a mesma gravação concordam em todos os detalhes, porque
-a lei de avaliação é um código Rust determinístico, compilado em um único arquivo WebAssembly. A lei é determinística, portanto, uma gravação
-reproduz o mesmo hash sem chamar um modelo; o CI a reproduz em cada execução.
+Em seguida, ele avalia cada nota em relação à partitura. Duas máquinas avaliando a mesma gravação concordam até o último bit, porque
+a lei de avaliação é um código Rust determinístico, compilado em um único binário WebAssembly. A lei é determinística, portanto, uma gravação
+reproduzida resulta no mesmo hash, sem a necessidade de chamar um modelo; o CI reproduz uma em cada execução.
 
 `si-jam-sessions` é o equivalente de [`ai-jam-sessions`](https://github.com/mcp-tool-shop-org/ai-jam-sessions)
-e um projeto irmão de [`si-rpg-engine`](https://github.com/mcp-tool-shop-org/si-rpg-engine). O modelo faz uma proposta. Um
+e um projeto irmão de [`si-rpg-engine`](https://github.com/mcp-tool-shop-org/si-rpg-engine). O modelo propõe. Um
 verificador, que não é o modelo, aceita ou rejeita a proposta com uma justificativa, e a lei registra e calcula o hash
 do que é aceito. O modelo nunca toca diretamente na partitura.
 
 ## Ouça
 
 Duas versões de *Battle Hymn of the Republic* são reproduzidas lado a lado na
-[página inicial](https://mcp-tool-shop-org.github.io/si-jam-sessions/), mostrando onde elas diferem.
+[página inicial](https://mcp-tool-shop-org.github.io/si-jam-sessions/), com uma visualização das diferenças entre elas.
 
 - **A fonte:** a transcrição deste projeto da edição anônima de 1862 da Ditson.
 - **Os arranjadores:** glm-5.3 e kimi-k3, cada um trabalhando a partir dessa fonte no Ollama Cloud.
-- **A licença:** ambos os arranjos são dedicados sob a licença CC0 1.0. Cada um passou no teste de licença da lei com suas
-evidências.
-- **A gravação:** cada uma foi renderizada através da lei no
+- **A licença:** ambos os arranjos são dedicados sob a licença CC0 1.0. Cada um passou pela verificação da licença da lei com suas
+respectivas evidências.
+- **A gravação:** cada um foi renderizado através da lei no
 [Salamander Grand Piano V3](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html) de Alexander Holm
 (CC BY 3.0).
 
-| Arranjo | Duração | Notas que a lei registrou | WAV não compactado (48 kHz, 32 bits float) |
+| Arranjo | Duração | Notas que a lei registrou | WAV não compactado (48 kHz, ponto flutuante de 32 bits) |
 |---|---|---|---|
 | glm-5.3 | 5:02 | 1,720 | [116 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-glm-5.3.wav), SHA-256 `85b2d567…2eed` |
 | kimi-k3 | 4:37 | 1,924 | [106 MB](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/download/v0.1.0/battle-hymn-kimi-k3.wav), SHA-256 `bf49d310…a017` |
 
-A renderização é determinística: uma segunda renderização produz os mesmos bytes. O trabalho de piano do CI
-renderizou cada exemplar inteiro no Linux, e os dois SHA-256 são os da release: os mesmos no Windows e no Linux.
-Após buscar o piano uma vez, este comando reproduz a primeira versão:
+A renderização é determinística: uma segunda renderização produz os mesmos bytes. O trabalho de piano do CI renderizou cada exemplar
+completamente no Linux, e ambos os SHA-256 correspondem à versão: o mesmo no Windows e no Linux. Após buscar o
+piano uma vez, este comando reproduz o primeiro:
 
 ```bash
 cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece battle-hymn-glm-5.3 --voice piano
 ```
 
-Os hashes completos estão nas [notas de lançamento](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/tag/v0.1.0).
+Os hashes completos estão nas [notas da versão](https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/tag/v0.1.0).
 
 ## O que o torna diferente
 
-- **A gravação faz parte da lei.** O tempo, a altura e a velocidade são inteiros no estado com hash, portanto, "atrasado em
+- **A gravação faz parte da lei.** O tempo, o tom e a velocidade são inteiros no estado com hash, portanto, "atrasado em
 45 ms" é um fato que o motor pode provar. A forma de onda é apenas uma apresentação.
 - **O relógio nunca espera.** A lei avança em um quantum fixo, independentemente de alguém tocar ou não. Um modelo planeja frases
 com antecedência em relação a um horizonte de compromisso. Um plano tardio é rejeitado, nunca permitido a atrasar a música.
 - **Cada música conquista seu lugar.** A música entra apenas com evidências:
-- uma composição de domínio público nos EUA e na UE;
-- um arranjo de domínio público ou um que este projeto criou;
-- a edição original e seu ano;
+- uma composição de domínio público tanto nos EUA quanto na UE;
+- um arranjo de domínio público, ou um que este projeto criou;
+- a edição de origem e seu ano;
 - uma licença no arquivo que corresponda ao seu recebimento.
 
-Fontes desconhecidas, com licença de compartilhamento, não comerciais e restritas à IA são rejeitadas. O material CC BY 4.0 está em sua
+Fontes desconhecidas, de compartilhamento semelhante, não comerciais e com restrições de IA são rejeitadas. O material CC BY 4.0 está em sua
 própria camada com atribuição.
-- **Os dados de treinamento serão uma impressão do que a lei registrou.** Nenhum conjunto de dados foi criado ainda. Quando um for,
+- **Os dados de treinamento serão uma impressão do que a lei registrou.** Ainda não foi criado nenhum conjunto de dados. Quando for,
 cada linha reproduzirá o mesmo hash, as divisões serão por obra e fixadas antes que qualquer linha exista, e cada
 resultado reivindicado indicará seu poder estatístico.
 
 ## Experimente
 
-Você precisa do Rust. O repositório fixa a versão 1.98.1 em `rust-toolchain.toml`, e `rustup` a instala na
-primeira construção.
+Compile a partir do código-fonte com Rust ou execute o contêiner. O repositório define o Rust 1.98.1 em `rust-toolchain.toml`,
+e `rustup` o instala na primeira compilação.
 
 - **Windows 10 e 11** executam tudo, embora a entrada ao vivo ainda não tenha sido testada com um teclado MIDI real.
-- **Linux:** o CI constrói e testa o host e renderiza com ele. A reprodução por meio de um dispositivo de áudio Linux não foi testada, e a entrada ao vivo é apenas para Windows por enquanto.
+- **Linux:** o CI compila e testa o host e renderiza com ele. A reprodução por meio de um dispositivo de áudio Linux não foi testada, e a entrada ao vivo é apenas para Windows por enquanto.
 - **macOS** não foi testado.
+- **O contêiner** `ghcr.io/mcp-tool-shop-org/si-jam-sessions` executa `render`, `notes`, `notices` e
+`preview` sem uma cadeia de ferramentas Rust. A reprodução por meio de um dispositivo é o mesmo caminho Linux não testado.
+
+A imagem é publicada com cada tag de versão. Ela contém o host e as partituras, mas não as amostras de piano.
+
+```bash
+docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0
+docker run --rm \
+  -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+  -v "$PWD:/out" \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  notes /out/notes.json
+```
+
+No PowerShell, remova as linhas de uid e monte `${PWD}:/out`. A página do
+[contêiner](https://mcp-tool-shop-org.github.io/si-jam-sessions/handbook/docker/) do manual tem a renderização do piano
+e o formulário do Windows. O pacote npm
+[`@si-jam-sessions/si-jam-sessions`](https://www.npmjs.com/package/@si-jam-sessions/si-jam-sessions) é o
+README, o registro de alterações e a licença desta versão, publicados pelo Trusted Publishing. A instalação não instala o
+host. O host é o contêiner ou a compilação abaixo.
 
 ```bash
 cargo run -p host --release -- devices        # list the audio outputs and MIDI inputs
@@ -102,34 +122,35 @@ Use uma saída com fio para `jam`. O atraso de uma saída Bluetooth é maior do 
 
 ## Confie no modelo
 
-- **Dados acessados:**
+- **Dados afetados:**
 - os arquivos de partitura em `scores/`;
 - as amostras de piano em um cache por usuário;
 - as saídas de áudio e as entradas MIDI que você escolher;
-- os arquivos que você pedir para ele gravar.
-- **Dados não acessados:** qualquer coisa fora desses caminhos. Não há contas, credenciais ou telemetria.
-- **Rede:** apenas `fetch-piano` a usa.
+- os arquivos que você solicitar que sejam gravados.
+- **Dados não afetados:** tudo o que estiver fora desses caminhos. Não há contas, credenciais ou telemetria.
+- **O contêiner** é o mesmo programa. Ele contém o binário e as partituras, não o piano. Ele reduz os privilégios antes que o host seja executado: uid 10001 ou `HOST_UID`, quando você o definir. Um diretório montado é a única maneira de um arquivo sair do contêiner.
+- **Rede:** apenas `fetch-piano` a utiliza.
 - Ele baixa um arquivo de um endereço fixo.
-- Ele verifica o arquivo em relação a um SHA-256 fixo antes de descompactar qualquer coisa.
+- Ele verifica o arquivo em relação a um hash SHA-256 fixo antes de descompactar qualquer coisa.
 - Ele rejeita links e caminhos que saem de seu diretório.
 - **Permissões:** uma conta de usuário comum. Nada precisa de direitos de administrador.
-- **A lei** não faz nenhuma operação de E/S. O CI verifica que seu módulo WebAssembly não importa nada.
+- **O programa** não realiza nenhuma operação de entrada/saída. O CI verifica se seu módulo WebAssembly não importa nada.
 
 Para relatar uma vulnerabilidade, consulte [`SECURITY.md`](SECURITY.md).
 
-## Onde está
+## Situação atual
 
-- **O primeiro marco foi concluído:** a lei, a ingestão e a proveniência, o hash dourado e o host. O hash dourado é o mesmo nativamente em x86_64 e ARM64, e também como WebAssembly no V8, SpiderMonkey e JavaScriptCore.
-- **O projeto** está finalizado em [`docs/PHASE-0.md`](docs/PHASE-0.md).
-- **A transferência** em [`docs/HANDOFF.md`](docs/HANDOFF.md) abrange o que está em andamento, o que foi decidido e por quê, e o que acontecerá a seguir.
-- **Revisão:** antes que uma alteração de código seja integrada, dois modelos a revisam no Ollama Cloud. Cada um pertence a uma família diferente da do autor, e cada um desconhece a revisão do outro.
+- **O primeiro marco foi concluído:** o programa, a ingestão e a proveniência, o hash de referência e o host. O hash de referência é o mesmo nativamente em x86_64 e ARM64, e como WebAssembly no V8, SpiderMonkey e JavaScriptCore.
+- **O projeto** está definido em [`docs/PHASE-0.md`](docs/PHASE-0.md).
+- **A transição** em [`docs/HANDOFF.md`](docs/HANDOFF.md) abrange o que está em andamento, o que foi decidido e por quê, e o que vem a seguir.
+- **Revisão:** antes que uma alteração de código seja mesclada, dois modelos a revisam no Ollama Cloud. Cada um vem de uma família diferente da do autor, e cada um não tem conhecimento da revisão do outro.
 
 ## Licença
 
-- **Código:** MIT (veja [`LICENSE`](LICENSE)).
-- **As duas versões de Battle Hymn:** CC0 1.0.
-- **As amostras de piano:** CC BY 3.0 (Alexander Holm). `fetch-piano` as baixa, e elas nunca são adicionadas ao repositório.
-- **Conjuntos de dados:** cada um tem sua própria licença em seu próprio arquivo.
+- **Código:** MIT (consulte [`LICENSE`](LICENSE)).
+- **As duas versões de "Battle Hymn":** CC0 1.0.
+- **As amostras de piano:** CC BY 3.0 (Alexander Holm). `fetch-piano` as baixa, e elas nunca são incluídas.
+- **Conjuntos de dados:** cada um carrega sua própria licença em seu próprio cartão.
 
 ---
 

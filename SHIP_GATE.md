@@ -6,7 +6,9 @@
 **Tags:** `[all]` every repo · `[npm]` `[pypi]` `[vsix]` `[desktop]` `[container]` published artifacts · `[mcp]` MCP servers · `[cli]` CLI tools
 
 This repository is a Rust workspace whose product is the `host` command-line program and the law's WebAssembly
-module. Nothing is published to a package registry. The 0.1.0 release carries the two exemplar recordings.
+module. The 0.1.0 release carries the two exemplar recordings. 0.2.0 also publishes the container
+`ghcr.io/mcp-tool-shop-org/si-jam-sessions` and the npm package `@si-jam-sessions/si-jam-sessions` (the README,
+changelog and licence; it does not install the host). npm publish goes through Trusted Publishing.
 
 ---
 
@@ -19,7 +21,7 @@ module. Nothing is published to a package registry. The 0.1.0 release carries th
 
 ### Default safety posture
 
-- [ ] `[cli|mcp|desktop]` SKIP: the host has no kill, delete or restart action. The one overwrite, of a file the user names for `render`, `notes` or `preview`, is documented, and asking first is tracked in #15.
+- [ ] `[cli|mcp|desktop]` SKIP: the host has no kill, delete or restart action. `render`, `notes` and `preview` refuse to overwrite a file that already exists (0.2.0).
 - [x] `[cli|mcp|desktop]` File operations constrained to known directories: the per-user piano cache and the paths the user names; the unpacker refuses links and paths that climb out (2026-09-26)
 - [ ] `[mcp]` SKIP: not an MCP server. The host uses the network only for `fetch-piano`.
 - [ ] `[mcp]` SKIP: not an MCP server.
@@ -47,14 +49,14 @@ module. Nothing is published to a package registry. The 0.1.0 release carries th
 ## D. Shipping Hygiene
 
 - [x] `[all]` `verify` script exists (test + build + smoke in one command): `verify.sh` runs every gate of CI's rust job (2026-09-26)
-- [x] `[all]` Version in manifest matches git tag: every crate is 0.1.0 and the release tag is `v0.1.0` (2026-09-26; `shipcheck manifest` has no npm or PyPI manifest to read)
+- [x] `[all]` Version in manifest matches git tag: `package.json` and every crate are 0.2.0. `v0.1.0` remains the recording release. `v0.2.0` is the tag for this version, cut when CI on main is green (2026-09-28; `shipcheck manifest` treats 0.2.0 as ahead of `v0.1.0` until that tag exists, which is a pass)
 - [x] `[all]` Dependency scanning runs in CI: `cargo deny --locked check licenses advisories` checks every dependency against the RustSec advisory database (2026-09-26). `shipcheck ci` does not recognise cargo-deny yet and reports no scanner; that is a gap in shipcheck, not in this repository.
 - [x] `[all]` No known high/critical vulnerabilities in any dependency tree, and Dependabot alerts are enabled (2026-09-26: `cargo deny check advisories` ok; `npm audit` on `site/` finds 0; the vulnerability-alerts API answers 204)
 - [ ] `[all]` SKIP: optional. The org rule reserves the update bot for when it is asked for; alerts are on.
-- [ ] `[npm]` SKIP: nothing is published to npm (`site/` is a private package).
-- [ ] `[npm]` SKIP: nothing is published to npm.
-- [ ] `[npm]` SKIP: nothing is published to npm or PyPI.
-- [ ] `[npm]` SKIP: nothing is published to npm or PyPI.
+- [x] `[npm]` Published via OIDC trusted publishing with `--provenance` — `release.yml` has `id-token: write` and `npm publish --provenance --access public` (2026-09-28). `site/` stays private. The registry attestation is checked again with `shipcheck ci --registry` after the tag's publish lands.
+- [x] `[npm]` **Every publishable package** passes `npx @mcptoolshop/shipcheck pack` — the root package's `files` are README.md, LICENSE and CHANGELOG.md (2026-09-28).
+- [x] `[npm]` `engines.node` set — `>=18` on `@si-jam-sessions/si-jam-sessions` (2026-09-28). The package ships no JavaScript; the field is the manifest constraint.
+- [x] `[npm]` Lockfile committed — `package-lock.json` at the repository root (2026-09-28). `site/package-lock.json` stays the site's own.
 - [ ] `[vsix]` SKIP: not a VS Code extension.
 - [ ] `[desktop]` SKIP: not a desktop application.
 
