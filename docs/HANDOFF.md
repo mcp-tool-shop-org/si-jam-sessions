@@ -87,7 +87,7 @@ source differ is itself useful to show.
 
 ## Next steps, in order
 
-1. **The JavaScript engines check the exemplar goldens** (#15): an `engine-js --exemplar <id>` mode.
+1. **~~The JavaScript engines check the exemplar goldens~~** (#15): an `engine-js --exemplar <id>` mode, with CI running both exemplars under each engine.
 2. **The listening test,** and a note-by-note check of both arrangements against the 1862 edition. Neither has
    been done, and the surfaces say so.
 3. **The owner's MIDI keyboard.** WinMM's device-only premises (serial callbacks per port; none after
@@ -127,11 +127,11 @@ How the reviews run:
 ## Open items
 
 - Issue #12: three LOW host findings from round 8.
-- Issue #15: the engines and the exemplar goldens; `notes`, `render` and `preview` replace an existing file
-  without asking.
+- Issue #15 is done: the exemplar engine checks run under each JavaScript engine in CI, and
+  `notes`, `render` and `preview` refuse to overwrite an existing file.
 - In piano mode the take and live notes still sound on the oscillator. That was the host agent's choice;
   confirm or change it.
-- CC0's SPDX forms (`CC0-1.0`) are still refused. Admitting them is one line and one test.
+- CC0's SPDX forms (`CC0-1.0` and `Creative Commons Zero v1.0 Universal`) are admitted.
 - Two readings the 1862 scans leave open: the octave of the A at bar 19, beat 4, and the alto's last note in
   bar 13.
 - An automated-access class (scraping, crawling) for a later predicate version.

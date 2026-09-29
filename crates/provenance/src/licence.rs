@@ -89,11 +89,16 @@ pub enum AdmittedClass {
 /// the name its deed gives it: CC0 1.0, a dedication to the public domain, and the Public
 /// Domain Mark 1.0, a label for a work free of known copyright, which admits by its
 /// sentence too. Their SPDX forms (`CC0-1.0`, "Creative Commons Zero v1.0 Universal") are
-/// not on the list; the crate's Known limits say why.
+/// also admitted.
 const ADMITTED: &[(&str, AdmittedClass)] = &[
     ("public domain", AdmittedClass::PublicDomain),
     ("cc0 1.0", AdmittedClass::PublicDomain),
     ("cc0 1.0 universal", AdmittedClass::PublicDomain),
+    ("cc0-1.0", AdmittedClass::PublicDomain),
+    (
+        "creative commons zero v1.0 universal",
+        AdmittedClass::PublicDomain,
+    ),
     ("public domain mark 1.0", AdmittedClass::PublicDomain),
     (
         "this work has been identified as being free of known restrictions under copyright \
@@ -509,7 +514,6 @@ mod tests {
             "public-domain",
             "public domain dedication",
             "cc0",
-            "cc0-1.0",
             "creative commons attribution 3.0",
             "creative commons attribution-sharealike 4.0",
             "public domain.",
@@ -1102,6 +1106,8 @@ mod tests {
         for text in [
             "cc0 1.0",
             "cc0 1.0 universal",
+            "cc0-1.0",
+            "creative commons zero v1.0 universal",
             "public domain mark 1.0",
             "this work has been identified as being free of known restrictions under \
              copyright law, including all related and neighboring rights.",

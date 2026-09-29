@@ -69,10 +69,10 @@
 //!   Version 3 admits CC0 1.0 and the Public Domain Mark and leaves these two refused:
 //!   the first does not claim the work is in the public domain, and the second claims it
 //!   for the United States alone.
-//! - **CC0 by other names.** A bare "CC0", and the SPDX forms "CC0-1.0" and "Creative
-//!   Commons Zero v1.0 Universal", are not admitted; a page that gives one is refused as
-//!   unknown and goes to a person. Version 2's tests pin "cc0" and "cc0-1.0" as refused,
-//!   and version 3 keeps them so.
+//! - **CC0 by other names.** A bare "CC0" is not admitted; a page that gives one is refused
+//!   as unknown and goes to a person. The SPDX forms "CC0-1.0" and "Creative Commons Zero
+//!   v1.0 Universal" are admitted in version 3. Version 2's tests pin "cc0" and "cc0-1.0" as
+//!   refused; version 3 admits the hyphenated SPDX form.
 //! - **An anonymous work's year is the work's.** The receipt holds one first-publication
 //!   year, the year the work as a whole was, which is when its last part was. An earlier
 //!   part's own year, such as a tune printed before its words, goes in the notes. Both

@@ -535,6 +535,20 @@ fn score_notes(piece: &Piece) -> impl Iterator<Item = (u8, u8)> + '_ {
     piece.score.notes().iter().map(|n| (n.pitch, n.velocity))
 }
 
+/// Refuses if `path` names a file that already exists.
+fn refuse_existing(path: &str) -> Result<(), String> {
+    if std::path::Path::new(path)
+        .try_exists()
+        .map_err(|e| format!("{path}: {e}"))?
+    {
+        return Err(format!(
+            "{path}: already exists; remove it or choose another name"
+        ));
+    }
+    Ok(())
+}
+
+/// `render`: renders the piece to a WAV file.
 fn render(o: &Options) -> Result<(), String> {
     let path = o.positional.first().map_or("", String::as_str);
     let piece = Piece::load(&root(), o.piece())?;
@@ -556,6 +570,7 @@ fn render(o: &Options) -> Result<(), String> {
     let mut bytes = Vec::with_capacity(samples.len() * 4 + 512);
     offline::write_wav_with(&mut bytes, &samples, channels as u16, info)
         .map_err(|e| e.to_string())?;
+    refuse_existing(path)?;
     std::fs::write(path, &bytes).map_err(|e| format!("{path}: {e}"))?;
     let record = law.record().map_err(refused)?;
     let frames = samples.len() / channels.max(1);
@@ -591,6 +606,7 @@ fn write_notes(o: &Options) -> Result<(), String> {
     let mut law = Law::acquire();
     let read = notes::read(&mut law, &piece).map_err(refused)?;
     let json = read.json();
+    refuse_existing(path)?;
     std::fs::write(path, &json).map_err(|e| format!("{path}: {e}"))?;
     println!(
         "Wrote the {} notes and {} beats the law commits for {} to {path}: {} bytes of JSON, \
@@ -658,6 +674,7 @@ fn preview(o: &Options) -> Result<(), String> {
         &[(*b"ICMT", piano::CREDIT), (*b"ISFT", PREVIEW_LABEL)],
     )
     .map_err(|e| e.to_string())?;
+    refuse_existing(wav)?;
     std::fs::write(wav, &out).map_err(|e| format!("{wav}: {e}"))?;
     let bpm = if draft.first_us_per_quarter == 0 {
         0.0

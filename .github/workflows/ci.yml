@@ -286,6 +286,8 @@ jobs:
       wasm: ${{ steps.build.outputs.wasm }}
       check: ${{ steps.scripts.outputs.check }}
       control: ${{ steps.scripts.outputs.control }}
+      exemplar-glm: ${{ steps.scripts.outputs.exemplar-glm }}
+      exemplar-kimi: ${{ steps.scripts.outputs.exemplar-kimi }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -325,14 +327,19 @@ jobs:
 
       # The scripts embed dist/law.wasm, the container and the take; engine-js
       # refuses unless its inputs are the ones the committed golden records.
+      # Exemplar scripts embed the wasm and the container with no take.
       - name: Write the engine scripts
         id: scripts
         run: |
           set -euo pipefail
           cargo run --locked -q -p golden --bin engine-js -- --wasm dist/law.wasm --out dist/golden.js
           cargo run --locked -q -p golden --bin engine-js -- --wasm dist/law.wasm --out dist/golden-negative.js --negative-control
+          cargo run --locked -q -p golden --bin engine-js -- --wasm dist/law.wasm --out dist/exemplar-glm.js --exemplar battle-hymn-glm-5.3
+          cargo run --locked -q -p golden --bin engine-js -- --wasm dist/law.wasm --out dist/exemplar-kimi.js --exemplar battle-hymn-kimi-k3
           echo "check=$(sha256sum dist/golden.js | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "control=$(sha256sum dist/golden-negative.js | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "exemplar-glm=$(sha256sum dist/exemplar-glm.js | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "exemplar-kimi=$(sha256sum dist/exemplar-kimi.js | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           sha256sum dist/*
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -459,11 +466,15 @@ jobs:
           WASM_SHA256: ${{ needs.wasm.outputs.wasm }}
           CHECK_SHA256: ${{ needs.wasm.outputs.check }}
           CONTROL_SHA256: ${{ needs.wasm.outputs.control }}
+          EXEMPLAR_GLM_SHA256: ${{ needs.wasm.outputs.exemplar-glm }}
+          EXEMPLAR_KIMI_SHA256: ${{ needs.wasm.outputs.exemplar-kimi }}
         run: |
           set -euo pipefail
           echo "$WASM_SHA256  dist/law.wasm" | sha256sum --check
           echo "$CHECK_SHA256  dist/golden.js" | sha256sum --check
           echo "$CONTROL_SHA256  dist/golden-negative.js" | sha256sum --check
+          echo "$EXEMPLAR_GLM_SHA256  dist/exemplar-glm.js" | sha256sum --check
+          echo "$EXEMPLAR_KIMI_SHA256  dist/exemplar-kimi.js" | sha256sum --check
 
       # Four values the engine prints, each against a source it cannot see:
       # the hash, the law version and the snapshot's length against the golden
@@ -513,3 +524,32 @@ jobs:
           test "$(value wasm-sha256 control.txt)" = "$(sha256sum dist/law.wasm | cut -c1-64)"
           grep -q 'golden mismatch' control.txt
           echo "the negative control failed as it must: status $status, computed $computed"
+
+      # Each exemplar script ingests the score and steps with no take; the hash
+      # must equal the one in its committed golden file.
+      - name: The engine computes the exemplar goldens
+        run: |
+          set -euo pipefail
+          value() { sed -n "s/^$1 \(.*\)\$/\1/p" "$2"; }
+          same() {
+            if [ -z "$3" ]; then
+              echo "::error::$1: nothing to compare against"
+              exit 1
+            fi
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1: the engine printed [$2], and it must be [$3]"
+              exit 1
+            fi
+            echo "$1: $3"
+          }
+          check_exemplar() {
+            local name=$1 script=$2 golden_file=$3
+            "$ENGINE" "$script" | tee "$name.txt"
+            same "the $name golden hash" "$(value computed "$name.txt")" "$(value golden "$golden_file")"
+            same "the $name wasm" "$(value wasm-sha256 "$name.txt")" "$(sha256sum dist/law.wasm | cut -c1-64)"
+            same "the $name law version" "$(value law-version "$name.txt")" "$(value law-version "$golden_file")"
+            same "the $name snapshot length" "$(value snapshot-bytes "$name.txt")" "$(value snapshot "$golden_file")"
+            grep -qx 'golden check passed' "$name.txt"
+          }
+          check_exemplar "exemplar-glm" dist/exemplar-glm.js golden/battle-hymn-glm-5.3.golden
+          check_exemplar "exemplar-kimi" dist/exemplar-kimi.js golden/battle-hymn-kimi-k3.golden
