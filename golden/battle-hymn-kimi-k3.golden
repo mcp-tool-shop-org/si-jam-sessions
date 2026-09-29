@@ -6,7 +6,7 @@ golden-format 1
 exemplar battle-hymn-kimi-k3
 law-version 5
 snapshot-format 2
-predicate-version 3
+predicate-version 4
 rules-year 2026
 us-last-public-domain-publication-year 1930
 eu-last-public-domain-death-year 1955
@@ -31,4 +31,4 @@ frame-notes 1924 beats 348
 frames-wire 52472 f01717117378a3edbe19820272805f63fb34c4502bb5a8bb6aa2d48be240e51c
 frames 105975 9f79fecfc3816cdd41eaaf7ea3165d63af0a21de505559100c5f14f10ccb3d03
 snapshot 282311
-golden 0f93de92b08ed6534a79462744035dcc553a91d8c05b3475750e83b440b89391
+golden e792361b22413de14e1cd0740947af2a34725970ef0d126be1e720f96b06395f

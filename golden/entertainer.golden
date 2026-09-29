@@ -5,7 +5,7 @@
 golden-format 1
 law-version 5
 snapshot-format 2
-predicate-version 3
+predicate-version 4
 rules-year 2026
 us-last-public-domain-publication-year 1930
 eu-last-public-domain-death-year 1955
@@ -39,4 +39,4 @@ steps 252917
 verdicts match 2617 early 1 late 2 wrong-pitch 1 addition 0 never-played 0
 rows 198106 114b64a92830a2bc1169ae3fe4226fcc41421a3851a55ad7004a604fd8f24b77
 snapshot 413207
-golden 66b59807261ff93086eed6b0c17cb4a7673e40937a83e0bd32db7ae25ef02946
+golden b43db3787577b4f959f611ae6e7d84c0b92e69d34c31bcbfe927a9f67f0eda11

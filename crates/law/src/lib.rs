@@ -140,14 +140,12 @@ pub use time::{TempoMap, rescale_tick};
 ///   reach window passed the committed horizon, about 20 ms before the note
 ///   was heard, and a later live note could replace that row. Version 4 now
 ///   closes score notes from the playhead, as above.
-/// - 5: the same law under licence predicate version 3, with the same rules
-///   year and cut-offs. Version 3 admits anonymous works and anonymous
-///   editions, CC0 1.0 and the Public Domain Mark, and an own engraving's
-///   statement of CC0 1.0; what it admits and refuses is `crates/provenance`'s
-///   to state (see `provenance::PREDICATE_VERSION`). Its EU cut-off for an
-///   anonymous work is the year of the EU death cut-off, which the header
-///   already carries, so the header gains no word. The ingest verb's refusal
-///   codes 116, 145 and 146 are new.
+/// - 5: the same law under licence predicate version 4, with the same rules
+///   year and cut-offs. Version 4 adds an automated-access refusal class and
+///   admits two standard rights statements that hold a negating word; what it
+///   admits and refuses is `crates/provenance`'s to state (see
+///   `provenance::PREDICATE_VERSION`). The ingest verb's refusal code 130 is new,
+///   and codes 131-133 shift by one.
 ///
 ///   Nothing version 4 computed for a score it admitted changes: the
 ///   Entertainer keeps its receipt digest and its tier, so the constructed
@@ -173,7 +171,7 @@ pub const LAW_VERSION: u32 = 5;
 // header's EU word carries both.
 const _: () = {
     assert!(LAW_VERSION == 5);
-    assert!(provenance::PREDICATE_VERSION == 3);
+    assert!(provenance::PREDICATE_VERSION == 4);
     assert!(provenance::RULES_YEAR == 2026);
     assert!(provenance::US_LAST_PUBLIC_DOMAIN_PUBLICATION_YEAR == 1930);
     assert!(provenance::EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR == 1955);

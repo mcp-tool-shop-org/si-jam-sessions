@@ -967,54 +967,60 @@ mod tests {
         );
     }
 
-    /// The version 4 snapshot of the constructed take: the current snapshot with
-    /// its law-version word (bytes 12 to 15) written back to 4 and its
-    /// predicate-version word (bytes 36 to 39) to 2. The test below proves it is
-    /// version 4's snapshot, byte for byte.
-    fn version_4_snapshot(g: &Golden) -> Vec<u8> {
+    /// Predicate version 4 changes nothing version 3 computed for the committed
+    /// score: the Entertainer is admitted in the same tier with the same receipt
+    /// digest, so the constructed take's snapshot differs from version 3's in one
+    /// header word alone, the predicate version. Written back to 3, it hashes to
+    /// version 3's golden.
+    #[test]
+    fn the_predicate_version_4_snapshot_is_version_3_but_for_its_predicate_version() {
+        const VERSION_3_GOLDEN: &str =
+            "66b59807261ff93086eed6b0c17cb4a7673e40937a83e0bd32db7ae25ef02946";
+        let g = golden();
+        assert_eq!(g.snapshot[12..16], [5, 0, 0, 0]);
+        assert_eq!(g.snapshot[36..40], [4, 0, 0, 0]);
         let mut bytes = g.snapshot.clone();
-        bytes[12] = 4;
-        bytes[36] = 2;
-        bytes
+        bytes[36] = 3;
+        let changed: Vec<usize> = (0..bytes.len())
+            .filter(|&i| bytes[i] != g.snapshot[i])
+            .collect();
+        assert_eq!(changed, [36], "only the predicate version word differs");
+        assert_eq!(hex(&sha256(&bytes)), VERSION_3_GOLDEN);
+        assert_ne!(hex(&g.golden), VERSION_3_GOLDEN);
     }
 
-    /// Law version 5 changes nothing version 4 computed for the committed
-    /// score: under predicate version 3 the Entertainer is admitted in the same
-    /// tier with the same receipt digest, so the constructed take's snapshot
-    /// differs from version 4's in two header words alone, the law version and
-    /// the predicate version. Written back to 4 and 2, it hashes to version 4's
-    /// golden.
+    /// Historical: law version 5, predicate version 3. The snapshot with the
+    /// law-version word written back to 4 and the predicate-version word to 2
+    /// is version 4's snapshot, which hashes to `fd574ccc…`.
     #[test]
     fn the_version_5_snapshot_is_version_4_but_for_its_version_words() {
         const VERSION_4_GOLDEN: &str =
             "fd574ccce7ae9eb389642b5c7372c506c7d2787b0e1f3b190655e49b80695baa";
         let g = golden();
-        assert_eq!(g.snapshot[12..16], [5, 0, 0, 0]);
-        assert_eq!(g.snapshot[36..40], [3, 0, 0, 0]);
-        let bytes = version_4_snapshot(&g);
+        let mut bytes = g.snapshot.clone();
+        bytes[12] = 4;
+        bytes[36] = 2;
         let changed: Vec<usize> = (0..bytes.len())
             .filter(|&i| bytes[i] != g.snapshot[i])
             .collect();
         assert_eq!(changed, [12, 36], "only the two version words differ");
         assert_eq!(hex(&sha256(&bytes)), VERSION_4_GOLDEN);
-        assert_ne!(hex(&g.golden), VERSION_4_GOLDEN);
     }
 
-    /// Law version 4 changes nothing version 3 computed: its snapshot of the
-    /// constructed take, with the law-version word (bytes 12 to 15) written back
-    /// to 3, is version 3's snapshot byte for byte, so it hashes to version 3's
-    /// golden. Version 4's snapshot is the one the test above rebuilds from the
-    /// current law's.
+    /// Historical: law version 4, predicate version 2. The snapshot with the
+    /// law-version word written back to 3 is version 3's snapshot, which hashes
+    /// to `145c7af9…`.
     #[test]
     fn the_version_4_snapshot_is_version_3_but_for_its_version_word() {
-        const VERSION_3_GOLDEN: &str =
+        const VERSION_3_GOLDEN_HISTORICAL: &str =
             "145c7af9f964a47f2e21566dd253ff5de6cc5cd65c6f2cbf5f04afe745c03b40";
         let g = golden();
-        let mut bytes = version_4_snapshot(&g);
+        let mut bytes = g.snapshot.clone();
+        bytes[12] = 4;
+        bytes[36] = 2;
         assert_eq!(bytes[12..16], [4, 0, 0, 0]);
         bytes[12] = 3;
-        assert_eq!(hex(&sha256(&bytes)), VERSION_3_GOLDEN);
-        assert_ne!(hex(&g.golden), VERSION_3_GOLDEN);
+        assert_eq!(hex(&sha256(&bytes)), VERSION_3_GOLDEN_HISTORICAL);
     }
 
     #[test]

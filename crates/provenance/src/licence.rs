@@ -57,6 +57,8 @@ pub enum LicenceRefusal {
     NoDerivatives,
     /// The source's terms forbid or limit processing by, or training of, AI models.
     AiRestricted,
+    /// The source's terms forbid or limit automated access, such as scraping or crawling.
+    AutomatedAccess,
 }
 
 impl From<Restriction> for LicenceRefusal {
@@ -68,6 +70,7 @@ impl From<Restriction> for LicenceRefusal {
             Restriction::NonCommercial => LicenceRefusal::NonCommercial,
             Restriction::NoDerivatives => LicenceRefusal::NoDerivatives,
             Restriction::AiRestricted => LicenceRefusal::AiRestricted,
+            Restriction::AutomatedAccess => LicenceRefusal::AutomatedAccess,
         }
     }
 }
@@ -105,6 +108,11 @@ const ADMITTED: &[(&str, AdmittedClass)] = &[
          law, including all related and neighboring rights.",
         AdmittedClass::PublicDomain,
     ),
+    (
+        "no known copyright restrictions",
+        AdmittedClass::PublicDomain,
+    ),
+    ("no copyright - united states", AdmittedClass::PublicDomain),
     ("creative commons attribution 4.0", AdmittedClass::CcBy40),
     (
         "creative commons attribution 4.0 international",
@@ -205,6 +213,26 @@ const REFUSAL_PHRASES: &[Phrases] = &[
             "chatgpt",
             "gpt",
         ],
+    },
+    Phrases {
+        class: LicenceRefusal::AutomatedAccess,
+        whole: &[
+            "scraping",
+            "crawling",
+            "spidering",
+            "harvesting",
+            "bot",
+            "bots",
+            "automated access",
+            "automated retrieval",
+            "scraper",
+            "scrapers",
+            "crawler",
+            "crawlers",
+            "spider",
+            "spiders",
+        ],
+        stems: &[],
     },
     Phrases {
         class: LicenceRefusal::AllRightsReserved,
@@ -381,11 +409,19 @@ pub fn restriction_in(text: &str) -> Option<LicenceRefusal> {
 /// It applies where a text may hold the licence alongside other text: a copyright markup
 /// must affirm the page licence, and an evidence quote that holds a licence or terms text
 /// must not deny it. Over-refusal is the intended failure mode.
-pub fn negates(normalised: &str) -> bool {
-    if normalised.contains('?') {
+pub fn negates(text: &str) -> bool {
+    if text.contains('?') {
         return true;
     }
-    let words: Vec<&str> = normalised
+    // Curated admission: a text that is exactly an admitted licence affirms, whatever
+    // words it holds. Compared as words, so punctuation and separators do not matter.
+    let words = as_words(text);
+    for (admitted, _) in ADMITTED {
+        if words == as_words(admitted) {
+            return false;
+        }
+    }
+    let words: Vec<&str> = text
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty())
         .collect();
@@ -914,21 +950,29 @@ mod tests {
         }
     }
 
-    /// Known limit: automated-access terms (scraping, crawling) are not a refusal class in
-    /// version 2. No phrase names them. A prohibiting or negating word in the same text
-    /// refuses it by the negation rule, not by a class of its own.
+    /// Automated-access terms (scraping, crawling) are a refusal class in version 4.
+    /// A prohibiting or negating word in the same text still refuses it, but the class
+    /// names the reason.
     #[test]
-    fn automated_access_terms_are_not_a_class_in_version_2() {
+    fn automated_access_terms_are_a_class_in_version_4() {
         for text in [
             "scraping is prohibited",
             "crawling and scraping are forbidden",
             "no scraping",
         ] {
-            assert_eq!(restriction_in(text), None, "{text}");
+            assert_eq!(
+                restriction_in(text),
+                Some(LicenceRefusal::AutomatedAccess),
+                "{text}"
+            );
+            // The negation rule still applies when the text is not exactly an admitted licence.
             assert!(negates(text), "{text}");
         }
-        // A limit phrased without a prohibiting or negating word passes.
-        assert_eq!(restriction_in("scraping requires written permission"), None);
+        // A limit phrased without a prohibiting or negating word is refused by the class.
+        assert_eq!(
+            restriction_in("scraping requires written permission"),
+            Some(LicenceRefusal::AutomatedAccess)
+        );
         assert!(!negates("scraping requires written permission"));
     }
 
@@ -958,9 +1002,10 @@ mod tests {
             // The verb forms of restrict still refuse, and "no" still refuses.
             "use is restricted",
             "no restrictions",
-            // Known limit: standard rights statements that hold a negating word refuse.
-            "no known copyright restrictions",
-            "no copyright - united states",
+            // Curated admission: standard rights statements that hold a negating word are
+            // now admitted, so they no longer negate when they are the whole text.
+            // "no known copyright restrictions",
+            // "no copyright - united states",
         ] {
             assert!(negates(text), "{text}");
         }
@@ -1015,6 +1060,9 @@ mod tests {
             "this work has been identified as being free of known restrictions under \
              copyright law, including all related and neighboring rights.",
             "this work is free of known copyright restrictions.",
+            // Curated admission: these standard rights statements no longer negate.
+            "no known copyright restrictions",
+            "no copyright - united states",
             // Known limit: a limitation phrased only with the noun is not read as a
             // negation.
             "restrictions apply",
@@ -1022,6 +1070,54 @@ mod tests {
         ] {
             assert!(!negates(text), "{text}");
         }
+    }
+
+    #[test]
+    fn automated_access_phrases_refuse() {
+        for text in [
+            "scraping",
+            "crawling",
+            "spidering",
+            "harvesting",
+            "bot",
+            "bots",
+            "automated access",
+            "automated retrieval",
+            "scraper",
+            "scrapers",
+            "crawler",
+            "crawlers",
+            "spider",
+            "spiders",
+        ] {
+            assert_eq!(
+                restriction_in(text),
+                Some(LicenceRefusal::AutomatedAccess),
+                "{text}"
+            );
+        }
+        // Plain words that run on from a stem still pass.
+        assert_eq!(restriction_in("spiderweb"), None);
+        assert_eq!(restriction_in("escrow"), None);
+    }
+
+    #[test]
+    fn curated_admissions_admit_despite_negating_words() {
+        // These texts hold negating words but are on the admitted list.
+        assert!(
+            ADMITTED
+                .iter()
+                .any(|(text, _)| *text == "no known copyright restrictions")
+        );
+        assert!(
+            ADMITTED
+                .iter()
+                .any(|(text, _)| *text == "no copyright - united states")
+        );
+        assert!(!negates("no known copyright restrictions"));
+        assert!(!negates("no copyright - united states"));
+        // But only when they are the whole text; extra words with negation still negate.
+        assert!(negates("not no known copyright restrictions"));
     }
 
     #[test]

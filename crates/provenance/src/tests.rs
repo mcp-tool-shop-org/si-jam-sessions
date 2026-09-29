@@ -2236,7 +2236,7 @@ fn exemplars() -> [Exemplar; 2] {
 /// the model, the pinned transcription and, for kimi-k3, the one line the project added.
 #[test]
 fn the_battle_hymn_exemplars_are_admitted_as_own_engravings() {
-    assert_eq!(PREDICATE_VERSION, 3);
+    assert_eq!(PREDICATE_VERSION, 4);
     let fixture = battle_hymn();
     for x in exemplars() {
         let r = Receipt::from_json(x.json).expect("the exemplar receipt loads");
@@ -2656,7 +2656,7 @@ fn the_rules_are_those_of_2026() {
     assert_eq!(EU_LAST_PUBLIC_DOMAIN_DEATH_YEAR, 1955);
     assert_eq!(EU_LAST_PUBLIC_DOMAIN_ANONYMOUS_PUBLICATION_YEAR, 1955);
     assert_eq!(LAST_OUT_OF_TERM_EDITION_YEAR, 2000);
-    assert_eq!(PREDICATE_VERSION, 3);
+    assert_eq!(PREDICATE_VERSION, 4);
     assert_eq!(CANONICAL_VERSION, 1);
     assert_eq!(RECEIPT_SCHEMA, 1);
 }

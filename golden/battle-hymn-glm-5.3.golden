@@ -6,7 +6,7 @@ golden-format 1
 exemplar battle-hymn-glm-5.3
 law-version 5
 snapshot-format 2
-predicate-version 3
+predicate-version 4
 rules-year 2026
 us-last-public-domain-publication-year 1930
 eu-last-public-domain-death-year 1955
@@ -31,4 +31,4 @@ frame-notes 1720 beats 373
 frames-wire 48026 c725c82c1e9d6e5dbef020b38118506d18438f1694e573f8bd8b811be8dc53f1
 frames 96119 9ee9d604049c5491a9cfa37758011c4342d8e127764624ffac95ba8601431b0c
 snapshot 252308
-golden 1c0789b11d61914879dd39630b763f44d2955955d1d97cef42c695e0fdd6ad24
+golden 409a3341a35af9e7ad203ef573a28e475600b27e183cc08d1b8b0cfbb03d2f97

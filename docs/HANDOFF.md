@@ -17,14 +17,14 @@ and exactly what to do next.
 | The host | #6 | cpal (WASAPI shared), rtrb, a callback that allocates nothing, oscillator voices and a click, MIDI through WinMM directly, a computer-keyboard fallback, a silent pre-roll; `devices`, `play`, `render`, `jam` |
 | Research | #8 | The Battle Hymn's evidence and its 1862 reference transcription |
 | The first handoff | #9 | This file, and the external-review tools in `tools/review/` |
-| Law version 5 | #10 | Licence predicate version 3: anonymous works (first published by 1930 for the US, by 1955 for the EU, rules year 2026), CC0 1.0 and the Public Domain Mark; the Battle Hymn provenance fixture |
+| Law version 5 | #10 | Licence predicate version 4: anonymous works (first published by 1930 for the US, by 1955 for the EU, rules year 2026), CC0 1.0 and the Public Domain Mark, automated-access terms refused, two negating rights statements curated as public domain; the Battle Hymn provenance fixture |
 | The grand piano | #11 | The Salamander Grand Piano V3 sampler, `fetch-piano` (archive pinned by SHA-256), `preview`, `notices`, `--voice`; issue #7's three fixes |
 | The exemplars | #14 | Both Battle Hymn arrangements admitted as scores (receipts `ee5a82df…` and `d044ffa4…`), a frames golden for each, `--piece` (default `battle-hymn-glm-5.3`), `host notes` |
 | The full treatment | this one | SECURITY, CHANGELOG, SHIP_GATE, SCORECARD, `verify.sh`, the RustSec advisory scan, the host's exit status (1 usage, 2 runtime), the README and its translations, the landing page, the handbook, and PHASE-0's amendments |
 
-- **Law version 5**, licence predicate version 3. *The Entertainer*'s golden is
-  `66b59807261ff93086eed6b0c17cb4a7673e40937a83e0bd32db7ae25ef02946`. The exemplar goldens are glm-5.3
-  `1c0789b1…` and kimi-k3 `0f93de92…`, checked natively on both architectures.
+- **Law version 5**, licence predicate version 4. *The Entertainer*'s golden is
+  `b43db3787577b4f959f611ae6e7d84c0b92e69d34c31bcbfe927a9f67f0eda11`. The exemplar goldens are glm-5.3
+  `409a3341…` and kimi-k3 `e792361b…`, checked natively on both architectures.
 - **Try it:** `cargo run -p host --release -- fetch-piano` once, then `-- play`. `play` opens on the Battle Hymn
   as glm-5.3 arranged it; `--piece battle-hymn-kimi-k3` or `--piece entertainer` picks another. `-- notes
   out.json --piece <name>` writes the notes the law commits. Use a wired output for `jam`: a Bluetooth output's
@@ -138,11 +138,15 @@ How the reviews run:
   audible by timbre. Changing it would need the piano to load samples for every possible live
   pitch or accept silent misses.
 - CC0's SPDX forms (`CC0-1.0` and `Creative Commons Zero v1.0 Universal`) are admitted.
-- Two readings the 1862 scans leave open: the octave of the A at bar 19, beat 4, and the alto's last note in
-  bar 13.
-- An automated-access class (scraping, crawling) for a later predicate version.
-- Standard rights statements that contain a negating word ("No known copyright restrictions") are refused
-  until curated.
+- ~~Two readings the 1862 scans leave open: the octave of the A at bar 19, beat 4, and the alto's last note in
+  bar 13.~~ **Resolved:** the reference transcription records its choices (A4 in bar 19; E4 in bar 13 alto),
+  and the arrangements are independent creative works that may diverge from it.
+- ~~An automated-access class (scraping, crawling) for a later predicate version.~~ **Done:**
+  predicate version 4 refuses scraping, crawling, spidering, harvesting, bots, and automated
+  access or retrieval.
+- ~~Standard rights statements that contain a negating word ("No known copyright restrictions") are refused
+  until curated.~~ **Done:** both "No known copyright restrictions" and "No Copyright - United States"
+  are admitted as public domain in version 4; a text that is exactly one of them no longer negates.
 - The npm scope `@si-jam-sessions` is reserved and empty. Publish through trusted publishing, never a token,
   and add its row to PHASE-0's compensators when the first package ships.
 

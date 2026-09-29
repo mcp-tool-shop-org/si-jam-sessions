@@ -605,10 +605,11 @@ fn licence_code(refusal: &provenance::Refusal) -> u32 {
             LicenceRefusal::NonCommercial => 127,
             LicenceRefusal::NoDerivatives => 128,
             LicenceRefusal::AiRestricted => 129,
+            LicenceRefusal::AutomatedAccess => 130,
         },
-        P::MissingCreditLedgerId => 130,
-        P::UnexpectedCreditLedgerId => 131,
-        P::QuoteNegated { .. } => 132,
+        P::MissingCreditLedgerId => 131,
+        P::UnexpectedCreditLedgerId => 132,
+        P::QuoteNegated { .. } => 133,
         P::MissingEditionPublisher => 140,
         P::MissingEditionYear => 141,
         P::EditionBeforeFirstPublication { .. } => 142,
@@ -716,6 +717,9 @@ fn licence_reason(f: &mut fmt::Formatter<'_>, refusal: &provenance::Refusal) -> 
                 LicenceRefusal::NonCommercial => "it is non-commercial",
                 LicenceRefusal::NoDerivatives => "it forbids derivatives",
                 LicenceRefusal::AiRestricted => "it restricts use by or for AI models",
+                LicenceRefusal::AutomatedAccess => {
+                    "it restricts automated access such as scraping or crawling"
+                }
             };
             write!(f, "the licence refuses the score: {why}")
         }

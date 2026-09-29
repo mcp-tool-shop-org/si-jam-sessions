@@ -54,21 +54,19 @@
 //!   belong to this corpus. A text that prohibits one of them ("Claude use is prohibited")
 //!   is still refused by the negation rule, but not named AI-restricted; one that limits
 //!   it without a prohibiting or negating word passes.
-//! - **Automated-access terms** (scraping, crawling) are not a refusal class in versions
-//!   2 and 3. No phrase names them and no receipt restriction records them. A text that
-//!   forbids them with a prohibiting or negating word ("scraping is prohibited", "no
-//!   scraping") is refused by the negation rule, not by a class of its own; one without
-//!   ("scraping requires written permission") names nothing the predicate refuses.
+//! - **Automated-access terms** (scraping, crawling) are a refusal class in version 4.
+//!   Phrases that name them are looked for in every licence text the predicate reads, and a
+//!   source whose terms limit or forbid any of them is refused by that class. A text without
+//!   a prohibiting or negating word that names one of them is still refused by the class.
 //! - **A limitation phrased only with the noun** ("restrictions apply", "subject to the
 //!   restrictions below") is not read as a negation. The nouns "restriction" and
 //!   "restrictions" are not negating words, because the Public Domain Mark says its work
 //!   is "free of known restrictions". The verb and adjective forms are ("use is
 //!   restricted", "restrictive terms").
-//! - **Standard rights statements that hold a negating word** are refused: "No known
-//!   copyright restrictions" and "No Copyright - United States" negate through "no".
-//!   Version 3 admits CC0 1.0 and the Public Domain Mark and leaves these two refused:
-//!   the first does not claim the work is in the public domain, and the second claims it
-//!   for the United States alone.
+//! - **Standard rights statements that hold a negating word** are now admitted in version 4:
+//!   "No known copyright restrictions" and "No Copyright - United States" are curated as
+//!   public domain. Compared as words, a text that is exactly one of them no longer negates;
+//!   a text that adds other words with negation still does.
 //! - **CC0 by other names.** A bare "CC0" is not admitted; a page that gives one is refused
 //!   as unknown and goes to a person. The SPDX forms "CC0-1.0" and "Creative Commons Zero
 //!   v1.0 Universal" are admitted in version 3. Version 2's tests pin "cc0" and "cc0-1.0" as
@@ -214,7 +212,21 @@ pub const LAST_OUT_OF_TERM_EDITION_YEAR: u16 = RULES_YEAR - 26;
 /// domain. A commit that only edits this record refines nothing.
 /// - `4d720d6`: an author's name may not be empty or only whitespace, and a licence
 ///   notice in a sequencer-specific or unknown meta event, a SysEx or an escape is read.
-pub const PREDICATE_VERSION: u32 = 3;
+///
+/// Version 4 differs from version 3:
+/// - It adds an automated-access refusal class: scraping, crawling, spidering, harvesting,
+///   bots, and automated access or retrieval. A source whose terms limit or forbid any of
+///   these is refused by that class. The class is looked for in the same places as the
+///   others: the page licence, the terms, evidence quotes and in-file statements.
+/// - It admits two standard rights statements that hold a negating word: "No known copyright
+///   restrictions" and "No Copyright - United States". Version 3 refused them because the
+///   word "no" negates; version 4 curates them as public domain. A text that is exactly one
+///   of these statements, compared as words, no longer negates; a text that adds other words
+///   with negation still does.
+/// - The canonical encoding gains one new restriction tag: `automated-access` (tag 6). A
+///   receipt that uses no restriction encodes exactly as it did, so the Entertainer receipt's
+///   digest is unchanged (`e23ba2e9…`), and the Entertainer is admitted as public domain.
+pub const PREDICATE_VERSION: u32 = 4;
 
 impl Receipt {
     /// Loads a receipt from JSON in the strict subset (see `json.rs`), refusing unknown or

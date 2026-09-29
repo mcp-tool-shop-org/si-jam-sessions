@@ -100,6 +100,8 @@ closed_enum! {
         NoDerivatives = (4, "no-derivatives"),
         /// A term that forbids or limits processing by, or training of, AI models.
         AiRestricted = (5, "ai-restricted"),
+        /// A term that forbids or limits automated access, such as scraping or crawling.
+        AutomatedAccess = (6, "automated-access"),
     }
 }
 
@@ -408,7 +410,7 @@ mod tests {
             assert_eq!(StatementField::from_tag(v.tag()), Some(v));
             assert_eq!(StatementField::from_name(v.name()), Some(v));
         }
-        assert_eq!(Restriction::from_tag(6), None);
+        assert_eq!(Restriction::from_tag(7), None);
         assert_eq!(Restriction::from_name("Share-Alike"), None);
     }
 
