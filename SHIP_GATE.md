@@ -49,7 +49,7 @@ changelog and licence; it does not install the host). npm publish goes through T
 ## D. Shipping Hygiene
 
 - [x] `[all]` `verify` script exists (test + build + smoke in one command): `verify.sh` runs every gate of CI's rust job (2026-09-26)
-- [x] `[all]` Version in manifest matches git tag: `package.json` and every crate are 0.2.0. `v0.1.0` remains the recording release. `v0.2.0` is the tag for this version, cut when CI on main is green (2026-09-28; `shipcheck manifest` treats 0.2.0 as ahead of `v0.1.0` until that tag exists, which is a pass)
+- [x] `[all]` Version in manifest matches git tag: `package.json` and every crate are 0.2.1. `v0.1.0` remains the recording release. `v0.2.1` is the provenance publish; 0.2.0 is already on npm from a local session (2026-09-29)
 - [x] `[all]` Dependency scanning runs in CI: `cargo deny --locked check licenses advisories` checks every dependency against the RustSec advisory database (2026-09-26). `shipcheck ci` does not recognise cargo-deny yet and reports no scanner; that is a gap in shipcheck, not in this repository.
 - [x] `[all]` No known high/critical vulnerabilities in any dependency tree, and Dependabot alerts are enabled (2026-09-26: `cargo deny check advisories` ok; `npm audit` on `site/` finds 0; the vulnerability-alerts API answers 204)
 - [ ] `[all]` SKIP: optional. The org rule reserves the update bot for when it is asked for; alerts are on.

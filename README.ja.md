@@ -72,11 +72,11 @@ Rustを使用してソースからビルドするか、コンテナを実行し�
 イメージは、各バージョンタグとともに公開されます。イメージには、ホストと楽譜が含まれますが、ピアノのサンプルは含まれません。
 
 ```bash
-docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0
+docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1
 docker run --rm \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -v "$PWD:/out" \
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \
   notes /out/notes.json
 ```
 

@@ -147,11 +147,12 @@ How the reviews run:
 - ~~Standard rights statements that contain a negating word ("No known copyright restrictions") are refused
   until curated.~~ **Done:** both "No known copyright restrictions" and "No Copyright - United States"
   are admitted as public domain in version 4; a text that is exactly one of them no longer negates.
-- **0.2.0** publishes the container `ghcr.io/mcp-tool-shop-org/si-jam-sessions` and the npm package
-  `@si-jam-sessions/si-jam-sessions`. The npm package is the release record (README, changelog, licence),
-  not the host binary. The host is the container, or `cargo run -p host`. Publishing uses Trusted Publishing
-  (`release.yml`, OIDC, `--provenance`). The 0.0.0 placeholder only reserved the name. Do not turn on
-  "disallow tokens" until a tag's OIDC publish has succeeded. PHASE-0's compensators include both publishes.
+- **0.2.1** is the Trusted Publishing publish of the same release. `release.yml` publishes
+  `@si-jam-sessions/si-jam-sessions` with provenance, and the tag pushes the container
+  `ghcr.io/mcp-tool-shop-org/si-jam-sessions`. The npm package is the release record (README, changelog,
+  licence), not the host binary. 0.2.0 is already on npm from a local session and has no attestation. Do not
+  turn on "disallow tokens" until the 0.2.1 OIDC publish has succeeded. PHASE-0's compensators include both
+  publishes.
 
 ## Working rules
 

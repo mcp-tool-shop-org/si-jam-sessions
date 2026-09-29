@@ -1,6 +1,6 @@
 [package]
 name = "provenance"
-version = "0.2.0"
+version = "0.2.1"
 description = "The receipt a score arrives with, and the licence predicate that admits or refuses it."
 edition.workspace = true
 rust-version.workspace = true

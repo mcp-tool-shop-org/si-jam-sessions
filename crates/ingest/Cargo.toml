@@ -1,6 +1,6 @@
 [package]
 name = "ingest"
-version = "0.2.0"
+version = "0.2.1"
 description = "Standard MIDI File bytes to the integer score the si-jam-sessions law reads."
 edition.workspace = true
 rust-version.workspace = true

@@ -91,11 +91,11 @@ non testé, et l’entrée en direct est uniquement disponible sur Windows pour 
 L’image est publiée avec chaque étiquette de version. Elle contient l’hôte et les partitions, mais pas les échantillons de piano.
 
 ```bash
-docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0
+docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1
 docker run --rm \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -v "$PWD:/out" \
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \
   notes /out/notes.json
 ```
 

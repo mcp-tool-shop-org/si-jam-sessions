@@ -76,11 +76,11 @@ cargo run -p host --release --locked -- render battle-hymn-glm-5.3.wav --piece b
 छवि प्रत्येक संस्करण टैग के साथ प्रकाशित की जाती है। इसमें होस्ट और स्कोर होते हैं, पियानो नमूने नहीं।
 
 ```bash
-docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0
+docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1
 docker run --rm \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -v "$PWD:/out" \
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \
   notes /out/notes.json
 ```
 
