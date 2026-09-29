@@ -78,13 +78,33 @@ The full hashes are in the [release notes](https://github.com/mcp-tool-shop-org/
 
 ## Try it
 
-You need Rust. The repository pins version 1.98.1 in `rust-toolchain.toml`, and `rustup` installs it on the
-first build.
+Build from source with Rust, or run the container. The repository pins Rust 1.98.1 in `rust-toolchain.toml`,
+and `rustup` installs it on the first build.
 
 - **Windows 10 and 11** run everything, though live input has not yet been tried with a real MIDI keyboard.
 - **Linux:** CI builds and tests the host and renders with it. Playing through a Linux audio device is
   untested, and live input is Windows-only for now.
 - **macOS** is untested.
+- **The container** `ghcr.io/mcp-tool-shop-org/si-jam-sessions` runs `render`, `notes`, `notices` and
+  `preview` without a Rust toolchain. Playing through a device is the same untested Linux path.
+
+The image is published with each version tag. It holds the host and the scores, not the piano samples.
+
+```bash
+docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0
+docker run --rm \
+  -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+  -v "$PWD:/out" \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  notes /out/notes.json
+```
+
+On PowerShell, drop the uid lines and mount `${PWD}:/out`. The handbook's
+[container page](https://mcp-tool-shop-org.github.io/si-jam-sessions/handbook/docker/) has the piano render
+and the Windows form. The npm package
+[`@si-jam-sessions/si-jam-sessions`](https://www.npmjs.com/package/@si-jam-sessions/si-jam-sessions) is this
+release's README, changelog and licence, published by Trusted Publishing. Installing it does not install the
+host. The host is the container, or the build below.
 
 ```bash
 cargo run -p host --release -- devices        # list the audio outputs and MIDI inputs
@@ -109,6 +129,9 @@ Use a wired output for `jam`. A Bluetooth output's delay is longer than the 100 
   - the audio outputs and MIDI inputs you choose;
   - the files you ask it to write.
 - **Data not touched:** anything outside those paths. There are no accounts, no credentials and no telemetry.
+- **The container** is that same program. It holds the binary and the scores, not the piano. It drops
+  privileges before the host runs: uid 10001, or `HOST_UID` when you set it. A mounted directory is the only
+  way a file leaves the container.
 - **Network:** only `fetch-piano` uses it.
   - It downloads one archive from one fixed address.
   - It checks the archive against a pinned SHA-256 before unpacking anything.

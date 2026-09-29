@@ -208,6 +208,8 @@ Scored 0–3 against the studio's six workflow standards. Slice 1 raised two of 
 | Crate publish | `cargo yank --version V` (does not delete) | New resolves avoid it; lockfiles keep working | crate publisher |
 | GitHub release | `gh release delete TAG -y`, tag removed separately | Release gone; downloaded assets not recalled | repository admin |
 | Pages deploy | Unpublish from the repository's Pages settings | Site offline; content kept | repository admin |
+| npm publish of `@si-jam-sessions/si-jam-sessions` | `npm unpublish @si-jam-sessions/si-jam-sessions@VERSION` within 72 hours; after that `npm deprecate @si-jam-sessions/si-jam-sessions@VERSION 'reason'`. Unpublishing the only version also locks the name for 24 hours | Within 72 hours the version is gone. After that it stays, with a warning. A provenance attestation on Sigstore is not revoked | package publisher |
+| GHCR image `ghcr.io/mcp-tool-shop-org/si-jam-sessions` | Delete that package version in the package settings, or `gh api --method DELETE` on its version id | That tag's manifest is gone. A copy already pulled is not recalled | repository admin |
 
 ## Decisions the Director may override
 
@@ -241,4 +243,4 @@ Each was settled by what slice 1 measured, under the Director's delegation, and 
 
 **A version number is frozen when it reaches main.** Before that it may be refined, but one number never names two different goldens, and every pushed refinement is recorded beside the version. You might expect every change to take a new number. During review that would spend a number on every round. Law version 2 named a golden on a pushed head, so the law that follows version 1 on main is version 3. Predicate version 2 was refined on its branch without moving the golden.
 
-**Still open:** whether *The Entertainer*'s `.mid` matches its `.ly` after the latter's 2016-11 formatting commit (a re-render with LilyPond 2.19.32 settles it); the human clearance path for editions still inside their term; the licence text for the project's own engravings; and whether predicate version 3 adds a class for automated-access terms (scraping, crawling).
+**Still open:** whether *The Entertainer*'s `.mid` matches its `.ly` after the latter's 2016-11 formatting commit (a re-render with LilyPond 2.19.32 settles it); the human clearance path for editions still inside their term; and the licence text for the project's own engravings. Predicate version 4 added the automated-access class and curated two negating rights statements as public domain.

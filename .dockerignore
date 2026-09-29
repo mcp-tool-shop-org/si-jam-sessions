@@ -1,0 +1,11 @@
+.git
+.github
+target
+site
+research
+tools
+docs
+node_modules
+*.md
+golden
+**/*.golden

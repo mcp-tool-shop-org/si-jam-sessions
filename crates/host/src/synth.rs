@@ -829,6 +829,48 @@ mod tests {
         assert_eq!((counts.notes, counts.outside), (0, 1));
     }
 
+    /// The full mix — score on the piano, take on the soft square, click —
+    /// renders to the same bits on every machine. The piano sampler uses only
+    /// IEEE +, -, × and ÷; the oscillators use `sin`, which is a platform libm
+    /// function with no last-bit guarantee. This fixture pins what the current
+    /// platform produces, and CI checks it on Linux and on Windows.
+    #[test]
+    fn the_full_mix_renders_the_same_bits_on_every_machine() {
+        let events = [
+            Event::Note {
+                onset: 0,
+                voice: Voice::Score,
+                pitch: 60,
+                velocity: 100,
+                duration: 2_000,
+            },
+            Event::Beat {
+                onset: 0,
+                downbeat: true,
+            },
+            Event::Note {
+                onset: 500,
+                voice: Voice::Take,
+                pitch: 72,
+                velocity: 100,
+                duration: 2_000,
+            },
+            Event::Beat {
+                onset: 1_000,
+                downbeat: false,
+            },
+        ];
+        let (out, counts) = through(with_piano(), &events, 3_000, 2);
+        assert_eq!(counts.notes, 2);
+        assert_eq!(counts.beats, 2);
+        let raw: Vec<u8> = out.iter().flat_map(|s| s.to_le_bytes()).collect();
+        // Pinned on Windows; CI checks Linux.
+        assert_eq!(
+            golden::run::hex(&golden::run::sha256(&raw)),
+            "9d1abd2cdb7ba7ee2b824ca26f70ebf8db598b2244bb4724de81c5768fb989dd"
+        );
+    }
+
     #[test]
     fn every_channel_carries_the_same_mix() {
         let (mut producer, mut consumer) = RingBuffer::new(2);

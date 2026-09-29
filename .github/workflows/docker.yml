@@ -1,0 +1,136 @@
+# Build the host image. A pull request builds it and runs `host help` and
+# `host notes`. A version tag pushes it to GHCR and makes the package public.
+#
+# The image is linux/amd64, the same architecture CI's rust job tests.
+# Playing through a device is untested on Linux, in or out of a container;
+# `render` and `notes` need no device.
+#
+# Standards compliance (the studio's six workflow standards, scored 0-3):
+# - PIN_PER_STEP 2: actions by commit SHA; the image's toolchain by
+#   rust-toolchain.toml; the build by Cargo.lock under --locked.
+# - ANDON_AUTHORITY 2: the first failure stops the job, and a pull request
+#   does not push. The smoke runs `notes`, which fails if the scores were
+#   left out of the image.
+# - NAMED_COMPENSATORS: a pull request publishes nothing. A tag push publishes
+#   one image. Undo is deleting that package version; a copy already pulled
+#   is not recalled. PHASE-0 records the call.
+# - DECOMPOSE_BY_SECRETS 2: the token is the workflow's own, for GHCR only.
+#   No other secret. The image contains no piano samples and no credentials.
+# - UNCERTAINTY_GATED_HUMANS 1. skip: the job passes or fails.
+# - EXTERNAL_VERIFIER 1: the smoke runs the built binary. It does not grade
+#   the law; CI's golden jobs do that.
+name: Container
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - docker/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - crates/**
+      - scores/**
+      - .github/workflows/docker.yml
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The container driver can export a cache and push. A pull request
+      # writes a tar and loads it, because `load` and a cache export cannot
+      # share the docker driver.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/mcp-tool-shop-org/si-jam-sessions
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+
+      - name: Build for the pull request
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          tags: si-jam-sessions:ci
+          outputs: type=docker,dest=/tmp/si-jam-sessions.tar
+          provenance: false
+          sbom: false
+          build-args: |
+            VERSION=${{ steps.ver.outputs.version }}
+            REVISION=${{ github.sha }}
+
+      - name: Build and push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+          build-args: |
+            VERSION=${{ steps.ver.outputs.version }}
+            REVISION=${{ github.sha }}
+
+      - name: Smoke
+        if: github.event_name == 'pull_request'
+        run: |
+          docker load -i /tmp/si-jam-sessions.tar
+          docker run --rm si-jam-sessions:ci help
+          docker run --rm si-jam-sessions:ci notes /tmp/out.json
+
+      - name: Make the package public
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          i=0
+          while [ "$i" -lt 6 ]; do
+            if gh api --method PUT -H "Accept: application/vnd.github+json" \
+              /orgs/mcp-tool-shop-org/packages/container/si-jam-sessions/visibility \
+              -f visibility=public; then
+              exit 0
+            fi
+            i=$((i + 1))
+            sleep 10
+          done
+          echo "::error::the image was pushed but the package stayed private"
+          exit 1

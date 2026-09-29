@@ -17,14 +17,14 @@ and exactly what to do next.
 | The host | #6 | cpal (WASAPI shared), rtrb, a callback that allocates nothing, oscillator voices and a click, MIDI through WinMM directly, a computer-keyboard fallback, a silent pre-roll; `devices`, `play`, `render`, `jam` |
 | Research | #8 | The Battle Hymn's evidence and its 1862 reference transcription |
 | The first handoff | #9 | This file, and the external-review tools in `tools/review/` |
-| Law version 5 | #10 | Licence predicate version 3: anonymous works (first published by 1930 for the US, by 1955 for the EU, rules year 2026), CC0 1.0 and the Public Domain Mark; the Battle Hymn provenance fixture |
+| Law version 5 | #10 | Licence predicate version 4: anonymous works (first published by 1930 for the US, by 1955 for the EU, rules year 2026), CC0 1.0 and the Public Domain Mark, automated-access terms refused, two negating rights statements curated as public domain; the Battle Hymn provenance fixture |
 | The grand piano | #11 | The Salamander Grand Piano V3 sampler, `fetch-piano` (archive pinned by SHA-256), `preview`, `notices`, `--voice`; issue #7's three fixes |
 | The exemplars | #14 | Both Battle Hymn arrangements admitted as scores (receipts `ee5a82df…` and `d044ffa4…`), a frames golden for each, `--piece` (default `battle-hymn-glm-5.3`), `host notes` |
 | The full treatment | this one | SECURITY, CHANGELOG, SHIP_GATE, SCORECARD, `verify.sh`, the RustSec advisory scan, the host's exit status (1 usage, 2 runtime), the README and its translations, the landing page, the handbook, and PHASE-0's amendments |
 
-- **Law version 5**, licence predicate version 3. *The Entertainer*'s golden is
-  `66b59807261ff93086eed6b0c17cb4a7673e40937a83e0bd32db7ae25ef02946`. The exemplar goldens are glm-5.3
-  `1c0789b1…` and kimi-k3 `0f93de92…`, checked natively on both architectures.
+- **Law version 5**, licence predicate version 4. *The Entertainer*'s golden is
+  `b43db3787577b4f959f611ae6e7d84c0b92e69d34c31bcbfe927a9f67f0eda11`. The exemplar goldens are glm-5.3
+  `409a3341…` and kimi-k3 `e792361b…`, checked natively on both architectures.
 - **Try it:** `cargo run -p host --release -- fetch-piano` once, then `-- play`. `play` opens on the Battle Hymn
   as glm-5.3 arranged it; `--piece battle-hymn-kimi-k3` or `--piece entertainer` picks another. `-- notes
   out.json --piece <name>` writes the notes the law commits. Use a wired output for `jam`: a Bluetooth output's
@@ -87,7 +87,7 @@ source differ is itself useful to show.
 
 ## Next steps, in order
 
-1. **The JavaScript engines check the exemplar goldens** (#15): an `engine-js --exemplar <id>` mode.
+1. **~~The JavaScript engines check the exemplar goldens~~** (#15): an `engine-js --exemplar <id>` mode, with CI running both exemplars under each engine.
 2. **The listening test,** and a note-by-note check of both arrangements against the 1862 edition. Neither has
    been done, and the surfaces say so.
 3. **The owner's MIDI keyboard.** WinMM's device-only premises (serial callbacks per port; none after
@@ -126,19 +126,32 @@ How the reviews run:
 
 ## Open items
 
-- Issue #12: three LOW host findings from round 8.
-- Issue #15: the engines and the exemplar goldens; `notes`, `render` and `preview` replace an existing file
-  without asking.
-- In piano mode the take and live notes still sound on the oscillator. That was the host agent's choice;
-  confirm or change it.
-- CC0's SPDX forms (`CC0-1.0`) are still refused. Admitting them is one line and one test.
-- Two readings the 1862 scans leave open: the octave of the A at bar 19, beat 4, and the alto's last note in
-  bar 13.
-- An automated-access class (scraping, crawling) for a later predicate version.
-- Standard rights statements that contain a negating word ("No known copyright restrictions") are refused
-  until curated.
-- The npm scope `@si-jam-sessions` is reserved and empty. Publish through trusted publishing, never a token,
-  and add its row to PHASE-0's compensators when the first package ships.
+- Issue #12, all three LOW host findings from round 8 are fixed:
+  1. The unpacked-samples trust boundary is stated in `fetch.rs`.
+  2. `synth.rs` pins the full mix (score piano + take oscillator + click) with
+     `the_full_mix_renders_the_same_bits_on_every_machine`; CI checks it on Linux and Windows.
+  3. `Midi::watch` no longer latches; held keys are released on every poll while the port count is low.
+- Issue #15 is done: the exemplar engine checks run under each JavaScript engine in CI, and
+  `notes`, `render` and `preview` refuse to overwrite an existing file.
+- In piano mode the take and live notes still sound on the oscillator. **Confirmed:** the host's
+  `help` text and handbook document this, and the separation makes wrong-pitch and timing errors
+  audible by timbre. Changing it would need the piano to load samples for every possible live
+  pitch or accept silent misses.
+- CC0's SPDX forms (`CC0-1.0` and `Creative Commons Zero v1.0 Universal`) are admitted.
+- ~~Two readings the 1862 scans leave open: the octave of the A at bar 19, beat 4, and the alto's last note in
+  bar 13.~~ **Resolved:** the reference transcription records its choices (A4 in bar 19; E4 in bar 13 alto),
+  and the arrangements are independent creative works that may diverge from it.
+- ~~An automated-access class (scraping, crawling) for a later predicate version.~~ **Done:**
+  predicate version 4 refuses scraping, crawling, spidering, harvesting, bots, and automated
+  access or retrieval.
+- ~~Standard rights statements that contain a negating word ("No known copyright restrictions") are refused
+  until curated.~~ **Done:** both "No known copyright restrictions" and "No Copyright - United States"
+  are admitted as public domain in version 4; a text that is exactly one of them no longer negates.
+- **0.2.0** publishes the container `ghcr.io/mcp-tool-shop-org/si-jam-sessions` and the npm package
+  `@si-jam-sessions/si-jam-sessions`. The npm package is the release record (README, changelog, licence),
+  not the host binary. The host is the container, or `cargo run -p host`. Publishing uses Trusted Publishing
+  (`release.yml`, OIDC, `--provenance`). The 0.0.0 placeholder only reserved the name. Do not turn on
+  "disallow tokens" until a tag's OIDC publish has succeeded. PHASE-0's compensators include both publishes.
 
 ## Working rules
 

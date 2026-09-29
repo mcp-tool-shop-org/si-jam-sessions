@@ -535,6 +535,20 @@ fn score_notes(piece: &Piece) -> impl Iterator<Item = (u8, u8)> + '_ {
     piece.score.notes().iter().map(|n| (n.pitch, n.velocity))
 }
 
+/// Refuses if `path` names a file that already exists.
+fn refuse_existing(path: &str) -> Result<(), String> {
+    if std::path::Path::new(path)
+        .try_exists()
+        .map_err(|e| format!("{path}: {e}"))?
+    {
+        return Err(format!(
+            "{path}: already exists; remove it or choose another name"
+        ));
+    }
+    Ok(())
+}
+
+/// `render`: renders the piece to a WAV file.
 fn render(o: &Options) -> Result<(), String> {
     let path = o.positional.first().map_or("", String::as_str);
     let piece = Piece::load(&root(), o.piece())?;
@@ -556,6 +570,7 @@ fn render(o: &Options) -> Result<(), String> {
     let mut bytes = Vec::with_capacity(samples.len() * 4 + 512);
     offline::write_wav_with(&mut bytes, &samples, channels as u16, info)
         .map_err(|e| e.to_string())?;
+    refuse_existing(path)?;
     std::fs::write(path, &bytes).map_err(|e| format!("{path}: {e}"))?;
     let record = law.record().map_err(refused)?;
     let frames = samples.len() / channels.max(1);
@@ -591,6 +606,7 @@ fn write_notes(o: &Options) -> Result<(), String> {
     let mut law = Law::acquire();
     let read = notes::read(&mut law, &piece).map_err(refused)?;
     let json = read.json();
+    refuse_existing(path)?;
     std::fs::write(path, &json).map_err(|e| format!("{path}: {e}"))?;
     println!(
         "Wrote the {} notes and {} beats the law commits for {} to {path}: {} bytes of JSON, \
@@ -658,6 +674,7 @@ fn preview(o: &Options) -> Result<(), String> {
         &[(*b"ICMT", piano::CREDIT), (*b"ISFT", PREVIEW_LABEL)],
     )
     .map_err(|e| e.to_string())?;
+    refuse_existing(wav)?;
     std::fs::write(wav, &out).map_err(|e| format!("{wav}: {e}"))?;
     let bpm = if draft.first_us_per_quarter == 0 {
         0.0
@@ -1062,18 +1079,21 @@ struct Midi {
 
 #[cfg(windows)]
 impl Midi {
-    /// Says once if WinMM lists fewer MIDI input ports than when the jam
-    /// began, and returns true then.
+    /// Returns true whenever WinMM lists fewer MIDI input ports than when the
+    /// jam began, so held keys are released on every poll while the port count
+    /// is low. The message prints once.
     fn watch(&mut self) -> bool {
         let now = host::winmm::port_count();
-        if !self.told && now < self.ports {
-            self.told = true;
-            println!(
-                "  WinMM now lists {now} MIDI input ports, {} when the jam began. If the \
-                 keyboard was unplugged, its notes stopped arriving; WinMM does not say so \
-                 otherwise. The keys held now are released in the monitor.",
-                self.ports
-            );
+        if now < self.ports {
+            if !self.told {
+                self.told = true;
+                println!(
+                    "  WinMM now lists {now} MIDI input ports, {} when the jam began. If the \
+                     keyboard was unplugged, its notes stopped arriving; WinMM does not say so \
+                     otherwise. The keys held now are released in the monitor.",
+                    self.ports
+                );
+            }
             return true;
         }
         false

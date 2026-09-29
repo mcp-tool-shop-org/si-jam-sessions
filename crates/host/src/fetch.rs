@@ -20,6 +20,12 @@
 //!    archive ([`verified`]), so a fetch that stopped partway is never played.
 //!    The archive is then deleted unless `--keep-archive`.
 //!
+//! The trust boundary is the archive: [`verified`] checks the marker, not the
+//! unpacked files. A sample edited after unpacking, or a hand-written marker
+//! over other files, is not detected. To detect that, the marker would need
+//! to record every file's SHA-256 and the piano would check them when it
+//! opens the bank.
+//!
 //! The samples are never committed: the cache is outside the repository, and
 //! a `--dir` inside it would be the user's own choice.
 //!

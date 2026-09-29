@@ -31,6 +31,8 @@ research, not a score: nothing here is admitted by the law.
 
 Two readings the scans leave open, neither of which the arrangement depends on: the octave of the A in the F7
 chord at bar 19, beat 4, and whether the alto rises to E or repeats D at the end of bar 13.
+The arrangements are independent creative works; they follow the tune, not this transcription note for note,
+and divergence at these points is not an error.
 
 ## Rules for the arrangement
 

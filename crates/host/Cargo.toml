@@ -1,6 +1,6 @@
 [package]
 name = "host"
-version = "0.1.0"
+version = "0.2.0"
 description = "The native host of si-jam-sessions: plays committed frames through oscillator voices and a click, and takes a live take."
 edition.workspace = true
 rust-version.workspace = true

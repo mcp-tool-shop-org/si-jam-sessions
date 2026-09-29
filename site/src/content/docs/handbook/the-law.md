@@ -90,7 +90,7 @@ and checks that it is the same in five places:
 - under JavaScriptCore.
 
 Each engine is pinned by the SHA-256 of every file it runs. Today's value is
-`66b59807261ff93086eed6b0c17cb4a7673e40937a83e0bd32db7ae25ef02946`.
+`b43db3787577b4f959f611ae6e7d84c0b92e69d34c31bcbfe927a9f67f0eda11`.
 
 **Each Battle Hymn exemplar has a golden of its own.** It holds the committed frames of the whole render
 window, the fewest steps that commit that window, the frame bytes a host receives, and the snapshot's hash at

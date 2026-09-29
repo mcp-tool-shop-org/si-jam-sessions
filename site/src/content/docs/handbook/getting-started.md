@@ -20,6 +20,10 @@ sidebar:
 | Windows 10 and 11 | Everything: playing, rendering, and live input from a MIDI keyboard or the computer keyboard. Live input has not yet been tried with a real MIDI keyboard |
 | Linux | CI builds and tests the host and renders with it. Playing through a Linux audio device is untested, and live input is Windows-only for now |
 | macOS | Untested |
+| The container | `render`, `notes`, `notices` and `preview`, with no Rust toolchain. Playing through a device is the same untested Linux path |
+
+The container is `ghcr.io/mcp-tool-shop-org/si-jam-sessions`. [The container](/si-jam-sessions/handbook/docker/)
+has the commands. The rest of this page is the build from source.
 
 ## Build and play
 

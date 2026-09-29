@@ -492,6 +492,7 @@ fn every_ingest_refusal_has_its_own_code_and_a_reason() {
         P::Licence(LicenceRefusal::NonCommercial),
         P::Licence(LicenceRefusal::NoDerivatives),
         P::Licence(LicenceRefusal::AiRestricted),
+        P::Licence(LicenceRefusal::AutomatedAccess),
         P::MissingCreditLedgerId,
         P::UnexpectedCreditLedgerId,
         P::QuoteNegated { what: "terms" },
@@ -552,12 +553,12 @@ fn every_ingest_refusal_has_its_own_code_and_a_reason() {
     assert_eq!(law.code(), 30);
 }
 
-/// Predicate version 3's refusals, each with a code of its own in its layer's range
+/// Predicate version 4's refusals, each with a code of its own in its layer's range
 /// and a reason in words: an anonymous work past the EU cut-off for anonymous works,
 /// an anonymous edition past either cut-off, and an unknown author with a death year,
 /// which the receipt's structure refuses.
 #[test]
-fn the_predicate_version_3_refusals_have_codes_and_reasons() {
+fn the_predicate_version_4_refusals_have_codes_and_reasons() {
     use provenance::Refusal as P;
     let cases = [
         (
@@ -688,8 +689,8 @@ fn the_battle_hymn_exemplars_are_ingested_as_own_engravings() {
         );
         assert_eq!(
             &bytes[36..40],
-            &3u32.to_le_bytes(),
-            "{model}: predicate version 3"
+            &4u32.to_le_bytes(),
+            "{model}: predicate version 4"
         );
         assert_eq!(&bytes[56..60], b"PROV");
         assert_eq!(&bytes[60..64], &[1, 0, 0, 0], "{model}: one record");

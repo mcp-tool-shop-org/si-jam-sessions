@@ -468,7 +468,7 @@ mod tests {
             assert_eq!(file.golden().unwrap(), g.golden);
             assert_eq!(file.one("exemplar").unwrap(), g.exemplar.id);
             assert_eq!(file.one("tier").unwrap(), "own-engraving");
-            assert_eq!(file.one("predicate-version").unwrap(), "3");
+            assert_eq!(file.one("predicate-version").unwrap(), "4");
             assert_eq!(file.all("input").len(), 3);
             assert_eq!(g.golden, sha256(&g.snapshot));
         }

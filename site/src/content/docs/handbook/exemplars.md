@@ -13,8 +13,8 @@ by something other than the step itself.
 
 The project transcribed the 1862 Ditson edition from its scans. The transcription is
 `research/battle-hymn/battle-hymn-ditson-1862.abc` (12,766 bytes). It is the only source the arrangers were
-allowed to follow. Two readings in the scans are still open: the octave of the A at bar 19, beat 4, and the
-alto's last note in bar 13.
+allowed to follow. Two readings in the scans are ambiguous; the reference transcription records one choice
+for each, and the arrangements are independent works that may diverge from it.
 
 ## The arrangers
 
@@ -38,7 +38,7 @@ mingw-x86_64 build, and rendering again gives the same bytes.
 
 ## Admission
 
-Both arrangements are admitted as engravings by this project under licence predicate version 3, and both are
+Both arrangements are admitted as engravings by this project under licence predicate version 4, and both are
 dedicated CC0 1.0. Each `.ly` states `CC0 1.0` in its `copyright` field, and each `.mid` states no licence at
 all. Each receipt records the evidence for the tune, the words and the edition, the call that produced the
 arrangement, and the change the project made to it.
