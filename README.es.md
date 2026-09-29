@@ -88,11 +88,11 @@ y `rustup` lo instala en la primera compilación.
 La imagen se publica con cada etiqueta de versión. Contiene el host y las partituras, no las muestras de piano.
 
 ```bash
-docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0
+docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1
 docker run --rm \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -v "$PWD:/out" \
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \
   notes /out/notes.json
 ```
 

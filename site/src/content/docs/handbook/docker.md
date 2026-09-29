@@ -9,8 +9,8 @@ The image `ghcr.io/mcp-tool-shop-org/si-jam-sessions` carries the `host` binary 
 repository. It does not carry the piano samples. Those stay a download, checked against the same SHA-256 the
 source pins.
 
-The image is published when a version tag is pushed. `0.2.0` is
-`ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0`, and that tag also moves `:0.2` and `:latest`.
+The image is published when a version tag is pushed. `0.2.1` is
+`ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1`, and that tag also moves `:0.2` and `:latest`.
 
 ## What it can do
 
@@ -29,12 +29,12 @@ that folder.
 ## Render the score on the oscillator
 
 ```bash
-docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0
+docker pull ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1
 
 docker run --rm \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -v "$PWD:/out" \
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \
   render /out/battle-hymn.wav --piece battle-hymn-glm-5.3 --voice osc
 ```
 
@@ -44,7 +44,7 @@ On Windows PowerShell, the same command is:
 docker run --rm `
   -e HOST_UID=10001 `
   -v "${PWD}:/out" `
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 `
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 `
   render /out/battle-hymn.wav --piece battle-hymn-glm-5.3 --voice osc
 ```
 
@@ -56,7 +56,7 @@ Without `HOST_UID`, the file is owned by uid 10001.
 docker run --rm \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -v "$PWD:/out" \
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \
   notes /out/notes.json --piece battle-hymn-kimi-k3
 ```
 
@@ -69,13 +69,13 @@ directory as `--samples` when you render:
 docker run --rm \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -v "$PWD/piano:/piano" \
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \
   fetch-piano --dir /piano
 
 docker run --rm \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -v "$PWD:/out" -v "$PWD/piano:/piano" \
-  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \
+  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \
   render /out/battle-hymn.wav --piece battle-hymn-glm-5.3 --voice piano --samples /piano
 ```
 

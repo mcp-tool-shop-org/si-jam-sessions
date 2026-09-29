@@ -67,7 +67,7 @@ export const config: SiteConfig = {
       cards: [
         {
           title: 'Or use the container',
-          code: 'docker run --rm -v "$PWD:/out" \\\n  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.0 \\\n  notes /out/notes.json',
+          code: 'docker run --rm -v "$PWD:/out" \\\n  ghcr.io/mcp-tool-shop-org/si-jam-sessions:0.2.1 \\\n  notes /out/notes.json',
         },
         {
           title: 'Get the grand piano once',

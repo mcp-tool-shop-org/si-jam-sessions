@@ -4,6 +4,12 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/). It stays below 1.0 until the product is 1.0.
 
+## [0.2.1] - 2026-09-29
+
+The same product as 0.2.0, published by Trusted Publishing so the registry copy carries a provenance
+attestation. 0.2.0 was published from a local npm session and has no attestation. The law, the goldens and
+the container are unchanged. The image tag for this publish is `0.2.1`.
+
 ## [0.2.0] - 2026-09-28
 
 Predicate version 4, a container, and the npm package. The committed notes did not move. The golden digests
@@ -96,5 +102,6 @@ The first release. Its assets are the two Battle Hymn renders as uncompressed WA
   - a key held when a MIDI port drops no longer drones;
   - a port-close error at teardown no longer fails a clean jam.
 
+[0.2.1]: https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/tag/v0.2.1
 [0.2.0]: https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/tag/v0.2.0
 [0.1.0]: https://github.com/mcp-tool-shop-org/si-jam-sessions/releases/tag/v0.1.0

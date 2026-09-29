@@ -1,6 +1,6 @@
 {
   "name": "@si-jam-sessions/si-jam-sessions",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A deterministic, hashed music law: a model proposes, a checker admits, every take is graded exactly and replays from its log.",
   "license": "MIT",
   "author": "mcp-tool-shop <64996768+mcp-tool-shop@users.noreply.github.com>",
