@@ -126,11 +126,11 @@ How the reviews run:
 
 ## Open items
 
-- Issue #12, two of three LOW host findings from round 8 are fixed:
+- Issue #12, all three LOW host findings from round 8 are fixed:
   1. The unpacked-samples trust boundary is stated in `fetch.rs`.
+  2. `synth.rs` pins the full mix (score piano + take oscillator + click) with
+     `the_full_mix_renders_the_same_bits_on_every_machine`; CI checks it on Linux and Windows.
   3. `Midi::watch` no longer latches; held keys are released on every poll while the port count is low.
-  2. The cross-platform byte pin still covers the piano alone; a full mix fixture render on both platforms
-     is not yet added.
 - Issue #15 is done: the exemplar engine checks run under each JavaScript engine in CI, and
   `notes`, `render` and `preview` refuse to overwrite an existing file.
 - In piano mode the take and live notes still sound on the oscillator. The host's `help` text documents
