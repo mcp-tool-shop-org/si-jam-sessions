@@ -117,20 +117,12 @@ jobs:
           docker run --rm si-jam-sessions:ci help
           docker run --rm si-jam-sessions:ci notes /tmp/out.json
 
-      - name: Make the package public
+      # The workflow token's visibility call 404s on this org. Packages
+      # pushed from a public repository are public already. An anonymous
+      # inspect is the check that a stranger can pull the tag.
+      - name: The pushed tag is public
         if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          i=0
-          while [ "$i" -lt 6 ]; do
-            if gh api --method PUT -H "Accept: application/vnd.github+json" \
-              /orgs/mcp-tool-shop-org/packages/container/si-jam-sessions/visibility \
-              -f visibility=public; then
-              exit 0
-            fi
-            i=$((i + 1))
-            sleep 10
-          done
-          echo "::error::the image was pushed but the package stayed private"
-          exit 1
+          docker logout ghcr.io
+          tag="${GITHUB_REF_NAME#v}"
+          docker buildx imagetools inspect "ghcr.io/mcp-tool-shop-org/si-jam-sessions:${tag}"
