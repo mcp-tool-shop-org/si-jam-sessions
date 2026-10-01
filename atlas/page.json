@@ -1,0 +1,1389 @@
+{
+  "authored": [
+    ".github/",
+    "docs/",
+    "golden/",
+    "research/",
+    "root",
+    "scores/",
+    "site/"
+  ],
+  "breaks": [
+    {
+      "doors": 6,
+      "importedBy": [
+        "golden-harness",
+        "host",
+        "ingest",
+        "law"
+      ],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "score-model",
+      "partLabel": "score-model"
+    },
+    {
+      "doors": 6,
+      "importedBy": [
+        "host",
+        "law"
+      ],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "ingest",
+      "partLabel": "ingest"
+    },
+    {
+      "doors": 6,
+      "importedBy": [
+        "golden-harness",
+        "host"
+      ],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "law",
+      "partLabel": "law"
+    },
+    {
+      "doors": 6,
+      "importedBy": [
+        "golden-harness",
+        "law"
+      ],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "provenance",
+      "partLabel": "provenance"
+    },
+    {
+      "doors": 6,
+      "importedBy": [
+        "host"
+      ],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "golden-harness",
+      "partLabel": "golden-harness"
+    },
+    {
+      "doors": 4,
+      "importedBy": [],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "host",
+      "partLabel": "host"
+    }
+  ],
+  "changes": {
+    "first": true
+  },
+  "changesTogether": [
+    {
+      "a": "crates/law/src/law.rs",
+      "b": "crates/law/src/refusal.rs",
+      "either": 9,
+      "partLabels": [
+        "law",
+        "law"
+      ],
+      "parts": [
+        "law",
+        "law"
+      ],
+      "relation": "inside",
+      "shared": 7
+    },
+    {
+      "a": "crates/law/src/law.rs",
+      "b": "crates/law/src/lib.rs",
+      "either": 12,
+      "partLabels": [
+        "law",
+        "law"
+      ],
+      "parts": [
+        "law",
+        "law"
+      ],
+      "relation": "inside",
+      "shared": 8
+    },
+    {
+      "a": "crates/law/src/abi.rs",
+      "b": "crates/law/src/law.rs",
+      "either": 9,
+      "partLabels": [
+        "law",
+        "law"
+      ],
+      "parts": [
+        "law",
+        "law"
+      ],
+      "relation": "inside",
+      "shared": 6
+    },
+    {
+      "a": "crates/host/src/alloc_free.rs",
+      "b": "crates/host/src/synth.rs",
+      "either": 6,
+      "partLabels": [
+        "host",
+        "host"
+      ],
+      "parts": [
+        "host",
+        "host"
+      ],
+      "relation": "inside",
+      "shared": 4
+    },
+    {
+      "a": "crates/host/src/alloc_free.rs",
+      "b": "crates/host/src/winmm.rs",
+      "either": 6,
+      "partLabels": [
+        "host",
+        "host"
+      ],
+      "parts": [
+        "host",
+        "host"
+      ],
+      "relation": "inside",
+      "shared": 4
+    }
+  ],
+  "changesTogetherNote": [
+    "Confidence is low: fewer than 20 source files reach 10 revisions in the window.",
+    "Window: 180 days; a pair counts from 3 shared commits, since 5 source files reach 10 revisions; the floor rises to 10 when 25 do."
+  ],
+  "changesTogetherWithTests": 0,
+  "commit": "7811372bebfbf4542385eb0d60af9821e905db12",
+  "defaultBranch": "main",
+  "derived": "15 parts, mostly Rust (62 files), TypeScript (4), Python (3), shell (3), Astro (2), CSS (2) and JavaScript (1). Work enters through 8 doors; CI and Container each reach 8 parts, and CI is followed because it comes first by name. It publishes to npm and a container image. It deploys a site to GitHub Pages. People run host. engine-js and write-golden are commands built from crates/golden (nothing ships them).",
+  "doors": [
+    {
+      "checks": [
+        "golden/battle-hymn-glm-5.3.golden",
+        "golden/battle-hymn-kimi-k3.golden",
+        "golden/entertainer.golden",
+        "crates/golden/src/lib.rs",
+        "crates/ingest/src/lib.rs",
+        "crates/law/src/lib.rs",
+        "crates/provenance/src/lib.rs"
+      ],
+      "checksCount": 7,
+      "checksMore": 4,
+      "file": ".github/workflows/ci.yml",
+      "id": ".github/workflows/ci.yml",
+      "landings": [],
+      "name": "CI",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": ".github",
+          "depth": 0,
+          "files": 1
+        },
+        {
+          "boundary": "golden",
+          "depth": 0,
+          "files": 3
+        },
+        {
+          "boundary": "golden-harness",
+          "depth": 0,
+          "files": 8
+        },
+        {
+          "boundary": "host",
+          "depth": 0,
+          "files": 22
+        },
+        {
+          "boundary": "ingest",
+          "depth": 0,
+          "files": 3
+        },
+        {
+          "boundary": "law",
+          "depth": 0,
+          "files": 18
+        },
+        {
+          "boundary": "provenance",
+          "depth": 0,
+          "files": 10
+        },
+        {
+          "boundary": "score-model",
+          "depth": 0,
+          "files": 1
+        }
+      ],
+      "runs": [
+        ".github/engines/verify.sh",
+        "crates/golden/src/bin/engine-js.rs",
+        "crates/golden/src/bin/write-golden.rs",
+        "crates/host/src/main.rs",
+        "crates/golden/src/engine_js.rs",
+        "crates/golden/src/exemplar.rs",
+        "crates/golden/src/prng.rs",
+        "crates/golden/src/run.rs",
+        "crates/golden/src/take.rs",
+        "crates/host/src/alloc_free.rs",
+        "crates/host/src/anchor.rs",
+        "crates/host/src/callback.rs",
+        "crates/host/src/console.rs",
+        "crates/host/src/event.rs",
+        "crates/host/src/fetch.rs",
+        "crates/host/src/fixture.rs",
+        "crates/host/src/lib.rs",
+        "crates/host/src/live.rs",
+        "crates/host/src/notes.rs",
+        "crates/host/src/notices.rs",
+        "crates/host/src/offline.rs",
+        "crates/host/src/piano.rs",
+        "crates/host/src/preview.rs",
+        "crates/host/src/sampler.rs",
+        "crates/host/src/schedule.rs",
+        "crates/host/src/score.rs",
+        "crates/host/src/synth.rs",
+        "crates/ingest/src/tests.rs",
+        "crates/ingest/tests/",
+        "crates/law/src/abi.rs",
+        "crates/law/src/grade.rs",
+        "crates/law/src/ingest_tests.rs",
+        "crates/law/src/law.rs",
+        "crates/law/src/live_tests.rs",
+        "crates/law/src/score.rs",
+        "crates/law/src/snapshot.rs",
+        "crates/law/src/time.rs",
+        "crates/law/src/wire.rs",
+        "crates/law/tests/no_float.rs",
+        "crates/law/tests/std_binding.rs",
+        "crates/law/tests/wasm_artifact.rs",
+        "crates/provenance/src/infile.rs",
+        "crates/provenance/src/json.rs",
+        "crates/provenance/src/licence.rs",
+        "crates/provenance/src/receipt.rs",
+        "crates/provenance/src/schema.rs",
+        "crates/provenance/src/tests.rs",
+        "crates/score-model/"
+      ],
+      "runsCount": 48,
+      "runsMore": 45,
+      "sends": [],
+      "stages": [],
+      "triggers": [
+        "on a pull request touching 11 paths",
+        "on a push to main touching 11 paths",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": ".github/workflows/docker.yml",
+      "id": ".github/workflows/docker.yml",
+      "landings": [],
+      "name": "Container",
+      "packs": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "crates/",
+        "rust-toolchain.toml",
+        "scores/"
+      ],
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "docker",
+          "depth": 0,
+          "files": 1
+        },
+        {
+          "boundary": "golden-harness",
+          "depth": 0,
+          "files": 8
+        },
+        {
+          "boundary": "host",
+          "depth": 0,
+          "files": 22
+        },
+        {
+          "boundary": "ingest",
+          "depth": 0,
+          "files": 3
+        },
+        {
+          "boundary": "law",
+          "depth": 0,
+          "files": 18
+        },
+        {
+          "boundary": "provenance",
+          "depth": 0,
+          "files": 10
+        },
+        {
+          "boundary": "root",
+          "depth": 0,
+          "files": 3
+        },
+        {
+          "boundary": "score-model",
+          "depth": 0,
+          "files": 1
+        }
+      ],
+      "runs": [
+        "crates/host/src/main.rs",
+        "docker/entrypoint.sh"
+      ],
+      "runsCount": 2,
+      "runsMore": 0,
+      "sends": [
+        "publishes a container image on a tag push or by hand"
+      ],
+      "stages": [],
+      "triggers": [
+        "on a pull request touching 9 paths",
+        "when a tag matching `v*` is pushed",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": ".github/workflows/host-windows.yml",
+      "id": ".github/workflows/host-windows.yml",
+      "landings": [],
+      "name": "Host (Windows)",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "host",
+          "depth": 0,
+          "files": 22
+        },
+        {
+          "boundary": "golden-harness",
+          "depth": 1,
+          "files": 6
+        },
+        {
+          "boundary": "ingest",
+          "depth": 1,
+          "files": 2
+        },
+        {
+          "boundary": "law",
+          "depth": 1,
+          "files": 14
+        },
+        {
+          "boundary": "score-model",
+          "depth": 1,
+          "files": 1
+        },
+        {
+          "boundary": "provenance",
+          "depth": 2,
+          "files": 10
+        }
+      ],
+      "runs": [
+        "crates/host/src/alloc_free.rs",
+        "crates/host/src/anchor.rs",
+        "crates/host/src/callback.rs",
+        "crates/host/src/console.rs",
+        "crates/host/src/event.rs",
+        "crates/host/src/fetch.rs",
+        "crates/host/src/fixture.rs",
+        "crates/host/src/lib.rs",
+        "crates/host/src/live.rs",
+        "crates/host/src/main.rs",
+        "crates/host/src/notes.rs",
+        "crates/host/src/notices.rs",
+        "crates/host/src/offline.rs",
+        "crates/host/src/piano.rs",
+        "crates/host/src/preview.rs",
+        "crates/host/src/sampler.rs",
+        "crates/host/src/schedule.rs",
+        "crates/host/src/score.rs",
+        "crates/host/src/synth.rs"
+      ],
+      "runsCount": 19,
+      "runsMore": 16,
+      "sends": [],
+      "stages": [],
+      "triggers": [
+        "on a pull request touching 5 paths",
+        "on a push to main touching 5 paths",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": ".github/workflows/pages.yml",
+      "id": ".github/workflows/pages.yml",
+      "landings": [],
+      "name": "Deploy site to GitHub Pages",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "site",
+          "depth": 0,
+          "files": 11
+        }
+      ],
+      "runs": [
+        "site/astro.config.mjs",
+        "site/src/"
+      ],
+      "runsCount": 2,
+      "runsMore": 0,
+      "sends": [
+        "deploys the site"
+      ],
+      "stages": [],
+      "triggers": [
+        "on a push to main touching 2 paths",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": ".github/workflows/release.yml",
+      "id": ".github/workflows/release.yml",
+      "landings": [],
+      "name": "Release",
+      "pushes": false,
+      "reach": [],
+      "runs": [],
+      "runsCount": 0,
+      "runsMore": 0,
+      "sends": [
+        "publishes to npm",
+        "creates a GitHub release"
+      ],
+      "stages": [],
+      "triggers": [
+        "when a tag matching `v*` is pushed"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": "crates/host/Cargo.toml",
+      "id": "crates/host/Cargo.toml#host",
+      "kind": "command",
+      "landings": [],
+      "name": "host",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "host",
+          "depth": 0,
+          "files": 22
+        },
+        {
+          "boundary": "golden-harness",
+          "depth": 1,
+          "files": 6
+        },
+        {
+          "boundary": "ingest",
+          "depth": 2,
+          "files": 2
+        },
+        {
+          "boundary": "law",
+          "depth": 2,
+          "files": 14
+        },
+        {
+          "boundary": "provenance",
+          "depth": 2,
+          "files": 10
+        },
+        {
+          "boundary": "score-model",
+          "depth": 2,
+          "files": 1
+        }
+      ],
+      "runs": [
+        "crates/host/src/main.rs"
+      ],
+      "runsCount": 1,
+      "runsMore": 0,
+      "sends": [],
+      "stages": [],
+      "triggers": []
+    },
+    {
+      "builtFrom": "crates/golden",
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": "crates/golden/Cargo.toml",
+      "id": "crates/golden/Cargo.toml#engine-js",
+      "kind": "command",
+      "landings": [],
+      "name": "engine-js",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "golden-harness",
+          "depth": 0,
+          "files": 7
+        },
+        {
+          "boundary": "law",
+          "depth": 2,
+          "files": 14
+        },
+        {
+          "boundary": "provenance",
+          "depth": 2,
+          "files": 10
+        },
+        {
+          "boundary": "score-model",
+          "depth": 2,
+          "files": 1
+        },
+        {
+          "boundary": "ingest",
+          "depth": 4,
+          "files": 2
+        }
+      ],
+      "runs": [
+        "crates/golden/src/bin/engine-js.rs"
+      ],
+      "runsCount": 1,
+      "runsMore": 0,
+      "sends": [],
+      "stages": [],
+      "triggers": [],
+      "unshipped": true
+    },
+    {
+      "builtFrom": "crates/golden",
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": "crates/golden/Cargo.toml",
+      "id": "crates/golden/Cargo.toml#write-golden",
+      "kind": "command",
+      "landings": [],
+      "name": "write-golden",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "golden-harness",
+          "depth": 0,
+          "files": 7
+        },
+        {
+          "boundary": "law",
+          "depth": 2,
+          "files": 14
+        },
+        {
+          "boundary": "provenance",
+          "depth": 2,
+          "files": 10
+        },
+        {
+          "boundary": "score-model",
+          "depth": 2,
+          "files": 1
+        },
+        {
+          "boundary": "ingest",
+          "depth": 4,
+          "files": 2
+        }
+      ],
+      "runs": [
+        "crates/golden/src/bin/write-golden.rs"
+      ],
+      "runsCount": 1,
+      "runsMore": 0,
+      "sends": [],
+      "stages": [],
+      "triggers": [],
+      "unshipped": true
+    }
+  ],
+  "duplicates": [],
+  "duplicatesLead": null,
+  "duplicatesNote": [],
+  "edges": [
+    {
+      "from": "golden-harness",
+      "fromTests": false,
+      "to": "law"
+    },
+    {
+      "from": "golden-harness",
+      "fromTests": false,
+      "to": "provenance"
+    },
+    {
+      "from": "golden-harness",
+      "fromTests": false,
+      "to": "score-model"
+    },
+    {
+      "from": "host",
+      "fromTests": false,
+      "to": "golden-harness"
+    },
+    {
+      "from": "host",
+      "fromTests": false,
+      "to": "ingest"
+    },
+    {
+      "from": "host",
+      "fromTests": false,
+      "to": "law"
+    },
+    {
+      "from": "host",
+      "fromTests": false,
+      "to": "score-model"
+    },
+    {
+      "from": "ingest",
+      "fromTests": false,
+      "to": "score-model"
+    },
+    {
+      "from": "law",
+      "fromTests": false,
+      "to": "ingest"
+    },
+    {
+      "from": "law",
+      "fromTests": false,
+      "to": "provenance"
+    },
+    {
+      "from": "law",
+      "fromTests": false,
+      "to": "score-model"
+    }
+  ],
+  "engine": "1.24.0",
+  "generated": [],
+  "generatedAt": "2026-10-01T02:54:33.729Z",
+  "limits": [
+    "2 imports could not be resolved: `crates/provenance/src/tests.rs` imports `LicenceRefusal::*`, twice.",
+    "20 writes and 12 reads use paths built at run time and are not named here.",
+    "3 writes and 7 reads go to a path their caller passes, not to this repository.",
+    "Statistics confidence is low: fewer than 20 source files reach 10 revisions in the window."
+  ],
+  "mainDoor": ".github/workflows/ci.yml",
+  "partLabels": {
+    ".github": ".github",
+    "docker": "docker",
+    "docs": "docs",
+    "golden": "golden",
+    "golden-harness": "golden-harness",
+    "host": "host",
+    "ingest": "ingest",
+    "law": "law",
+    "provenance": "provenance",
+    "research": "research",
+    "root": "the repository root",
+    "score-model": "score-model",
+    "scores": "scores",
+    "site": "the site",
+    "tools": "tools"
+  },
+  "parts": 15,
+  "readers": [],
+  "repo": "mcp-tool-shop-org/si-jam-sessions",
+  "sequences": [
+    {
+      "alternatives": [
+        {
+          "steps": [
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            }
+          ],
+          "when": "role != Role::Check"
+        },
+        {
+          "steps": [
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            }
+          ],
+          "when": "committed.all(key) != regenerated.all(key)"
+        }
+      ],
+      "entry": "main",
+      "file": "crates/golden/src/bin/engine-js.rs",
+      "inner": [
+        {
+          "file": "crates/golden/src/run.rs",
+          "name": "compute",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`compute`",
+          "steps": [
+            {
+              "name": "ingest",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`ingest`",
+              "receiver": "Law"
+            },
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "draw",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`draw`"
+            },
+            {
+              "name": "construct",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`construct`"
+            },
+            {
+              "name": "encode_take",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`encode_take`"
+            },
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "law_alloc",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_alloc`"
+            },
+            {
+              "name": "law_free",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_free`"
+            }
+          ]
+        },
+        {
+          "file": "crates/golden/src/exemplar.rs",
+          "name": "compute",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`compute`",
+          "steps": [
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "ingest",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`ingest`",
+              "receiver": "Law"
+            },
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "encode_frames",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`encode_frames`"
+            },
+            {
+              "name": "pass",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`pass`"
+            },
+            {
+              "name": "snapshot_hash",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`snapshot_hash`"
+            },
+            {
+              "name": "law_snapshot_ptr",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_snapshot_ptr`"
+            },
+            {
+              "name": "law_snapshot_len",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_snapshot_len`"
+            },
+            {
+              "name": "read_out",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`read_out`"
+            },
+            {
+              "name": "law_step",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_step`"
+            }
+          ]
+        }
+      ],
+      "part": "golden-harness",
+      "partLabel": "golden-harness",
+      "phrase": "`main`",
+      "steps": [
+        {
+          "count": 4,
+          "name": null,
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`lib.rs`"
+        },
+        {
+          "count": 4,
+          "name": null,
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`run.rs`"
+        },
+        {
+          "name": "new",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`new`",
+          "receiver": "Error"
+        },
+        {
+          "name": "render",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`render`"
+        },
+        {
+          "name": "new",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`new`",
+          "receiver": "Error"
+        },
+        {
+          "count": 4,
+          "name": null,
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`run.rs`"
+        },
+        {
+          "name": "new",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`new`",
+          "receiver": "Error"
+        },
+        {
+          "name": "read_dir",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`read_dir`",
+          "receiver": "Inputs"
+        },
+        {
+          "name": "compute",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`compute`"
+        },
+        {
+          "name": "new",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`new`",
+          "receiver": "Error"
+        },
+        {
+          "name": "parse",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`parse`",
+          "receiver": "GoldenFile"
+        },
+        {
+          "name": "new",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`new`",
+          "receiver": "Error"
+        }
+      ]
+    },
+    {
+      "alternatives": [
+        {
+          "steps": [
+            {
+              "count": 4,
+              "name": null,
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`run.rs`"
+            }
+          ],
+          "when": "check"
+        }
+      ],
+      "entry": "main",
+      "file": "crates/golden/src/bin/write-golden.rs",
+      "inner": [
+        {
+          "file": "crates/golden/src/run.rs",
+          "name": "compute",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`compute`",
+          "steps": [
+            {
+              "name": "ingest",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`ingest`",
+              "receiver": "Law"
+            },
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "draw",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`draw`"
+            },
+            {
+              "name": "construct",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`construct`"
+            },
+            {
+              "name": "encode_take",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`encode_take`"
+            },
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "law_alloc",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_alloc`"
+            },
+            {
+              "name": "law_free",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_free`"
+            }
+          ]
+        },
+        {
+          "file": "crates/golden/src/exemplar.rs",
+          "name": "compute_at",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`compute_at`",
+          "steps": [
+            {
+              "name": "read_dir",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`read_dir`",
+              "receiver": "Inputs"
+            },
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "ingest",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`ingest`",
+              "receiver": "Law"
+            },
+            {
+              "name": "new",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`new`",
+              "receiver": "Error"
+            },
+            {
+              "name": "encode_frames",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`encode_frames`"
+            },
+            {
+              "name": "pass",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`pass`"
+            },
+            {
+              "name": "snapshot_hash",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`snapshot_hash`"
+            },
+            {
+              "name": "law_snapshot_ptr",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_snapshot_ptr`"
+            },
+            {
+              "name": "law_snapshot_len",
+              "part": "law",
+              "partLabel": "law",
+              "phrase": "`law_snapshot_len`"
+            },
+            {
+              "name": "read_out",
+              "part": "golden-harness",
+              "partLabel": "golden-harness",
+              "phrase": "`read_out`"
+            }
+          ]
+        }
+      ],
+      "part": "golden-harness",
+      "partLabel": "golden-harness",
+      "phrase": "`main`",
+      "steps": [
+        {
+          "name": "repo_root",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`repo_root`"
+        },
+        {
+          "name": "read",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`read`",
+          "receiver": "Inputs"
+        },
+        {
+          "name": "compute",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`compute`"
+        },
+        {
+          "name": "compute_at",
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`compute_at`"
+        },
+        {
+          "count": 3,
+          "name": null,
+          "part": "golden-harness",
+          "partLabel": "golden-harness",
+          "phrase": "`run.rs`"
+        }
+      ]
+    },
+    {
+      "entry": "main",
+      "file": "crates/host/src/main.rs",
+      "inner": [],
+      "part": "host",
+      "partLabel": "host",
+      "phrase": "`main`",
+      "steps": [
+        {
+          "name": "parse",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`parse`",
+          "receiver": "Name"
+        },
+        {
+          "name": "outputs",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`outputs`"
+        },
+        {
+          "name": "root",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`root`"
+        },
+        {
+          "name": "load",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`load`",
+          "receiver": "Piece"
+        },
+        {
+          "name": "choose_output",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`choose_output`"
+        },
+        {
+          "name": "dir_or_default",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`dir_or_default`"
+        },
+        {
+          "name": "verified",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`verified`"
+        },
+        {
+          "name": "default",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`default`",
+          "receiver": "Needs"
+        },
+        {
+          "name": "open",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`open`",
+          "receiver": "Bank"
+        },
+        {
+          "name": "acquire",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`acquire`",
+          "receiver": "Law"
+        },
+        {
+          "name": "default",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`default`",
+          "receiver": "Shared"
+        },
+        {
+          "name": "new",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`new`",
+          "receiver": "Scheduler"
+        },
+        {
+          "name": "steps_for",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`steps_for`"
+        },
+        {
+          "name": "new",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`new`",
+          "receiver": "Synth"
+        },
+        {
+          "name": "new",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`new`",
+          "receiver": "Callback"
+        },
+        {
+          "name": "start",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`start`"
+        },
+        {
+          "name": "clock",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`clock`"
+        },
+        {
+          "name": "kind_text",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`kind_text`"
+        },
+        {
+          "name": "outcome",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`outcome`"
+        },
+        {
+          "name": "root",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`root`"
+        },
+        {
+          "name": "load",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`load`",
+          "receiver": "Piece"
+        },
+        {
+          "name": "acquire",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`acquire`",
+          "receiver": "Law"
+        },
+        {
+          "name": "render_with",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`render_with`"
+        },
+        {
+          "name": "write_wav_with",
+          "part": "host",
+          "partLabel": "host",
+          "phrase": "`write_wav_with`"
+        }
+      ]
+    }
+  ],
+  "startDoor": ".github/workflows/ci.yml",
+  "startHere": [
+    ".github/workflows/ci.yml",
+    "crates/host/src/main.rs",
+    "crates/host/src/lib.rs",
+    "crates/host/src/bridge.rs"
+  ],
+  "summary": null,
+  "summaryFrom": null,
+  "testFiles": 46,
+  "testedBy": {
+    "golden-harness": 5,
+    "host": 19,
+    "ingest": 1,
+    "law": 9,
+    "provenance": 6,
+    "score-model": 1,
+    "tools": 0
+  },
+  "testedInside": [
+    "golden-harness",
+    "host",
+    "ingest",
+    "law",
+    "provenance",
+    "score-model"
+  ],
+  "unnamedWrites": 20,
+  "unread": [],
+  "unreadCode": [
+    "docker"
+  ],
+  "unreadCodeUses": "docker holds only shell files, which this map does not read, so what uses it cannot be seen.",
+  "unreadFiles": 0,
+  "unreadNote": [],
+  "untested": [
+    {
+      "part": "tools",
+      "partLabel": "tools",
+      "testedBy": 0
+    }
+  ],
+  "untestedNote": [
+    "golden-harness is tested only by the unit tests in its own files.",
+    "host is tested only by the unit tests in its own files.",
+    "ingest is tested only by the unit tests in its own files.",
+    "law is tested only by the unit tests in its own files.",
+    "provenance is tested only by the unit tests in its own files.",
+    "score-model is tested only by the unit tests in its own files.",
+    "docker holds only shell files, which this map does not read, so whether a test touches it cannot be seen."
+  ],
+  "written": 0
+}

@@ -1,0 +1,1415 @@
+{
+  "authorship": {
+    "parts": [],
+    "places": []
+  },
+  "boundaries": [
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": ".github",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "docker",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "docs",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "golden",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": [
+          "host"
+        ]
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "golden-harness",
+      "qualifyingSourceCommits": 12,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": 1,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "host",
+      "qualifyingSourceCommits": 15,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": [
+          "host",
+          "law"
+        ]
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "ingest",
+      "qualifyingSourceCommits": 3,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": [
+          "golden-harness",
+          "host"
+        ]
+      },
+      "cohesion": 1,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "law",
+      "qualifyingSourceCommits": 19,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": [
+          "golden-harness",
+          "law"
+        ]
+      },
+      "cohesion": 1,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "provenance",
+      "qualifyingSourceCommits": 23,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "research",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "root",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": [
+          "golden-harness",
+          "host",
+          "ingest",
+          "law"
+        ]
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "score-model",
+      "qualifyingSourceCommits": 1,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "scores",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "site",
+      "qualifyingSourceCommits": 3,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "tools",
+      "qualifyingSourceCommits": 2,
+      "rebaseline": null
+    }
+  ],
+  "churn": {
+    "definition": "commits is how many commits in the window touch the file, including merges and commits dropped from coupling. lines is added plus deleted in those commits.",
+    "files": [
+      {
+        "commits": 2,
+        "lines": 22,
+        "path": ".dockerignore"
+      },
+      {
+        "commits": 1,
+        "lines": 4,
+        "path": ".gitattributes"
+      },
+      {
+        "commits": 2,
+        "lines": 94,
+        "path": ".github/engines/javascriptcore-319571.txt"
+      },
+      {
+        "commits": 2,
+        "lines": 8,
+        "path": ".github/engines/node-24.21.0.txt"
+      },
+      {
+        "commits": 2,
+        "lines": 16,
+        "path": ".github/engines/spidermonkey-156.0.1.txt"
+      },
+      {
+        "commits": 2,
+        "lines": 142,
+        "path": ".github/engines/verify.sh"
+      },
+      {
+        "commits": 19,
+        "lines": 1282,
+        "path": ".github/workflows/ci.yml"
+      },
+      {
+        "commits": 5,
+        "lines": 344,
+        "path": ".github/workflows/docker.yml"
+      },
+      {
+        "commits": 3,
+        "lines": 160,
+        "path": ".github/workflows/host-windows.yml"
+      },
+      {
+        "commits": 2,
+        "lines": 126,
+        "path": ".github/workflows/pages.yml"
+      },
+      {
+        "commits": 2,
+        "lines": 196,
+        "path": ".github/workflows/release.yml"
+      },
+      {
+        "commits": 3,
+        "lines": 15,
+        "path": ".gitignore"
+      },
+      {
+        "commits": 6,
+        "lines": 214,
+        "path": "CHANGELOG.md"
+      },
+      {
+        "commits": 19,
+        "lines": 2123,
+        "path": "Cargo.lock"
+      },
+      {
+        "commits": 3,
+        "lines": 36,
+        "path": "Cargo.toml"
+      },
+      {
+        "commits": 2,
+        "lines": 136,
+        "path": "Dockerfile"
+      },
+      {
+        "commits": 1,
+        "lines": 21,
+        "path": "LICENSE"
+      },
+      {
+        "commits": 8,
+        "lines": 456,
+        "path": "README.es.md"
+      },
+      {
+        "commits": 8,
+        "lines": 442,
+        "path": "README.fr.md"
+      },
+      {
+        "commits": 9,
+        "lines": 450,
+        "path": "README.hi.md"
+      },
+      {
+        "commits": 8,
+        "lines": 474,
+        "path": "README.it.md"
+      },
+      {
+        "commits": 9,
+        "lines": 438,
+        "path": "README.ja.md"
+      },
+      {
+        "commits": 9,
+        "lines": 374,
+        "path": "README.md"
+      },
+      {
+        "commits": 8,
+        "lines": 482,
+        "path": "README.pt-BR.md"
+      },
+      {
+        "commits": 8,
+        "lines": 500,
+        "path": "README.zh.md"
+      },
+      {
+        "commits": 2,
+        "lines": 96,
+        "path": "SCORECARD.md"
+      },
+      {
+        "commits": 4,
+        "lines": 110,
+        "path": "SECURITY.md"
+      },
+      {
+        "commits": 7,
+        "lines": 198,
+        "path": "SHIP_GATE.md"
+      },
+      {
+        "commits": 6,
+        "lines": 46,
+        "path": "crates/golden/Cargo.toml"
+      },
+      {
+        "commits": 4,
+        "lines": 524,
+        "path": "crates/golden/src/bin/engine-js.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 470,
+        "path": "crates/golden/src/bin/write-golden.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 1614,
+        "path": "crates/golden/src/engine_js.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 1010,
+        "path": "crates/golden/src/exemplar.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 198,
+        "path": "crates/golden/src/lib.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 284,
+        "path": "crates/golden/src/prng.rs"
+      },
+      {
+        "commits": 13,
+        "lines": 2502,
+        "path": "crates/golden/src/run.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 790,
+        "path": "crates/golden/src/take.rs"
+      },
+      {
+        "commits": 9,
+        "lines": 122,
+        "path": "crates/host/Cargo.toml"
+      },
+      {
+        "commits": 2,
+        "lines": 402,
+        "path": "crates/host/licences/Apache-2.0.txt"
+      },
+      {
+        "commits": 2,
+        "lines": 638,
+        "path": "crates/host/licences/CC-BY-3.0.txt"
+      },
+      {
+        "commits": 4,
+        "lines": 190,
+        "path": "crates/host/licences/NOTICES.txt"
+      },
+      {
+        "commits": 2,
+        "lines": 64,
+        "path": "crates/host/licences/Salamander-NOTICE.txt"
+      },
+      {
+        "commits": 2,
+        "lines": 42,
+        "path": "crates/host/licences/alsa-sys-MIT.txt"
+      },
+      {
+        "commits": 2,
+        "lines": 42,
+        "path": "crates/host/licences/simd-adler32-MIT.txt"
+      },
+      {
+        "commits": 8,
+        "lines": 728,
+        "path": "crates/host/src/alloc_free.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 854,
+        "path": "crates/host/src/anchor.rs"
+      },
+      {
+        "commits": 3,
+        "lines": 462,
+        "path": "crates/host/src/bridge.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 1540,
+        "path": "crates/host/src/callback.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 570,
+        "path": "crates/host/src/console.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 622,
+        "path": "crates/host/src/device.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 324,
+        "path": "crates/host/src/event.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 1388,
+        "path": "crates/host/src/fetch.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 452,
+        "path": "crates/host/src/fixture.rs"
+      },
+      {
+        "commits": 10,
+        "lines": 330,
+        "path": "crates/host/src/lib.rs"
+      },
+      {
+        "commits": 9,
+        "lines": 2114,
+        "path": "crates/host/src/live.rs"
+      },
+      {
+        "commits": 18,
+        "lines": 4428,
+        "path": "crates/host/src/main.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 512,
+        "path": "crates/host/src/notes.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 312,
+        "path": "crates/host/src/notices.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 1144,
+        "path": "crates/host/src/offline.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 1108,
+        "path": "crates/host/src/piano.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 872,
+        "path": "crates/host/src/preview.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 1230,
+        "path": "crates/host/src/sampler.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 750,
+        "path": "crates/host/src/schedule.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 590,
+        "path": "crates/host/src/score.rs"
+      },
+      {
+        "commits": 9,
+        "lines": 1832,
+        "path": "crates/host/src/synth.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 580,
+        "path": "crates/host/src/winmm.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 50,
+        "path": "crates/ingest/Cargo.toml"
+      },
+      {
+        "commits": 5,
+        "lines": 1187,
+        "path": "crates/ingest/src/lib.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 2842,
+        "path": "crates/ingest/src/tests.rs"
+      },
+      {
+        "commits": 3,
+        "lines": 1455,
+        "path": "crates/ingest/tests/wasm_float_free.rs"
+      },
+      {
+        "commits": 8,
+        "lines": 58,
+        "path": "crates/law/Cargo.toml"
+      },
+      {
+        "commits": 10,
+        "lines": 2556,
+        "path": "crates/law/src/abi.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 642,
+        "path": "crates/law/src/frames.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 1870,
+        "path": "crates/law/src/grade.rs"
+      },
+      {
+        "commits": 9,
+        "lines": 1472,
+        "path": "crates/law/src/ingest_tests.rs"
+      },
+      {
+        "commits": 13,
+        "lines": 2804,
+        "path": "crates/law/src/law.rs"
+      },
+      {
+        "commits": 17,
+        "lines": 876,
+        "path": "crates/law/src/lib.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 326,
+        "path": "crates/law/src/live.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 3664,
+        "path": "crates/law/src/live_tests.rs"
+      },
+      {
+        "commits": 13,
+        "lines": 1866,
+        "path": "crates/law/src/refusal.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 810,
+        "path": "crates/law/src/score.rs"
+      },
+      {
+        "commits": 9,
+        "lines": 704,
+        "path": "crates/law/src/snapshot.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 96,
+        "path": "crates/law/src/take.rs"
+      },
+      {
+        "commits": 3,
+        "lines": 1004,
+        "path": "crates/law/src/time.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 1606,
+        "path": "crates/law/src/wire.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 266,
+        "path": "crates/law/tests/common/mod.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 510,
+        "path": "crates/law/tests/no_float.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 370,
+        "path": "crates/law/tests/std_binding.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 786,
+        "path": "crates/law/tests/wasm_artifact.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 53,
+        "path": "crates/provenance/Cargo.toml"
+      },
+      {
+        "commits": 2,
+        "lines": 8,
+        "path": "crates/provenance/fixtures/.gitattributes"
+      },
+      {
+        "commits": 2,
+        "lines": 42,
+        "path": "crates/provenance/fixtures/battle-hymn/battle-hymn.ly"
+      },
+      {
+        "commits": 2,
+        "lines": 0,
+        "path": "crates/provenance/fixtures/battle-hymn/battle-hymn.mid"
+      },
+      {
+        "commits": 2,
+        "lines": 654,
+        "path": "crates/provenance/fixtures/battle-hymn/receipt.json"
+      },
+      {
+        "commits": 5,
+        "lines": 1304,
+        "path": "crates/provenance/src/canonical.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 232,
+        "path": "crates/provenance/src/error.rs"
+      },
+      {
+        "commits": 12,
+        "lines": 2665,
+        "path": "crates/provenance/src/infile.rs"
+      },
+      {
+        "commits": 3,
+        "lines": 1236,
+        "path": "crates/provenance/src/json.rs"
+      },
+      {
+        "commits": 24,
+        "lines": 997,
+        "path": "crates/provenance/src/lib.rs"
+      },
+      {
+        "commits": 18,
+        "lines": 4384,
+        "path": "crates/provenance/src/licence.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 1643,
+        "path": "crates/provenance/src/predicate.rs"
+      },
+      {
+        "commits": 8,
+        "lines": 1301,
+        "path": "crates/provenance/src/receipt.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 1170,
+        "path": "crates/provenance/src/schema.rs"
+      },
+      {
+        "commits": 25,
+        "lines": 7303,
+        "path": "crates/provenance/src/tests.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 19,
+        "path": "crates/score-model/Cargo.toml"
+      },
+      {
+        "commits": 1,
+        "lines": 252,
+        "path": "crates/score-model/src/lib.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 48,
+        "path": "deny.toml"
+      },
+      {
+        "commits": 2,
+        "lines": 48,
+        "path": "docker/entrypoint.sh"
+      },
+      {
+        "commits": 16,
+        "lines": 705,
+        "path": "docs/HANDOFF.md"
+      },
+      {
+        "commits": 11,
+        "lines": 282,
+        "path": "docs/PHASE-0.md"
+      },
+      {
+        "commits": 2,
+        "lines": 238,
+        "path": "docs/TREATMENT-FINISH.md"
+      },
+      {
+        "commits": 1,
+        "lines": 95,
+        "path": "docs/consult/brief.md"
+      },
+      {
+        "commits": 1,
+        "lines": 17,
+        "path": "docs/consult/diff.md"
+      },
+      {
+        "commits": 1,
+        "lines": 65,
+        "path": "docs/consult/lock-draft.md"
+      },
+      {
+        "commits": 1,
+        "lines": 32,
+        "path": "docs/consult/receipts/reply-gemini.meta.json"
+      },
+      {
+        "commits": 1,
+        "lines": 152,
+        "path": "docs/consult/receipts/revision-1-grok.meta.json"
+      },
+      {
+        "commits": 1,
+        "lines": 65,
+        "path": "docs/consult/reply-claude.md"
+      },
+      {
+        "commits": 1,
+        "lines": 47,
+        "path": "docs/consult/reply-gemini.md"
+      },
+      {
+        "commits": 1,
+        "lines": 32,
+        "path": "docs/consult/review-of-revision-1.md"
+      },
+      {
+        "commits": 1,
+        "lines": 189,
+        "path": "docs/consult/revision-1-grok-stateless.md"
+      },
+      {
+        "commits": 1,
+        "lines": 43,
+        "path": "docs/consult/revision-2-grok-author-seat.md"
+      },
+      {
+        "commits": 1,
+        "lines": 222,
+        "path": "docs/study-swarm/gate/run1-citation-receipt.json"
+      },
+      {
+        "commits": 1,
+        "lines": 35,
+        "path": "docs/study-swarm/gate/run1-verify-citations.out.txt"
+      },
+      {
+        "commits": 1,
+        "lines": 201,
+        "path": "docs/study-swarm/gate/run2-citation-receipt.json"
+      },
+      {
+        "commits": 1,
+        "lines": 34,
+        "path": "docs/study-swarm/gate/run2-verify-citations.out.txt"
+      },
+      {
+        "commits": 1,
+        "lines": 37,
+        "path": "docs/study-swarm/lanes/lane1-publish-friendly-music.md"
+      },
+      {
+        "commits": 1,
+        "lines": 15,
+        "path": "docs/study-swarm/lanes/lane2-representation.md"
+      },
+      {
+        "commits": 1,
+        "lines": 21,
+        "path": "docs/study-swarm/lanes/lane3-environment-training.md"
+      },
+      {
+        "commits": 1,
+        "lines": 17,
+        "path": "docs/study-swarm/lanes/lane4-realtime-coperformance.md"
+      },
+      {
+        "commits": 1,
+        "lines": 15,
+        "path": "docs/study-swarm/lanes/lane5-reproducible-audio.md"
+      },
+      {
+        "commits": 1,
+        "lines": 186,
+        "path": "docs/study-swarm/lanes/sibling-inventory.md"
+      },
+      {
+        "commits": 1,
+        "lines": 80,
+        "path": "docs/study-swarm/phase-0-consult.dispatch.md"
+      },
+      {
+        "commits": 1,
+        "lines": 47,
+        "path": "docs/study-swarm/verification.md"
+      },
+      {
+        "commits": 2,
+        "lines": 4186,
+        "path": "golden/battle-hymn-glm-5.3.frames"
+      },
+      {
+        "commits": 5,
+        "lines": 84,
+        "path": "golden/battle-hymn-glm-5.3.golden"
+      },
+      {
+        "commits": 2,
+        "lines": 4544,
+        "path": "golden/battle-hymn-kimi-k3.frames"
+      },
+      {
+        "commits": 4,
+        "lines": 76,
+        "path": "golden/battle-hymn-kimi-k3.golden"
+      },
+      {
+        "commits": 8,
+        "lines": 112,
+        "path": "golden/entertainer.golden"
+      },
+      {
+        "commits": 2,
+        "lines": 5242,
+        "path": "golden/entertainer.rows"
+      },
+      {
+        "commits": 4,
+        "lines": 40,
+        "path": "package-lock.json"
+      },
+      {
+        "commits": 4,
+        "lines": 72,
+        "path": "package.json"
+      },
+      {
+        "commits": 3,
+        "lines": 44,
+        "path": "research/battle-hymn/README.md"
+      },
+      {
+        "commits": 1,
+        "lines": 292,
+        "path": "research/battle-hymn/battle-hymn-ditson-1862.abc"
+      },
+      {
+        "commits": 1,
+        "lines": 564,
+        "path": "research/battle-hymn/battle-hymn-ditson-1862.events.csv"
+      },
+      {
+        "commits": 1,
+        "lines": 958,
+        "path": "research/battle-hymn/evidence-manifest.json"
+      },
+      {
+        "commits": 1,
+        "lines": 1004,
+        "path": "research/battle-hymn/samples-manifest.json"
+      },
+      {
+        "commits": 1,
+        "lines": 25,
+        "path": "research/battle-hymn/verify/BRIEF-transcription-check.md"
+      },
+      {
+        "commits": 1,
+        "lines": 21,
+        "path": "research/battle-hymn/verify/check-glm-5.3-flash.md"
+      },
+      {
+        "commits": 1,
+        "lines": 37,
+        "path": "research/battle-hymn/verify/check-glm-5.3-flash.meta.json"
+      },
+      {
+        "commits": 1,
+        "lines": 6,
+        "path": "research/battle-hymn/verify/check-kimi-k3.md"
+      },
+      {
+        "commits": 1,
+        "lines": 37,
+        "path": "research/battle-hymn/verify/check-kimi-k3.meta.json"
+      },
+      {
+        "commits": 1,
+        "lines": 5,
+        "path": "rust-toolchain.toml"
+      },
+      {
+        "commits": 3,
+        "lines": 12,
+        "path": "scores/.gitattributes"
+      },
+      {
+        "commits": 2,
+        "lines": 868,
+        "path": "scores/battle-hymn-glm-5.3/battle-hymn-glm-5.3.ly"
+      },
+      {
+        "commits": 2,
+        "lines": 0,
+        "path": "scores/battle-hymn-glm-5.3/battle-hymn-glm-5.3.mid"
+      },
+      {
+        "commits": 3,
+        "lines": 662,
+        "path": "scores/battle-hymn-glm-5.3/receipt.json"
+      },
+      {
+        "commits": 2,
+        "lines": 536,
+        "path": "scores/battle-hymn-kimi-k3/battle-hymn-kimi-k3.ly"
+      },
+      {
+        "commits": 2,
+        "lines": 0,
+        "path": "scores/battle-hymn-kimi-k3/battle-hymn-kimi-k3.mid"
+      },
+      {
+        "commits": 2,
+        "lines": 660,
+        "path": "scores/battle-hymn-kimi-k3/receipt.json"
+      },
+      {
+        "commits": 3,
+        "lines": 1194,
+        "path": "scores/entertainer/entertainer.ly"
+      },
+      {
+        "commits": 3,
+        "lines": 0,
+        "path": "scores/entertainer/entertainer.mid"
+      },
+      {
+        "commits": 3,
+        "lines": 531,
+        "path": "scores/entertainer/receipt.json"
+      },
+      {
+        "commits": 2,
+        "lines": 64,
+        "path": "site/astro.config.mjs"
+      },
+      {
+        "commits": 2,
+        "lines": 8,
+        "path": "site/audio.sha256"
+      },
+      {
+        "commits": 2,
+        "lines": 12208,
+        "path": "site/package-lock.json"
+      },
+      {
+        "commits": 2,
+        "lines": 38,
+        "path": "site/package.json"
+      },
+      {
+        "commits": 2,
+        "lines": 10,
+        "path": "site/public/favicon.svg"
+      },
+      {
+        "commits": 2,
+        "lines": 0,
+        "path": "site/src/assets/logo.png"
+      },
+      {
+        "commits": 4,
+        "lines": 408,
+        "path": "site/src/components/Exemplars.astro"
+      },
+      {
+        "commits": 2,
+        "lines": 14,
+        "path": "site/src/content.config.ts"
+      },
+      {
+        "commits": 4,
+        "lines": 220,
+        "path": "site/src/content/docs/handbook/docker.md"
+      },
+      {
+        "commits": 6,
+        "lines": 238,
+        "path": "site/src/content/docs/handbook/exemplars.md"
+      },
+      {
+        "commits": 6,
+        "lines": 204,
+        "path": "site/src/content/docs/handbook/getting-started.md"
+      },
+      {
+        "commits": 2,
+        "lines": 108,
+        "path": "site/src/content/docs/handbook/index.md"
+      },
+      {
+        "commits": 4,
+        "lines": 170,
+        "path": "site/src/content/docs/handbook/provenance.md"
+      },
+      {
+        "commits": 5,
+        "lines": 194,
+        "path": "site/src/content/docs/handbook/reference.md"
+      },
+      {
+        "commits": 2,
+        "lines": 136,
+        "path": "site/src/content/docs/handbook/security.md"
+      },
+      {
+        "commits": 4,
+        "lines": 216,
+        "path": "site/src/content/docs/handbook/the-law.md"
+      },
+      {
+        "commits": 4,
+        "lines": 6,
+        "path": "site/src/data/battle-hymn-glm-5.3.notes.json"
+      },
+      {
+        "commits": 4,
+        "lines": 6,
+        "path": "site/src/data/battle-hymn-kimi-k3.notes.json"
+      },
+      {
+        "commits": 4,
+        "lines": 6,
+        "path": "site/src/data/sections.json"
+      },
+      {
+        "commits": 2,
+        "lines": 300,
+        "path": "site/src/lib/compare.ts"
+      },
+      {
+        "commits": 2,
+        "lines": 442,
+        "path": "site/src/lib/view.ts"
+      },
+      {
+        "commits": 2,
+        "lines": 92,
+        "path": "site/src/pages/index.astro"
+      },
+      {
+        "commits": 6,
+        "lines": 272,
+        "path": "site/src/site-config.ts"
+      },
+      {
+        "commits": 2,
+        "lines": 14,
+        "path": "site/src/styles/global.css"
+      },
+      {
+        "commits": 2,
+        "lines": 10,
+        "path": "site/src/styles/starlight-custom.css"
+      },
+      {
+        "commits": 2,
+        "lines": 10,
+        "path": "site/tsconfig.json"
+      },
+      {
+        "commits": 1,
+        "lines": 55,
+        "path": "tools/review/CLOUD-REVIEW-BRIEF-R5-host.md"
+      },
+      {
+        "commits": 1,
+        "lines": 52,
+        "path": "tools/review/CLOUD-REVIEW-BRIEF-R5-law.md"
+      },
+      {
+        "commits": 1,
+        "lines": 108,
+        "path": "tools/review/cloud_review.py"
+      },
+      {
+        "commits": 1,
+        "lines": 66,
+        "path": "tools/review/vision_check.py"
+      },
+      {
+        "commits": 2,
+        "lines": 298,
+        "path": "tools/site/sections.py"
+      },
+      {
+        "commits": 2,
+        "lines": 30,
+        "path": "verify.sh"
+      }
+    ]
+  },
+  "confidence": {
+    "level": "low",
+    "reason": "fewer than 20 source files reach 10 revisions in the window"
+  },
+  "generatedAt": "2026-10-01T02:54:33.729Z",
+  "generatedFrom": {
+    "commit": "7811372bebfbf4542385eb0d60af9821e905db12"
+  },
+  "pairs": [
+    {
+      "a": "README.hi.md",
+      "b": "README.ja.md",
+      "either": 5,
+      "shared": 5,
+      "strength": 1
+    },
+    {
+      "a": "README.hi.md",
+      "b": "README.md",
+      "either": 6,
+      "shared": 4,
+      "strength": 0.666667
+    },
+    {
+      "a": "README.ja.md",
+      "b": "README.md",
+      "either": 6,
+      "shared": 4,
+      "strength": 0.666667
+    },
+    {
+      "a": "crates/host/src/alloc_free.rs",
+      "b": "crates/host/src/lib.rs",
+      "either": 7,
+      "shared": 4,
+      "strength": 0.571429
+    },
+    {
+      "a": "crates/host/src/alloc_free.rs",
+      "b": "crates/host/src/synth.rs",
+      "either": 6,
+      "shared": 4,
+      "strength": 0.666667
+    },
+    {
+      "a": "crates/host/src/alloc_free.rs",
+      "b": "crates/host/src/winmm.rs",
+      "either": 6,
+      "shared": 4,
+      "strength": 0.666667
+    },
+    {
+      "a": "crates/host/src/lib.rs",
+      "b": "crates/host/src/winmm.rs",
+      "either": 7,
+      "shared": 4,
+      "strength": 0.571429
+    },
+    {
+      "a": "crates/host/src/live.rs",
+      "b": "crates/host/src/winmm.rs",
+      "either": 7,
+      "shared": 4,
+      "strength": 0.571429
+    },
+    {
+      "a": "crates/law/src/abi.rs",
+      "b": "crates/law/src/law.rs",
+      "either": 9,
+      "shared": 6,
+      "strength": 0.666667
+    },
+    {
+      "a": "crates/law/src/abi.rs",
+      "b": "crates/law/src/refusal.rs",
+      "either": 10,
+      "shared": 5,
+      "strength": 0.5
+    },
+    {
+      "a": "crates/law/src/abi.rs",
+      "b": "crates/law/src/snapshot.rs",
+      "either": 8,
+      "shared": 4,
+      "strength": 0.5
+    },
+    {
+      "a": "crates/law/src/law.rs",
+      "b": "crates/law/src/lib.rs",
+      "either": 12,
+      "shared": 8,
+      "strength": 0.666667
+    },
+    {
+      "a": "crates/law/src/law.rs",
+      "b": "crates/law/src/refusal.rs",
+      "either": 9,
+      "shared": 7,
+      "strength": 0.777778
+    },
+    {
+      "a": "crates/law/src/law.rs",
+      "b": "crates/law/src/snapshot.rs",
+      "either": 8,
+      "shared": 5,
+      "strength": 0.625
+    },
+    {
+      "a": "crates/law/src/lib.rs",
+      "b": "crates/law/src/refusal.rs",
+      "either": 13,
+      "shared": 7,
+      "strength": 0.538462
+    },
+    {
+      "a": "crates/law/src/refusal.rs",
+      "b": "crates/law/src/snapshot.rs",
+      "either": 8,
+      "shared": 5,
+      "strength": 0.625
+    },
+    {
+      "a": "crates/provenance/src/lib.rs",
+      "b": "crates/provenance/src/licence.rs",
+      "either": 17,
+      "shared": 11,
+      "strength": 0.647059
+    },
+    {
+      "a": "crates/provenance/src/licence.rs",
+      "b": "crates/provenance/src/tests.rs",
+      "either": 18,
+      "shared": 10,
+      "strength": 0.555556
+    }
+  ],
+  "parameters": {
+    "appliedChangesetLimit": 49.75,
+    "changeset": 50,
+    "changesetFraction": 0.25,
+    "cohesionDrop": 0.2,
+    "couplingPopulation": "source",
+    "fallenShared": 3,
+    "floor": "fallen",
+    "floorHeld": false,
+    "floorTrigger": "revision-depth",
+    "headDate": "2026-09-28T19:01:58-07:00",
+    "inScopeFiles": 199,
+    "pinnedStart": null,
+    "priorFloor": null,
+    "qualifyingCommits": 82,
+    "qualifyingMinimum": 30,
+    "revisions": 5,
+    "shared": 10,
+    "sharedFloorUsed": 3,
+    "since": "2026-04-02T02:01:58.000Z",
+    "sourceExtensions": [
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".mts",
+      ".cts",
+      ".py",
+      ".rs",
+      ".gd"
+    ],
+    "sourceFileReach": 20,
+    "sourceFileRise": 25,
+    "sourceFilesReachingStrongFloor": 5,
+    "strength": 0.5,
+    "windowDays": 180
+  },
+  "strengthDefinition": "strength is the shared qualifying commits divided by either. either is the number of qualifying commits that touch either file."
+}

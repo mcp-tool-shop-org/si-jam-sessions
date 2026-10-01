@@ -1,0 +1,62 @@
+summary: ""
+boundaries:
+  - name: .github
+    globs:
+      - .github/**
+    role: config
+  - name: golden-harness
+    globs:
+      - crates/golden/**
+    role: code
+  - name: docker
+    globs:
+      - docker/**
+    role: code
+  - name: docs
+    globs:
+      - docs/**
+    role: docs
+  - name: golden
+    globs:
+      - golden/**
+    role: config
+  - name: host
+    globs:
+      - crates/host/**
+    role: code
+  - name: ingest
+    globs:
+      - crates/ingest/**
+    role: code
+  - name: law
+    globs:
+      - crates/law/**
+    role: code
+  - name: provenance
+    globs:
+      - crates/provenance/**
+    role: code
+  - name: research
+    globs:
+      - research/**
+    role: data
+  - name: root
+    globs:
+      - "*"
+    role: config
+  - name: score-model
+    globs:
+      - crates/score-model/**
+    role: code
+  - name: scores
+    globs:
+      - scores/**
+    role: config
+  - name: site
+    globs:
+      - site/**
+    role: site
+  - name: tools
+    globs:
+      - tools/**
+    role: code
