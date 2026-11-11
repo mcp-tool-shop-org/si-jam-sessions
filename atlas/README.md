@@ -1,14 +1,14 @@
 # si-jam-sessions: how it works
 
-Mapped at 2026-10-01 from commit 7811372 by Atlas 1.24.0.
+Mapped at 2026-11-11 from commit c3c787d by Atlas 1.26.0.
 
 ## What this is
 
 15 parts, mostly Rust (62 files), TypeScript (4), Python (3), shell (3), Astro (2), CSS (2) and JavaScript (1). Work enters through 8 doors; CI and Container each reach 8 parts, and CI is followed because it comes first by name. It publishes to npm and a container image. It deploys a site to GitHub Pages. People run host. engine-js and write-golden are commands built from crates/golden (nothing ships them).
 
-## What changed since the last map
+## What changed since 2026-10-01 (7811372)
 
-This is the first map.
+Nothing structural changed since 2026-10-01; 1 file changed content.
 
 ## What comes in
 
@@ -134,7 +134,7 @@ docker holds only shell files, which this map does not read, so what uses it can
 - **crates/host/src/alloc_free.rs** and **crates/host/src/synth.rs** changed together in 4 of 6 commits, inside the host part.
 - **crates/host/src/alloc_free.rs** and **crates/host/src/winmm.rs** changed together in 4 of 6 commits, inside the host part.
 
-Confidence is low: fewer than 20 source files reach 10 revisions in the window.
+Confidence is low: fewer than 25 source files reach 10 revisions in the window.
 
 Window: 180 days; a pair counts from 3 shared commits, since 5 source files reach 10 revisions; the floor rises to 10 when 25 do.
 
@@ -183,6 +183,6 @@ Read those in order to follow one pull request end to end.
 - 2 imports could not be resolved: `crates/provenance/src/tests.rs` imports `LicenceRefusal::*`, twice.
 - 20 writes and 12 reads use paths built at run time and are not named here.
 - 3 writes and 7 reads go to a path their caller passes, not to this repository.
-- Statistics confidence is low: fewer than 20 source files reach 10 revisions in the window.
+- Statistics confidence is low: fewer than 25 source files reach 10 revisions in the window.
 
 Regenerate with `npx --yes @dogfood-lab/atlas map`.

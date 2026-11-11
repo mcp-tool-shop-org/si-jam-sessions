@@ -25,7 +25,7 @@
           "path": ".github/engines/verify.sh"
         },
         {
-          "hash": "bde45fcb6b846a39f4323590823dcf4cf76a81f4d0e9296a480cc02ab3dfd11e",
+          "hash": "daf7e35b818b696e03263be6e89d8f3d4c1b03a130ddd0cf4e8444d408cb870f",
           "path": ".github/workflows/ci.yml"
         },
         {
@@ -10110,9 +10110,9 @@
       "to": "score-model"
     }
   ],
-  "engine": "1.24.0",
+  "engine": "1.26.0",
   "generatedFrom": {
-    "commit": "7811372bebfbf4542385eb0d60af9821e905db12",
+    "commit": "c3c787d258bf4c7ca764025741aef58434c3bd3e",
     "tracked": 194
   },
   "landings": [
