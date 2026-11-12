@@ -9,10 +9,6 @@
       "externals": 0,
       "files": [
         {
-          "hash": "b33843077eb792f01de6ea4a48416fde8981c54f037fc8cd7b2757b7eea74dd4",
-          "path": ".github/engines/javascriptcore-319571.txt"
-        },
-        {
           "hash": "d2f8c6d0c65864f7740102bce67455af7e1ad2b2eeb80d68ca86f8efd1edb401",
           "path": ".github/engines/node-24.21.0.txt"
         },
@@ -25,7 +21,7 @@
           "path": ".github/engines/verify.sh"
         },
         {
-          "hash": "daf7e35b818b696e03263be6e89d8f3d4c1b03a130ddd0cf4e8444d408cb870f",
+          "hash": "f1f60948011a146e4ab92fbdeb2a5be64d1804ff532be4a80ded4dc20aaad691",
           "path": ".github/workflows/ci.yml"
         },
         {
@@ -8254,10 +8250,6 @@
       "mentions": [
         {
           "job": "engines",
-          "path": ".github/engines/javascriptcore-319571.txt"
-        },
-        {
-          "job": "engines",
           "path": ".github/engines/node-24.21.0.txt"
         },
         {
@@ -10112,20 +10104,10 @@
   ],
   "engine": "1.26.0",
   "generatedFrom": {
-    "commit": "c3c787d258bf4c7ca764025741aef58434c3bd3e",
-    "tracked": 194
+    "commit": "4cb32a6ec1a9075868e112b1fb9df1ce794265a1",
+    "tracked": 193
   },
   "landings": [
-    {
-      "readers": [
-        {
-          "by": ".github/workflows/ci.yml",
-          "confidence": "config"
-        }
-      ],
-      "target": ".github/engines/javascriptcore-319571.txt",
-      "writers": []
-    },
     {
       "readers": [
         {

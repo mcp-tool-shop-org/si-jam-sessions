@@ -80,18 +80,18 @@
       "changed": 1,
       "moved": 0,
       "parts": 1,
-      "removed": 0
+      "removed": 1
     },
     "items": [
       {
         "kind": "counts",
-        "sentence": "Nothing structural changed since 2026-10-01; 1 file changed content.",
+        "sentence": "Nothing structural changed since 2026-11-11; 1 file removed and 1 changed content.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "7811372bebfbf4542385eb0d60af9821e905db12",
-      "generatedAt": "2026-10-01T02:54:33.729Z"
+      "commit": "c3c787d258bf4c7ca764025741aef58434c3bd3e",
+      "generatedAt": "2026-11-11T22:41:06.947Z"
     },
     "unchanged": true
   },
@@ -177,7 +177,7 @@
     "Window: 180 days; a pair counts from 3 shared commits, since 5 source files reach 10 revisions; the floor rises to 10 when 25 do."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "c3c787d258bf4c7ca764025741aef58434c3bd3e",
+  "commit": "4cb32a6ec1a9075868e112b1fb9df1ce794265a1",
   "defaultBranch": "main",
   "derived": "15 parts, mostly Rust (62 files), TypeScript (4), Python (3), shell (3), Astro (2), CSS (2) and JavaScript (1). Work enters through 8 doors; CI and Container each reach 8 parts, and CI is followed because it comes first by name. It publishes to npm and a container image. It deploys a site to GitHub Pages. People run host. engine-js and write-golden are commands built from crates/golden (nothing ships them).",
   "doors": [
@@ -709,7 +709,7 @@
   ],
   "engine": "1.26.0",
   "generated": [],
-  "generatedAt": "2026-11-11T22:41:06.947Z",
+  "generatedAt": "2026-11-12T07:27:16.590Z",
   "limits": [
     "2 imports could not be resolved: `crates/provenance/src/tests.rs` imports `LicenceRefusal::*`, twice.",
     "20 writes and 12 reads use paths built at run time and are not named here.",

@@ -33,7 +33,7 @@
 #   runner's Ubuntu archive, by name; the host links it and never opens a
 #   device with it); cargo-deny by version, checked
 #   against install-action's recorded sha256; node 24.21.0, SpiderMonkey
-#   156.0.1 and JavaScriptCore 319571 (from jsvu 3.0.5) by version and by the
+#   156.0.1 and JavaScriptCore 326367 (from jsvu 3.0.5) by version and by the
 #   manifests in .github/engines/, which verify.sh checks before an engine
 #   runs. The law's pins sit in the snapshot header, and the golden job proves
 #   a changed pin moves the golden.
@@ -389,7 +389,7 @@ jobs:
           set -euo pipefail
           case "$ENGINE_NAME" in
             spidermonkey) shell=spidermonkey@156.0.1 ;;
-            javascriptcore) shell=javascriptcore@319571 ;;
+            javascriptcore) shell=javascriptcore@326367 ;;
           esac
           npm install -g jsvu@3.0.5
           jsvu --os=linux64 "$shell"
@@ -413,8 +413,8 @@ jobs:
               engine="$HOME/.jsvu/engines/spidermonkey-156.0.1"
               pins=.github/engines/spidermonkey-156.0.1.txt ;;
             javascriptcore)
-              engine="$HOME/.jsvu/engines/javascriptcore-319571"
-              pins=.github/engines/javascriptcore-319571.txt ;;
+              engine="$HOME/.jsvu/engines/javascriptcore-326367"
+              pins=.github/engines/javascriptcore-326367.txt ;;
           esac
           bash .github/engines/verify.sh "$engine" "$pins"
           echo "ENGINE_PATH=$engine" >> "$GITHUB_ENV"
@@ -459,7 +459,7 @@ jobs:
               printf '#!/usr/bin/env bash\nLD_LIBRARY_PATH="%s" exec "%s/spidermonkey-156.0.1" "$@"\n' \
                 "$ENGINE_PATH" "$ENGINE_PATH" > "$launcher" ;;
             javascriptcore)
-              printf '#!/usr/bin/env bash\nLD_LIBRARY_PATH="%s/lib" exec "%s/lib/ld-linux-x86-64.so.2" "%s/javascriptcore-319571" "$@"\n' \
+              printf '#!/usr/bin/env bash\nLD_LIBRARY_PATH="%s/lib" exec "%s/lib/ld-linux-x86-64.so.2" "%s/javascriptcore-326367" "$@"\n' \
                 "$ENGINE_PATH" "$ENGINE_PATH" "$ENGINE_PATH" > "$launcher" ;;
           esac
           chmod +x "$launcher"

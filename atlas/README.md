@@ -1,14 +1,14 @@
 # si-jam-sessions: how it works
 
-Mapped at 2026-11-11 from commit c3c787d by Atlas 1.26.0.
+Mapped at 2026-11-12 from commit 4cb32a6 by Atlas 1.26.0.
 
 ## What this is
 
 15 parts, mostly Rust (62 files), TypeScript (4), Python (3), shell (3), Astro (2), CSS (2) and JavaScript (1). Work enters through 8 doors; CI and Container each reach 8 parts, and CI is followed because it comes first by name. It publishes to npm and a container image. It deploys a site to GitHub Pages. People run host. engine-js and write-golden are commands built from crates/golden (nothing ships them).
 
-## What changed since 2026-10-01 (7811372)
+## What changed since 2026-11-11 (c3c787d)
 
-Nothing structural changed since 2026-10-01; 1 file changed content.
+Nothing structural changed since 2026-11-11; 1 file removed and 1 changed content.
 
 ## What comes in
 

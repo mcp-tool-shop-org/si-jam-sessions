@@ -295,8 +295,8 @@
         "path": ".github/engines/verify.sh"
       },
       {
-        "commits": 21,
-        "lines": 1302,
+        "commits": 22,
+        "lines": 1304,
         "path": ".github/workflows/ci.yml"
       },
       {
@@ -405,8 +405,8 @@
         "path": "SHIP_GATE.md"
       },
       {
-        "commits": 2,
-        "lines": 376,
+        "commits": 3,
+        "lines": 386,
         "path": "atlas/README.md"
       },
       {
@@ -415,18 +415,18 @@
         "path": "atlas/boundaries.yaml"
       },
       {
-        "commits": 2,
-        "lines": 2778,
+        "commits": 3,
+        "lines": 2809,
         "path": "atlas/page.json"
       },
       {
-        "commits": 2,
-        "lines": 2830,
+        "commits": 3,
+        "lines": 2873,
         "path": "atlas/statistics.json"
       },
       {
-        "commits": 2,
-        "lines": 21134,
+        "commits": 3,
+        "lines": 21140,
         "path": "atlas/structure.json"
       },
       {
@@ -1265,9 +1265,9 @@
     "level": "low",
     "reason": "fewer than 25 source files reach 10 revisions in the window"
   },
-  "generatedAt": "2026-11-11T22:41:06.947Z",
+  "generatedAt": "2026-11-12T07:27:16.590Z",
   "generatedFrom": {
-    "commit": "c3c787d258bf4c7ca764025741aef58434c3bd3e"
+    "commit": "4cb32a6ec1a9075868e112b1fb9df1ce794265a1"
   },
   "pairs": [
     {
@@ -1398,7 +1398,7 @@
     }
   ],
   "parameters": {
-    "appliedChangesetLimit": 49.75,
+    "appliedChangesetLimit": 49.5,
     "changeset": 50,
     "changesetFraction": 0.25,
     "cohesionDrop": 0.2,
@@ -1407,16 +1407,16 @@
     "floor": "fallen",
     "floorHeld": false,
     "floorTrigger": "revision-depth",
-    "headDate": "2026-09-30T20:06:22-07:00",
-    "inScopeFiles": 199,
+    "headDate": "2026-11-11T17:41:10-05:00",
+    "inScopeFiles": 198,
     "pinnedStart": null,
     "priorFloor": "fallen",
-    "qualifyingCommits": 83,
+    "qualifyingCommits": 84,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-04-04T03:06:22.000Z",
+    "since": "2026-05-15T22:41:10.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",
